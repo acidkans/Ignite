@@ -148,7 +148,7 @@ export default function QaMailRepliesModal({ processNodeId, replies, loading, on
                                 <div className="mt-1 flex flex-col gap-1">
                                     {handled.map(r => (
                                         <div key={r.id} className="flex items-center gap-2 text-[13px] text-gray-400">
-                                            <span className={r.status === 'DONE' ? 'text-emerald-400' : 'text-gray-600'}>{r.status === 'DONE' ? 'wpisane' : 'pominięte'}</span>
+                                            <span className={r.status === 'IGNORED' ? 'text-gray-600' : 'text-emerald-400'}>{r.status === 'IGNORED' ? 'pominięte' : (r.proposals || []).some(p => p.applied) ? 'wpisane przez AI' : 'wpisane'}</span>
                                             <span className="truncate">{fmtDateTime(r.receivedAt)} · {r.fromEmail} · {r.subject}</span>
                                             <button onClick={() => restore(r.id)} className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-white/10 hover:text-white shrink-0" title="Przywróć do przejrzenia"><Undo2 size={12} /> Przywróć</button>
                                         </div>

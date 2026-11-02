@@ -1,3 +1,22 @@
+## 2026-11-02 — feat(qa): odpowiedzi z maila w Q&A całego drzewa; AI samo wpisuje odpowiedzi klienta i pokazuje popup „Dodano odpowiedzi z maila”
+
+### schema.prisma
+- `schema-pole` `QaMailReply.status` — nowa wartość `AUTO` (AI wpisało odpowiedzi do Q&A, popup jeszcze niepotwierdzony); komentarz pola, bez migracji
+
+### architektura / API
+- dodano `back-funkcja` `QaMailRepliesService.autoApply` — po odebraniu i analizie AI nowego maila propozycje z odpowiedzią trafiają od razu do `WbsNode.qa` (tylko pytania bez odpowiedzi), zamykają zadania „Wyjaśnić czy…”, propozycja dostaje `applied: true`, mail status `AUTO`
+- dodano `back-funkcja` `QaMailRepliesService.recomposeBranchFor` — backendowe złożenie strategii gałęzi (lustro frontowego `composeBranchStrategy`)
+- `GET /qa-mail/replies/:processNodeId` zwraca też maile `AUTO`; `POST /qa-mail/replies/:id/resolve` z `DONE` potwierdza popup
+- dodano `ui-modal` `QaMailAutoNotice` (UnifiedWbsPanel) — popup co 60 s sprawdza maile `AUTO`, trzyma się do zamknięcia / „Otwórz Q&A”
+- `ui-widok` `QaTreeView` — przycisk „Odpowiedzi z maila” (QaMailRepliesModal) jak w Q&A węzła; nowe `ui-propsy` `highlightReplyIds` — nowe odpowiedzi z maila na zielono
+- `ui-funkcja` `composeBranchStrategy` (WBSHybridTable) — eksportowana
+
+### słownik
+- dodano `qa-mail-replies-auto-apply`, `qa-mail-replies-recompose-branch`, `qa-mail-auto-notice`, `qa-highlight-reply-ids`, `qa-tree-mail-replies`, `answer-qa-tree-from-mail`
+
+### wytyczne
+- `back-funkcja` `autoApply` — nigdy nie nadpisuje odpowiedzi już wpisanej w Q&A; ręczne „Podpowiedz AI” w oknie odpowiedzi nie wpisuje automatycznie
+
 ## 2026-11-01 — fix(zadania): szuflada Zadania gałęzi głównej pokazuje zadania całego poddrzewa (jak PDF strategii)
 
 ### architektura / API

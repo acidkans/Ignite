@@ -198,7 +198,7 @@ function collectBranchStrategyEntries(node) {
 // pustą linią.
 // @anchor compose-branch-strategy
 // Pytania do klienta (`{{q:id}}`) w złożeniu są rozwiązane: odpowiedź albo „[wyjaśnić: …]”.
-function composeBranchStrategy(node) {
+export function composeBranchStrategy(node) {
     const qaIndex = buildQaIndex(node);
     return collectBranchStrategyEntries(node)
         .map(e => `${e.name}:\n${resolveStrategyText(e.strategy, qaIndex)}`)

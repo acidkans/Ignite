@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
-import { X, HelpCircle, Plus, Search, CloudOff, ChevronLeft, Mail } from 'lucide-react';
+import { X, HelpCircle, Plus, Search, CloudOff, ChevronLeft, Mail, Inbox } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { enqueueWbsQa, getPendingByType } from '../../../services/repos/outboxRepo';
 import { getMeta, setMeta } from '../../../services/db';
-import { ensureQaIds } from './strategyQuestions';
+import { ensureQaIds, strategyHasTokens } from './strategyQuestions';
 import QaMailModal from './QaMailModal';
+import QaMailRepliesModal from './QaMailRepliesModal';
+import { composeBranchStrategy } from './WBSHybridTable';
 
 // Wspólny edytowalny widok Q&A całego drzewa WBS — jeden komponent dla mobile
 // (pełny ekran) i desktopu (modal 3/4). Zapis per węzeł: PATCH /wbs-nodes/:id,
@@ -76,8 +78,9 @@ function GrowingTextarea({ value, ...props }) {
 
 // @anchor qa-tree-view
 // `initialFilter` — „Z pytaniami” po kliknięciu przycisku Q&A (widać wszystkie pytania), „Bez odpowiedzi”
-// przy automatycznym otwarciu na wejściu w WBS (`wbs-qa-tree-open`).
-export default function QaTreeView({ nodeId, versionId, onClose, initialFilter = 'withQa' }) {
+// przy automatycznym otwarciu na wejściu w WBS (`wbs-qa-tree-open`). `highlightReplyIds` — id maili, których
+// odpowiedzi (para z `mailReplyId`) są nowe i świecą na zielono (popup `qa-mail-auto-notice`).
+export default function QaTreeView({ nodeId, versionId, onClose, initialFilter = 'withQa', highlightReplyIds = null }) {
     const [rows, setRows] = useState(null); // null = ładowanie
     const [loadError, setLoadError] = useState(false);
     const [fromCache, setFromCache] = useState(false);
@@ -91,6 +94,25 @@ export default function QaTreeView({ nodeId, versionId, onClose, initialFilter =
     const [mailQuestions, setMailQuestions] = useState(null);
     const rowsRef = useRef([]);
     useEffect(() => { rowsRef.current = rows || []; }, [rows]);
+    // Surowe węzły (ze strategią) — do przeliczenia złożenia strategii gałęzi po odpowiedzi z maila.
+    const itemsRef = useRef([]);
+
+    // @anchor qa-tree-mail-replies — odpowiedzi klientów na maile z pytaniami (QaMailRepliesModal); licznik NEW w nagłówku.
+    const [mailReplies, setMailReplies] = useState(null);
+    const [mailRepliesLoading, setMailRepliesLoading] = useState(false);
+    const [mailRepliesOpen, setMailRepliesOpen] = useState(false);
+    const loadMailReplies = useCallback(async () => {
+        if (!nodeId) return;
+        setMailRepliesLoading(true);
+        try {
+            const r = await fetch(`${API_URL}/qa-mail/replies/${nodeId}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
+            if (r.ok) setMailReplies(await r.json());
+        } catch { /* offline — licznik bez odświeżenia */ } finally {
+            setMailRepliesLoading(false);
+        }
+    }, [nodeId]);
+    useEffect(() => { loadMailReplies(); }, [loadMailReplies]);
+    const newMailReplies = (mailReplies || []).filter(r => r.status === 'NEW').length;
 
     // Migawka par bez odpowiedzi — liczona przy wejściu w filtr, żeby wpisana
     // odpowiedź nie znikała z ekranu w trakcie pisania.
@@ -102,6 +124,13 @@ export default function QaTreeView({ nodeId, versionId, onClose, initialFilter =
         rowsRef.current.forEach(r => r.qa.forEach(p => { if (isUnanswered(p)) keys.add(p._k); }));
         setUnansweredKeys(keys);
     }, [qaFilter, loaded]);
+
+    const isNewFromMail = (p) => !!(highlightReplyIds && p.mailReplyId && highlightReplyIds.has(p.mailReplyId));
+    // Po wczytaniu przewiń do pierwszej nowej odpowiedzi z maila.
+    useEffect(() => {
+        if (!loaded || !highlightReplyIds?.size) return;
+        requestAnimationFrame(() => document.querySelector('[data-mail-new="1"]')?.scrollIntoView({ block: 'center' }));
+    }, [loaded, highlightReplyIds]);
 
     const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
     useEffect(() => {
@@ -139,6 +168,7 @@ export default function QaTreeView({ nodeId, versionId, onClose, initialFilter =
                 items = items.map(n => pendingByNode.has(n.id) ? { ...n, qa: pendingByNode.get(n.id) } : n);
                 setQueuedIds(new Set(pendingByNode.keys()));
             }
+            itemsRef.current = items;
             setRows(flattenRows(buildTree(items)));
         })();
         return () => { cancelled = true; };
@@ -227,6 +257,59 @@ export default function QaTreeView({ nodeId, versionId, onClose, initialFilter =
         window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
     };
 
+    // @anchor answer-qa-tree-from-mail
+    // Zatwierdzone odpowiedzi z maila klienta → pary Q&A drzewa, jak w Q&A węzła (`answer-questions-from-mail`):
+    // zamyka zadanie „Wyjaśnić czy…”, przelicza złożenie strategii gałęzi z `{{q:id}}`. Para szukana po id,
+    // potem po treści pytania. Zwraca liczbę pytań, których nie ma już w Q&A.
+    const answerFromMail = (reply, picked) => {
+        const norm = t => String(t || '').trim().toLowerCase();
+        const byNode = new Map();
+        picked.forEach(r => byNode.set(r.wbsNodeId, [...(byNode.get(r.wbsNodeId) || []), r]));
+        let missing = 0;
+        const changed = new Map();
+        const doneTaskIds = [];
+        for (const [wbsNodeId, list] of byNode) {
+            const row = rowsRef.current.find(r => r.id === wbsNodeId);
+            if (!row) { missing += list.length; continue; }
+            let qa = ensureQaIds(row.qa);
+            for (const r of list) {
+                let idx = qa.findIndex(p => p.id === r.qaId);
+                if (idx < 0) idx = qa.findIndex(p => norm(p.question) === norm(r.question));
+                if (idx < 0) { missing++; continue; }
+                if (qa[idx].taskId && !String(qa[idx].answer || '').trim()) doneTaskIds.push(qa[idx].taskId);
+                const answer = String(r.answer || '').trim().toLocaleLowerCase('pl-PL');
+                qa = qa.map((p, i) => i === idx ? { ...p, answer, answerSource: 'mail', mailReplyId: reply.id, mailReplyAt: reply.receivedAt } : p);
+            }
+            changed.set(wbsNodeId, qa);
+        }
+        if (!changed.size) return missing;
+
+        const next = rowsRef.current.map(r => changed.has(r.id) ? { ...r, qa: changed.get(r.id) } : r);
+        rowsRef.current = next;
+        setRows(next);
+        changed.forEach((_, id) => { dirtyRef.current.add(id); persistNodeQa(id); });
+
+        const headers = { Authorization: `Bearer ${sessionStorage.getItem('token')}`, 'Content-Type': 'application/json' };
+        doneTaskIds.forEach(taskId => fetch(`${API_URL}/my-tasks/${taskId}`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'DONE' }) }).catch(() => {}));
+
+        // Złożenie strategii gałęzi (top-level) — tylko gdy któraś strategia w gałęzi ma znaczniki.
+        itemsRef.current = itemsRef.current.map(n => changed.has(n.id) ? { ...n, qa: changed.get(n.id).map(({ _k, ...p }) => p) } : n);
+        const topIds = new Set(next.filter(r => changed.has(r.id)).map(r => r.topId));
+        for (const root of buildTree(itemsRef.current).filter(r => topIds.has(r.id))) {
+            let tokens = false;
+            const walk = n => { if (strategyHasTokens(n?.strategy)) tokens = true; (n?.children || []).forEach(walk); };
+            (root.children || []).forEach(walk);
+            if (!tokens) continue;
+            const composed = composeBranchStrategy(root);
+            if (!composed || composed === (root.strategy || '')) continue;
+            itemsRef.current = itemsRef.current.map(n => n.id === root.id ? { ...n, strategy: composed } : n);
+            fetch(`${API_URL}/wbs-nodes/${root.id}`, { method: 'PATCH', headers, body: JSON.stringify({ strategy: composed }) })
+                .then(() => window.dispatchEvent(new CustomEvent('wbs-qa-imported')))
+                .catch(() => {});
+        }
+        return missing;
+    };
+
     const updatePair = (wbsNodeId, idx, field, value) => {
         dirtyRef.current.add(wbsNodeId);
         setRows(prev => prev.map(r => r.id === wbsNodeId
@@ -305,6 +388,12 @@ export default function QaTreeView({ nodeId, versionId, onClose, initialFilter =
                         <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-400 text-[10px] font-bold flex-shrink-0" title="Zapisy czekają na synchronizację — wyślą się automatycznie po odzyskaniu sieci">
                             <CloudOff size={12} /> {queuedIds.size} w kolejce
                         </div>
+                    )}
+                    {rows !== null && !loadError && !fromCache && (
+                        <button onClick={() => { setMailRepliesOpen(true); loadMailReplies(); }} title="Odpowiedzi klienta na maile z pytaniami"
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-bold transition-all flex-shrink-0 ${newMailReplies ? 'bg-amber-500/15 border-amber-500/30 text-amber-300 hover:bg-amber-500/25' : 'bg-white/5 border-white/10 text-gray-400 hover:text-gray-200 hover:bg-white/10'}`}>
+                            <Inbox size={12} /> {isMobile ? 'Odpowiedzi' : 'Odpowiedzi z maila'}{newMailReplies ? ` (${newMailReplies})` : ''}
+                        </button>
                     )}
                     {rows !== null && !loadError && !fromCache && openPairs > 0 && (
                         <button onClick={openMail} title="Wyślij pytania bez odpowiedzi mailem do klienta — domyślnie zaznaczone jeszcze niewysłane"
@@ -385,9 +474,11 @@ export default function QaTreeView({ nodeId, versionId, onClose, initialFilter =
                                             </div>
                                             <div className={isMobile ? 'flex gap-2' : 'contents'}>
                                                 <GrowingTextarea value={p.answer || ''} placeholder="Odpowiedź…"
+                                                    data-mail-new={isNewFromMail(p) ? '1' : undefined}
+                                                    title={isNewFromMail(p) ? 'Nowa odpowiedź wpisana przez AI z maila klienta' : undefined}
                                                     onChange={e => updatePair(row.id, idx, 'answer', e.target.value)}
                                                     onBlur={() => persistNodeQa(row.id)}
-                                                    className="w-full resize-none overflow-hidden bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm text-blue-200 placeholder-gray-700 focus:outline-none focus:border-blue-500/50" />
+                                                    className={`w-full resize-none overflow-hidden rounded-xl px-3 py-2 text-sm placeholder-gray-700 focus:outline-none ${isNewFromMail(p) ? 'bg-emerald-500/15 border-2 border-emerald-400/70 text-emerald-200 focus:border-emerald-300' : 'bg-black/20 border border-white/10 text-blue-200 focus:border-blue-500/50'}`} />
                                                 <button onClick={() => removePair(row.id, idx)} className="p-2 rounded-lg text-gray-700 hover:text-red-400 hover:bg-red-500/10 active:text-red-400 transition-all flex-shrink-0 self-start" title="Usuń pytanie">
                                                     <X size={12} />
                                                 </button>
@@ -407,6 +498,21 @@ export default function QaTreeView({ nodeId, versionId, onClose, initialFilter =
                     questions={mailQuestions}
                     onClose={() => setMailQuestions(null)}
                     onSent={applyMailSent}
+                />
+            )}
+            {mailRepliesOpen && (
+                <QaMailRepliesModal
+                    processNodeId={nodeId}
+                    replies={mailReplies}
+                    loading={mailRepliesLoading}
+                    onReload={loadMailReplies}
+                    onApply={answerFromMail}
+                    currentAnswer={(wbsNodeId, qaId, question) => {
+                        const qa = rowsRef.current.find(r => r.id === wbsNodeId)?.qa || [];
+                        const p = qa.find(x => x.id === qaId) || qa.find(x => String(x.question || '').trim().toLowerCase() === String(question || '').trim().toLowerCase());
+                        return String(p?.answer || '').trim();
+                    }}
+                    onClose={() => setMailRepliesOpen(false)}
                 />
             )}
         </div>
