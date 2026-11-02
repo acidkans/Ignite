@@ -238,7 +238,7 @@ export function wykryjKolizje({ liscie, actualsOf, constraints = [] }) {
         .map(k => [k.sourceId, k.id]));
     const roboty = {};
     for (const l of liscie) {
-        if (!l.ganttStart || !hasExecAxis(l.type) || ZROBIONE_ROBOTY.includes(l.execStatus)) continue;
+        if (!l.planOd || !hasExecAxis(l.type) || ZROBIONE_ROBOTY.includes(l.execStatus)) continue;
         (roboty[l.branchId] || (roboty[l.branchId] = [])).push(l);
     }
     const out = [];
@@ -249,8 +249,8 @@ export function wykryjKolizje({ liscie, actualsOf, constraints = [] }) {
             const dost = dzien(e.entryDate);
             let najgorsza = null;
             for (const w of roboty[m.branchId] || []) {
-                const start = dzien(w.ganttStart);
-                const koniec = dzien(w.ganttEnd || w.ganttStart);
+                const start = dzien(w.planOd);
+                const koniec = dzien(w.planDo);
                 const zapas = Math.round((start - dost) / 86400000);
                 if (zapas >= BUFOR_DOSTAWY_DNI || koniec < dost) continue;
                 if (!najgorsza || zapas < najgorsza.zapas) najgorsza = { robota: w, start, zapas };

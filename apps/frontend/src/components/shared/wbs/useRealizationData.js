@@ -5,7 +5,8 @@
 // i liczby pozycji nie mogą żyć w dwóch kopiach.
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { API_URL } from '../../../config';
-import { AXIS_STATUS_ORDER, hasPurchaseAxis, hasExecAxis, buildOwnerOptions, applyGroupMultipliers } from './wbsConstants';
+import { AXIS_STATUS_ORDER, hasPurchaseAxis, hasExecAxis, buildOwnerOptions, applyGroupMultipliers, buildHierarchy } from './wbsConstants';
+import { ganttDatesByNode } from './GanttSection';
 import {
     authHeaders, flattenWbsNodes, buildCardMap, wbsRootOf, realizationOf, planValueOf, markOutOfBaseline, ENTRY_STATUS,
 } from './realizationShared';
@@ -79,13 +80,21 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
         try {
             const headers = { Authorization: `Bearer ${token}` };
             const q = versionId ? `?versionId=${versionId}` : '';
-            const [wbsRes, reqRes, actRes] = await Promise.all([
+            const [wbsRes, reqRes, actRes, orderRes] = await Promise.all([
                 fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${q}`, { headers }),
                 fetch(`${API_URL}/material-requirements/node/${nodeId}${q}`, { headers }),
                 fetch(`${API_URL}/leaf-actuals/order/${nodeId}`, { headers }),
+                fetch(`${API_URL}/order-requirements/${nodeId}${q}`, { headers }),
             ]);
+            const items = wbsRes.ok ? ((await wbsRes.json()).items || []) : [];
+            // @anchor realization-plan-od-do — `planOd`/`planDo` (do = ostatni dzień) liczone jak w Gantcie,
+            // ze startem projektu tej samej wersji (`OrderRequirements.projectStart`).
+            let projectStart = null;
+            try { const t = orderRes.ok ? await orderRes.text() : ''; projectStart = t ? JSON.parse(t).projectStart : null; } catch { /* brak startu = dziś, jak Gantt */ }
+            const daty = ganttDatesByNode(buildHierarchy(flattenWbsNodes(items)), projectStart);
             // Pakiety (gałęzie grupujące z ilością) rozwinięte: ilość planu = własna × pakiety.
-            const flat = wbsRes.ok ? applyGroupMultipliers(flattenWbsNodes((await wbsRes.json()).items || [])) : [];
+            const flat = applyGroupMultipliers(flattenWbsNodes(items))
+                .map(n => (daty[n.id] ? { ...n, planOd: daty[n.id].od, planDo: daty[n.id].do } : n));
             setWbsNodes(markOutOfBaseline(flat, acceptedAt));
             setCards(reqRes.ok ? buildCardMap(flat, await reqRes.json()) : {});
             setActuals(actRes.ok ? await actRes.json() : []);
@@ -131,6 +140,32 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
             console.error('[RealizationNewTab] fetchCards error:', e);
         }
     }, [nodeId, versionId, token, wbsNodes]);
+
+    // @anchor realization-save-plan-dates — przesunięcie paska robót z Lookahead: zapis do
+    // `WbsNode.ganttStart/ganttEnd` (te same pola co Gantt, koniec wyłączny = dzień po ostatnim),
+    // więc oba widoki planują na jednym źródle. Ilość pozycji się nie zmienia — plan po baseline.
+    const savePlanDates = useCallback(async (wbsNodeId, od, doDnia) => {
+        const start = new Date(od); start.setHours(0, 0, 0, 0);
+        const ost = new Date(doDnia); ost.setHours(0, 0, 0, 0);
+        if (ost < start) ost.setTime(start.getTime());
+        const koniec = new Date(ost); koniec.setDate(koniec.getDate() + 1);
+        let poprzednie = null;
+        setWbsNodes(prev => prev.map(n => {
+            if (n.id !== wbsNodeId) return n;
+            poprzednie = n;
+            return { ...n, planOd: start, planDo: ost, ganttStart: start.toISOString(), ganttEnd: koniec.toISOString() };
+        }));
+        try {
+            const res = await fetch(`${API_URL}/wbs-nodes/${wbsNodeId}`, {
+                method: 'PATCH', headers: authHeaders(),
+                body: JSON.stringify({ ganttStart: start.toISOString(), ganttEnd: koniec.toISOString() }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (e) {
+            if (poprzednie) setWbsNodes(prev => prev.map(n => (n.id === wbsNodeId ? poprzednie : n)));
+            throw e;
+        }
+    }, []);
 
     // @anchor realization-new-save-comment — `WbsNode.comment` przez `PATCH /wbs-nodes/:id`,
     // plus rozgłoszenie `wbs-comment-changed`: ten sam komentarz czyta WBS, panel Materiały
@@ -321,7 +356,7 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
     return {
         loading, wbsNodes, cards, actuals,
         fetchAll, fetchActuals, fetchCards,
-        saveComment, saveOwner, saveAxis, addActual, updateActual, deleteActual, setClosed, toggleClosed,
+        saveComment, saveOwner, saveAxis, savePlanDates, addActual, updateActual, deleteActual, setClosed, toggleClosed,
         actualsOf, cardOf, rowOf, ownerOptions,
         // @anchor realization-owner-users — konta zespołu zamówienia (właściciel blokera = `User`)
         ownerUsers,

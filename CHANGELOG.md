@@ -1,3 +1,19 @@
+## 2026-11-02 — feat(realizacja): Lookahead jako tablica planowania — te same daty co Gantt, przeciąganie i rozciąganie pasków robót
+
+### architektura / API
+- `ui-funkcja` `ganttDatesByNode` (GanttSection) — jedno źródło dat robót: zapisane `ganttStart/ganttEnd` albo domyślne daty, które Gantt liczy w locie (start projektu + czas trwania) i których nie zapisuje; wcześniej Lookahead widział tylko ręcznie poprawione paski
+- `ui-hook` `useRealizationData` — pobiera `order-requirements` wersji (start projektu), dokłada pozycjom `planOd/planDo`; nowa mutacja `savePlanDates` → `PATCH /wbs-nodes/:id { ganttStart, ganttEnd }`
+- `ui-sekcja` `Lookahead` — przeciągnięcie paska przesuwa roboty, krawędź zmienia start/koniec, klik w dzień przenosi start; okno przewijane o tydzień, 14/28 dni, przełącznik „wszystkie roboty”, znaczniki robót poza oknem; widok przemianowany na „Lookahead”
+- Kokpit, Tablica i kolizje dostaw czytają `planOd/planDo` zamiast surowych `ganttStart/ganttEnd`
+
+### słownik
+- dodano `realizacja-lookahead-okno`, `realizacja-lookahead-drag`, `gantt-daty-wezlow`, `realization-plan-od-do`, `realization-save-plan-dates`
+
+### wytyczne
+- `ui-funkcja` `ganttDatesByNode` — każda funkcja pokazująca daty robót poza Gantem liczy je przez tę funkcję, nigdy z samego `WbsNode.ganttStart` (puste dla nieruszonych pasków)
+- `schema-pole` `WbsNode.ganttEnd` — koniec wyłączny (dzień po ostatnim dniu robót); `planDo` w realizacji to ostatni dzień (domknięty)
+- `ui-sekcja` `Lookahead` — zmiana dat w realizacji nie zmienia ilości pozycji (plan po baseline), w odróżnieniu od rozciągania paska pracy w Gantcie
+
 ## 2026-11-02 — feat(realizacja): rejestr blokerów (Constraint), kontrola kolizji dostaw i Lookahead 14 dni z Gantta; wygląd Realizacji jak w mockupie
 
 ### schema.prisma
