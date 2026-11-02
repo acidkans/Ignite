@@ -290,6 +290,31 @@ const toInputDate = (d) => d ? new Date(d).toISOString().slice(0, 10) : '';
 // Data "Do" jest domknięta (= ostatni dzień zadania). Wewnętrznie task.end jest
 // wykluczające (dzień po ostatnim), więc do wyświetlenia odejmujemy 1 dzień.
 const inclusiveEnd = (d) => new Date(new Date(d).getTime() - DAY_MS);
+
+// @anchor gantt-daty-wezlow — daty pasków tak, jak je rysuje Gantt: zapisane `ganttStart/End`
+// albo domyślne (start projektu + czas trwania), których Gantt NIE zapisuje do bazy, dopóki
+// ktoś nie ruszy paska. Bez tego Realizacja widziała tylko ręcznie poprawione paski.
+// `items` = drzewo (z `children`); zwraca { [id]: { od, do } }, `do` = ostatni dzień (domknięty).
+export const ganttDatesByNode = (items, projectStartDate) => {
+    const start = projectStartDate && isValidGanttDate(projectStartDate)
+        ? new Date(String(projectStartDate).slice(0, 10))
+        : new Date();
+    start.setHours(0, 0, 0, 0);
+    const overrides = {};
+    const walk = (nodes) => {
+        for (const n of nodes || []) {
+            if (n.ganttStart && n.ganttEnd) overrides[n.id] = { start: n.ganttStart, end: n.ganttEnd };
+            walk(n.children);
+        }
+    };
+    walk(items);
+    const { tasks } = buildTasksFromTree(items || [], start, '', overrides, {});
+    const out = {};
+    for (const t of tasks) {
+        if (t && isValidGanttDate(t.start) && isValidGanttDate(t.end)) out[t.id] = { od: t.start, do: new Date(Math.max(+t.start, +inclusiveEnd(t.end))) };
+    }
+    return out;
+};
 // ExcelJS serializuje daty wg składowych UTC — daty z aplikacji są o północy
 // lokalnej, więc bez konwersji plik cofa dzień o dobę. Budujemy północ UTC
 // z lokalnego dnia kalendarzowego.

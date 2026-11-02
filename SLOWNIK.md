@@ -301,6 +301,11 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-formularz | BlokerForm | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-bloker-form |
 | ui-funkcja | decyzje (sortowanie blokerów) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolejnosc-blokerow |
 | ui-sekcja | Lookahead | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-lookahead |
+| ui-stan | przesun / ileDni (okno Lookahead: przesunięcie od dziś i długość 14/28 dni) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-lookahead-okno |
+| ui-stan | drag (ciągnięty pasek robót w Lookahead: tryb move/l/r, delta dni) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-lookahead-drag |
+| ui-funkcja | ganttDatesByNode (daty pasków jak w Gantcie: zapisane albo domyślne; do = ostatni dzień) | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor gantt-daty-wezlow |
+| ui-funkcja | planOd / planDo (daty robót pozycji w danych realizacji, z `ganttDatesByNode`) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-plan-od-do |
+| ui-funkcja | savePlanDates (zapis `ganttStart/ganttEnd` z Lookahead) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-save-plan-dates |
 | ui-sekcja | Tablica | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tablica |
 | ui-stala | TABLICA_KOLUMNY | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tablica-kolumny |
 | ui-stala | RODZAJE_BLOKERA | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor rodzaje-blokera |
