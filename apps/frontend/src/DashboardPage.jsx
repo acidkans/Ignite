@@ -7,6 +7,7 @@ import NodeInfoTab from './components/shared/NodeInfoTab';
 import SchematTab from './components/shared/SchematTab';
 import LogistykaMaterialListsTab from './components/shared/LogistykaMaterialListsTab';
 import RealizationNewTab from './components/shared/RealizationNewTab';
+import RealizacjaPanel from './components/shared/realizacja/RealizacjaPanel';
 import MaterialDatabaseTab from './components/shared/MaterialDatabaseTab';
 import OffersTab from './components/shared/OffersTab';
 import UnifiedWbsPanel from './components/shared/wbs/UnifiedWbsPanel';
@@ -15,7 +16,7 @@ import MyTasksModal from './components/shared/MyTasksModal';
 import DueTasksBell from './components/shared/DueTasksBell';
 import TaskReminderToast from './components/shared/TaskReminderToast';
 import SnapshotEditGuard from './components/shared/SnapshotEditGuard';
-import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink, Coins, ThumbsUp, Undo2 } from 'lucide-react';
+import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink, Coins, ThumbsUp, Undo2, Play } from 'lucide-react';
 import { API_URL } from './config';
 import { APP_VERSION } from './version';
 import OneDriveBrowserModal from './components/shared/OneDriveBrowserModal';
@@ -76,6 +77,8 @@ export default function DashboardPage() {
     const contextPendingRequirementIdRef = context?.pendingRequirementIdRef;
     const contextPendingSectionRef = context?.pendingSectionRef;
     const refreshTree = context?.refreshTree;
+    // @anchor dashboard-set-branch-nav — publikuje drzewo gałęzi realizacji do lewego panelu (MainLayout).
+    const setBranchNav = context?.setBranchNav;
 
     const { userId: currentUserId, roles: currentRoles = [] } = useMemo(() => decodeToken() || {}, []); // eslint-disable-line react-hooks/exhaustive-deps
     const isWorker = currentRoles.includes('USER') && !currentRoles.some(r => ['ADMIN', 'MANAGER', 'LOGISTYK'].includes(r));
@@ -94,7 +97,7 @@ export default function DashboardPage() {
         _setActiveTab(tab);
     };
     const [tabOrder, setTabOrder] = useState(() => {
-        const ALL_TABS = ['files', 'financialFiles', 'unified', 'realizationNew', 'schematics', 'materialDatabase'];
+        const ALL_TABS = ['files', 'financialFiles', 'unified', 'realizacja', 'realizationNew', 'schematics', 'materialDatabase'];
         try {
             const saved = JSON.parse(localStorage.getItem('tabOrder') || 'null');
             if (!saved) return ALL_TABS;
@@ -178,6 +181,13 @@ export default function DashboardPage() {
     const [acceptModal, setAcceptModal] = useState(null); // { versionId, versionLabel, preview, quickQuoteId, busy, error }
     // @anchor dashboard-revoke-modal
     const [revokeModal, setRevokeModal] = useState(null); // { reason, busy, error }
+    // @anchor dashboard-realization-started — etap REALIZACJA: realizacja uruchomiona po baseline.
+    // Blokuje cofnięcie akceptacji (najpierw trzeba cofnąć uruchomienie).
+    const realizationStarted = acceptance?.orderStage === 'REALIZACJA';
+    // @anchor dashboard-stage-busy — trwa zmiana etapu realizacji (przycisk w nagłówku i w modalu).
+    const [stageBusy, setStageBusy] = useState(false);
+    // @anchor dashboard-stop-realization-open — modal potwierdzenia cofnięcia uruchomienia realizacji.
+    const [stopRealizationOpen, setStopRealizationOpen] = useState(false);
 
     // Sprawdź typ aktywnego węzła
     const activeNode = useMemo(() => findNodeById(menuTree, activeAreaId), [menuTree, activeAreaId]);
@@ -370,9 +380,36 @@ export default function DashboardPage() {
                 setAcceptModal(m => ({ ...m, busy: false, error: e.message || 'Błąd akceptacji' }));
                 return;
             }
-            setAcceptModal(null);
+            // Modal zostaje otwarty z drugim krokiem — „Uruchom realizację" albo „Później".
+            setAcceptModal(m => ({ ...m, busy: false, done: true }));
             await fetchAcceptance();
         } catch { setAcceptModal(m => ({ ...m, busy: false, error: 'Błąd połączenia' })); }
+    };
+
+    // @anchor dashboard-change-realization-stage — „Uruchom realizację" (ZAAKCEPTOWANE → REALIZACJA)
+    // albo cofnięcie uruchomienia. Po starcie zamówienie przechodzi na zakładkę Realizacja.
+    const changeRealizationStage = async (start) => {
+        if (stageBusy) return false;
+        setStageBusy(true);
+        try {
+            const res = await fetch(`${API_URL}/orders/${activeAreaId}/${start ? 'start' : 'stop'}-realization`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+            });
+            if (!res.ok) {
+                const e = await res.json().catch(() => ({}));
+                alert(e.message || 'Nie udało się zmienić etapu zamówienia');
+                return false;
+            }
+            await fetchAcceptance();
+            if (start) handleTabChange('realizacja');
+            return true;
+        } catch {
+            alert('Błąd połączenia');
+            return false;
+        } finally {
+            setStageBusy(false);
+        }
     };
 
     // @anchor dashboard-confirm-revoke — cofnięcie akceptacji z obowiązkowym powodem
@@ -786,9 +823,13 @@ export default function DashboardPage() {
                                                     {/* @anchor dashboard-revoke-button — cofnięcie akceptacji: osobna głośna akcja z powodem */}
                                                     {isManagerOrAdmin && acceptance?.acceptedVersionId === v.id && (
                                                         <button
-                                                            onClick={(e) => { e.stopPropagation(); setShowVersionMenu(false); setRevokeModal({ reason: '', busy: false, error: '' }); }}
-                                                            className="p-1 text-amber-500 hover:text-amber-300"
-                                                            title="Cofnij akceptację (wymaga powodu)"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (realizationStarted) return;
+                                                                setShowVersionMenu(false); setRevokeModal({ reason: '', busy: false, error: '' });
+                                                            }}
+                                                            className={`p-1 ${realizationStarted ? 'text-gray-700 cursor-not-allowed' : 'text-amber-500 hover:text-amber-300'}`}
+                                                            title={realizationStarted ? 'Realizacja uruchomiona — najpierw cofnij uruchomienie (chip REALIZACJA w nagłówku)' : 'Cofnij akceptację (wymaga powodu)'}
                                                         >
                                                             <Undo2 size={11} />
                                                         </button>
@@ -828,6 +869,32 @@ export default function DashboardPage() {
                             )}
                         </div>
 
+                        {/* @anchor dashboard-start-realization-button — start realizacji po baseline.
+                            Osobno od listy wersji: dotyczy całego zamówienia, nie jednej wersji. */}
+                        {baselineAccepted && !realizationStarted && isManagerOrAdmin && (
+                            <button
+                                onClick={() => changeRealizationStage(true)}
+                                disabled={stageBusy}
+                                title="Etap zamówienia ZAAKCEPTOWANE → REALIZACJA. Zamówienie otworzy się na zakładce Realizacja."
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 text-[11px] font-bold text-fuchsia-300 hover:bg-fuchsia-500/20 transition-all disabled:opacity-50">
+                                <Play size={11} />{stageBusy ? 'Uruchamianie…' : 'Uruchom realizację'}
+                            </button>
+                        )}
+                        {/* @anchor dashboard-realization-chip — etap REALIZACJA; manager może cofnąć uruchomienie. */}
+                        {realizationStarted && (
+                            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 text-[10px] font-bold uppercase tracking-wider text-fuchsia-300">
+                                Realizacja
+                                {isManagerOrAdmin && (
+                                    <button
+                                        onClick={() => setStopRealizationOpen(true)}
+                                        disabled={stageBusy}
+                                        title="Cofnij uruchomienie realizacji (etap wraca na ZAAKCEPTOWANE, wpisy realizacji zostają)"
+                                        className="text-fuchsia-400/60 hover:text-fuchsia-200">
+                                        <Undo2 size={11} />
+                                    </button>
+                                )}
+                            </span>
+                        )}
                     </div>
                 )}
 
@@ -1046,7 +1113,10 @@ export default function DashboardPage() {
                         // Widzi ją KAŻDY, kto widzi zamówienie, także pracownik. Zapis ogranicza rola: `RealizationNewTab`
                         // wpuszcza do edycji ADMIN/MANAGER/LOGISTYK, a analizę kwotową pokazuje
                         // wyłącznie ADMIN i MANAGER.
-                        realizationNew:  { label: 'Realizacja',       color: 'fuchsia', activeColor: 'text-fuchsia-400', idleColor: 'text-fuchsia-400/50 hover:text-fuchsia-300', bar: 'bg-fuchsia-500', shadow: '217,70,239', cond: isOrder },
+                        // @anchor tab-realizacja — nowy UI realizacji (MVP): Kokpit + Macierz na całą szerokość,
+                        // drzewo gałęzi w lewym panelu aplikacji. Stary układ zostaje obok jako „Realizacja (tabela)".
+                        realizacja:      { label: 'Realizacja',       color: 'fuchsia', activeColor: 'text-fuchsia-400', idleColor: 'text-fuchsia-400/50 hover:text-fuchsia-300', bar: 'bg-fuchsia-500', shadow: '217,70,239', cond: isOrder },
+                        realizationNew:  { label: 'Realizacja (tabela)', color: 'fuchsia', activeColor: 'text-fuchsia-400', idleColor: 'text-fuchsia-400/50 hover:text-fuchsia-300', bar: 'bg-fuchsia-500', shadow: '217,70,239', cond: isOrder },
                         schematics:      { label: 'Schemat',          color: 'orange', activeColor: 'text-orange-400', bar: 'bg-orange-500', shadow: '249,115,22',  cond: isOrder },
                         materialDatabase:{ label: 'Baza Materiałów',  color: 'purple', activeColor: 'text-purple-400', bar: 'bg-purple-500', shadow: '168,85,247',  cond: isOrder },
                     };
@@ -1163,6 +1233,22 @@ export default function DashboardPage() {
                                 />
                             </div>
                         )}
+                        {activeTab === 'realizacja' && isOrder && (
+                            <div className="absolute inset-0 overflow-hidden">
+                                <RealizacjaPanel
+                                    key={`realizacja-${activeAreaId}-${realizationVersionId}`}
+                                    nodeId={activeAreaId}
+                                    versionId={realizationVersionId}
+                                    planLabel={realizationPlanLabel}
+                                    orderName={activeNode?.name || ''}
+                                    userRoles={currentRoles}
+                                    acceptedAt={realizationVersion?.source === 'baseline' ? (acceptance?.acceptedAt ?? null) : null}
+                                    stage={acceptance?.orderStage || null}
+                                    searchQuery={searchQuery}
+                                    setBranchNav={setBranchNav}
+                                />
+                            </div>
+                        )}
                         {activeTab === 'schematics' && (
                            <div className="absolute inset-0 overflow-hidden">
                                <SchematTab
@@ -1226,6 +1312,27 @@ export default function DashboardPage() {
                         <ThumbsUp size={15} className="text-teal-400" />
                         <span className="text-sm font-bold text-white">Akceptacja wersji „{acceptModal.versionLabel}"</span>
                     </div>
+                    {/* @anchor dashboard-accept-done-step — drugi krok po kciuku: start realizacji teraz albo później */}
+                    {acceptModal.done ? (
+                    <>
+                    <div className="px-5 py-4 space-y-2">
+                        <p className="text-sm text-emerald-300 font-semibold">Baseline zapisany.</p>
+                        <p className="text-xs text-gray-400 leading-relaxed">
+                            Uruchomienie realizacji przestawia zamówienie na etap REALIZACJA i otwiera zakładkę Realizacja.
+                            Możesz to zrobić teraz albo później przyciskiem „Uruchom realizację” w nagłówku, np. po podpisaniu umowy.
+                        </p>
+                    </div>
+                    <div className="px-5 py-4 border-t border-white/5 bg-black/20 flex items-center gap-3">
+                        <button onClick={() => setAcceptModal(null)} disabled={stageBusy}
+                            className="flex-1 py-2 rounded-xl text-[11px] text-gray-400 font-semibold border border-white/10 hover:bg-white/5 transition-all">Później</button>
+                        <button onClick={async () => { if (await changeRealizationStage(true)) setAcceptModal(null); }} disabled={stageBusy}
+                            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-300 text-[11px] font-semibold border border-fuchsia-500/30 transition-all disabled:opacity-50">
+                            <Play size={12} />{stageBusy ? 'Uruchamianie…' : 'Uruchom realizację'}
+                        </button>
+                    </div>
+                    </>
+                    ) : (
+                    <>
                     <div className="px-5 py-4 space-y-3">
                         {!acceptModal.preview && !acceptModal.error && <p className="text-xs text-gray-500">Ładowanie podglądu…</p>}
                         {acceptModal.preview && (
@@ -1293,6 +1400,29 @@ export default function DashboardPage() {
                         <button onClick={confirmAccept} disabled={acceptModal.busy || !acceptModal.preview}
                             className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 text-[11px] font-semibold border border-teal-500/30 transition-all disabled:opacity-50">
                             <ThumbsUp size={12} />{acceptModal.busy ? 'Akceptowanie…' : 'Zaakceptuj (baseline)'}
+                        </button>
+                    </div>
+                    </>
+                    )}
+                </div>
+            </div>
+        )}
+
+        {/* @anchor dashboard-stop-realization-modal — potwierdzenie cofnięcia uruchomienia realizacji */}
+        {stopRealizationOpen && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                <div className="bg-gray-900 border border-white/10 rounded-2xl shadow-2xl w-[420px] overflow-hidden">
+                    <div className="px-5 py-4 border-b border-white/5 text-sm font-bold text-white">Cofnąć uruchomienie realizacji?</div>
+                    <p className="px-5 py-4 text-xs text-gray-400 leading-relaxed">
+                        Etap zamówienia wróci na ZAAKCEPTOWANE. Zakupy, zadania i protokoły zostają bez zmian.
+                        Dopiero potem można cofnąć akceptację baseline.
+                    </p>
+                    <div className="px-5 py-4 border-t border-white/5 bg-black/20 flex items-center gap-3">
+                        <button onClick={() => setStopRealizationOpen(false)} disabled={stageBusy}
+                            className="flex-1 py-2 rounded-xl text-[11px] text-gray-400 font-semibold border border-white/10 hover:bg-white/5 transition-all">NIE</button>
+                        <button onClick={async () => { await changeRealizationStage(false); setStopRealizationOpen(false); }} disabled={stageBusy}
+                            className="flex-1 py-2 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 text-[11px] font-semibold border border-amber-500/30 transition-all disabled:opacity-50">
+                            {stageBusy ? 'Cofanie…' : 'TAK, cofnij'}
                         </button>
                     </div>
                 </div>

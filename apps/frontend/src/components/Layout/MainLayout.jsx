@@ -74,6 +74,9 @@ export default function MainLayout({ onLogout }) {
 
     // Data State
     const [menuTree, setMenuTree] = useState([]);
+    // @anchor main-layout-branch-nav — drzewo gałęzi realizacji aktywnego zamówienia do lewego panelu
+    // (publikuje je `RealizacjaPanel`, rysuje `SidebarBranchTree`); null = brak.
+    const [branchNav, setBranchNav] = useState(null);
     const [loadingMenu, setLoadingMenu] = useState(true);
 
     // Selection state
@@ -342,6 +345,7 @@ export default function MainLayout({ onLogout }) {
                         leavesEnabled={leavesEnabled}
                         onReloadTree={fetchTree}
                         onOpenMyAccount={() => setMyAccount({ oauthResult: null })}
+                        branchNav={branchNav}
                     />
                 </div>
 
@@ -422,7 +426,7 @@ export default function MainLayout({ onLogout }) {
                     Outlet działa tutaj jako placeholder dla komponentów zdefiniowanych w App.jsx 
                     Przekazujemy setActiveAreaId itp. przez context, aby DashboardPage mógł z tego korzystać.
                 */}
-                <Outlet context={{ activeAreaId, setActiveAreaId: handleNodeChange, refreshTree: fetchTree, menuTree, setLeftVisible, setAiVisible, setDocsVisible, pendingTabRef, pendingRequirementIdRef, pendingSectionRef }} />
+                <Outlet context={{ activeAreaId, setActiveAreaId: handleNodeChange, refreshTree: fetchTree, menuTree, setLeftVisible, setAiVisible, setDocsVisible, pendingTabRef, pendingRequirementIdRef, pendingSectionRef, setBranchNav }} />
             </main>
 
             {/* TOGGLE DOCS BUTTON (amber) */}

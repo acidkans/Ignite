@@ -215,6 +215,54 @@ Indeks wszystkich zaindeksowanych zmiennych projektu. Aktualizowany przed każdy
 Format wiersza: `| tag | nazwa | plik | @anchor <kebab-case-name> |`
 Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 
+### Moduł Realizacja — nowy UI (MVP)
+
+Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja”, drzewo gałęzi w lewym panelu aplikacji.
+
+| Tag | Nazwa | Plik | Anchor |
+|-----|-------|------|--------|
+| schema-pole | WbsNode.shortName | apps/backend/prisma/schema.prisma | @anchor wbs-node-short-name |
+| back-endpoint | POST /orders/:nodeId/start-realization | apps/backend/src/orders/orders.controller.ts | @anchor orders-start-realization-endpoint |
+| back-endpoint | POST /orders/:nodeId/stop-realization | apps/backend/src/orders/orders.controller.ts | @anchor orders-stop-realization-endpoint |
+| back-funkcja | startRealization | apps/backend/src/orders/orders.service.ts | @anchor orders-start-realization |
+| back-funkcja | stopRealization | apps/backend/src/orders/orders.service.ts | @anchor orders-stop-realization |
+| ui-funkcja | setBranchNav (z kontekstu) | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-set-branch-nav |
+| ui-stan | realizationStarted | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-realization-started |
+| ui-stan | stageBusy | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-stage-busy |
+| ui-stan | stopRealizationOpen | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-stop-realization-open |
+| ui-funkcja | changeRealizationStage | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-change-realization-stage |
+| ui-przycisk | Uruchom realizację (nagłówek) | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-start-realization-button |
+| ui-przycisk | chip REALIZACJA + cofnięcie | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-realization-chip |
+| ui-zakladka | realizacja (TAB_META) | apps/frontend/src/DashboardPage.jsx | @anchor tab-realizacja |
+| ui-modal | krok „Baseline zapisany” w modalu akceptacji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-accept-done-step |
+| ui-modal | Cofnąć uruchomienie realizacji? | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-stop-realization-modal |
+| ui-stan | branchNav | apps/frontend/src/components/Layout/MainLayout.jsx | @anchor main-layout-branch-nav |
+| ui-panel | SidebarBranchTree | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree |
+| ui-zakladka | RealizacjaPanel | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-panel |
+| ui-funkcja | drogaPozycji | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-droga |
+| ui-funkcja | osEtykieta | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-os-etykieta |
+| ui-stan | shortOverrides | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-short-overrides |
+| ui-funkcja | zapiszShort | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zapisz-short |
+| ui-stala | navGalezie | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-branch-nav |
+| ui-sekcja | DrogaPasek | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-droga-pasek |
+| ui-sekcja | SygnalyCell | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-sygnaly-cell |
+| ui-sekcja | Wpis | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis |
+| ui-sekcja | FiltryWatku | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-filtry-watku |
+| ui-tabela | Macierz | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-macierz |
+| ui-sekcja | RozwinietaPozycja | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-rozwinieta-pozycja |
+| ui-dropdown | OsWybor | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-os-wybor |
+| ui-sekcja | Kokpit | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit |
+| ui-funkcja | krotkaNazwa | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor krotka-nazwa |
+| ui-funkcja | nazwaWyswietlana | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor nazwa-wyswietlana |
+| ui-stala | WATEK_RODZAJE | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor watek-rodzaje |
+| ui-funkcja | zbudujWatek | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor zbuduj-watek |
+| ui-funkcja | sygnalyWezlow | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor sygnaly-wezlow |
+| ui-funkcja | sumaSygnalow | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor suma-sygnalow |
+| ui-funkcja | kiedyTekst | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor kiedy-tekst |
+| ui-hook | useWatekRealizacji | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor use-watek-realizacji |
+| ui-funkcja | wyslij | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-wyslij |
+| ui-funkcja | zamknijBloker | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-zamknij-bloker |
+
 ### Moduł MarkerDetailsPanel
 
 #### Frontend (`apps/frontend/src/components/shared/MarkerDetailsPanel.jsx`)
@@ -1165,6 +1213,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | back-funkcja | MailService.sendUserConfirmation | apps/backend/src/mail/mail.service.ts | @anchor mail-send-user-confirmation |
 | back-funkcja | MailService.sendExport | apps/backend/src/mail/mail.service.ts | @anchor mail-send-export |
 | back-funkcja | MailService.exportSender | apps/backend/src/mail/mail.service.ts | @anchor mail-export-sender |
+| back-funkcja | sendExport — zakres odbiorców `scope: 'team'` | apps/backend/src/mail/mail.service.ts | @anchor mail-send-export-team-scope |
 | back-funkcja | MailService.getRecipients | apps/backend/src/mail/mail.service.ts | @anchor mail-get-recipients |
 | back-controller | MailController | apps/backend/src/mail/mail.controller.ts | @anchor mail-controller |
 | back-endpoint | GET /mail/export-sender/:nodeId | apps/backend/src/mail/mail.controller.ts | @anchor get-mail-export-sender |

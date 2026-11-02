@@ -624,10 +624,15 @@ export class OrdersService {
         if (!reason?.trim()) throw new BadRequestException('Powód cofnięcia akceptacji jest wymagany');
         const node = await this.prisma.processNode.findUnique({
             where: { id: nodeId },
-            select: { id: true, acceptedVersionId: true, acceptedBy: true, acceptedAt: true },
+            select: { id: true, acceptedVersionId: true, acceptedBy: true, acceptedAt: true, orderStage: true },
         });
         if (!node) throw new NotFoundException('Węzeł nie znaleziony');
         if (!node.acceptedVersionId) throw new BadRequestException('Zamówienie nie ma zaakceptowanej wersji');
+        // Na baseline wiszą już zakupy, zadania i protokoły realizacji — cofnięcie akceptacji
+        // spod uruchomionej realizacji zostawiłoby je bez planu, do którego się rozliczają.
+        if (node.orderStage === 'REALIZACJA') {
+            throw new BadRequestException('Realizacja jest uruchomiona — najpierw cofnij uruchomienie realizacji');
+        }
 
         const restore = await this.statusesToRestore(nodeId, node.acceptedVersionId);
 
@@ -673,6 +678,42 @@ export class OrdersService {
                 + ` — cofnięto ${restore.revertedCount} statusów, zostawiono ${restore.keptCount}`,
             );
             return { ...updated, revertedCount: restore.revertedCount, keptCount: restore.keptCount };
+        });
+    }
+
+    // @anchor orders-start-realization — „Uruchom realizację": ZAAKCEPTOWANE → REALIZACJA.
+    // Osobny krok od kciuka, bo między akceptacją oferty a startem prac bywa czekanie na umowę.
+    // Sam etap nie zmienia pozycji — osie zakupu i robót otworzył już kciuk (`CONFIRMED`).
+    async startRealization(nodeId: string, userEmail?: string) {
+        return this.setRealizationStage(nodeId, 'ZAAKCEPTOWANE', 'REALIZACJA', AuditAction.START_REALIZATION, userEmail);
+    }
+
+    // @anchor orders-stop-realization — cofnięcie uruchomienia (pomyłka): REALIZACJA → ZAAKCEPTOWANE.
+    // Wpisy realizacji zostają nietknięte; dopiero po tym kroku da się cofnąć akceptację.
+    async stopRealization(nodeId: string, userEmail?: string) {
+        return this.setRealizationStage(nodeId, 'REALIZACJA', 'ZAAKCEPTOWANE', AuditAction.STOP_REALIZATION, userEmail);
+    }
+
+    private async setRealizationStage(nodeId: string, from: string, to: string, action: AuditAction, userEmail?: string) {
+        const node = await this.prisma.processNode.findUnique({
+            where: { id: nodeId },
+            select: { id: true, orderStage: true, acceptedVersionId: true },
+        });
+        if (!node) throw new NotFoundException('Węzeł nie znaleziony');
+        if (!node.acceptedVersionId) throw new BadRequestException('Zamówienie nie ma zaakceptowanej wersji (baseline)');
+        if (node.orderStage !== from) throw new BadRequestException(`Etap zamówienia to ${node.orderStage}, oczekiwano ${from}`);
+        const userId = this.cls.get('user.id') ?? null;
+        return this.prisma.$transaction(async (tx) => {
+            const updated = await tx.processNode.update({
+                where: { id: nodeId },
+                data: { orderStage: to },
+                select: { id: true, orderStage: true, acceptedVersionId: true, acceptedAt: true, acceptedBy: true },
+            });
+            await tx.auditLog.create({
+                data: { action, entity: 'ProcessNode', entityId: nodeId, diff: { from, to }, userId },
+            });
+            this.logger.log(`Etap zamówienia ${nodeId}: ${from} → ${to} (${userEmail})`);
+            return updated;
         });
     }
 

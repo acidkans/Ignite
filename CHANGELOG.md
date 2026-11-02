@@ -1,3 +1,24 @@
+## 2026-11-02 — feat(realizacja): nowy UI realizacji (MVP) — start realizacji po baseline, Kokpit i Macierz z wątkiem pozycji, drzewo gałęzi w lewym panelu
+
+### schema.prisma
+- dodano `schema-pole` `WbsNode.shortName String?` — krótka nazwa do drzewa i Macierzy; pełna `name` zostaje w ofercie, protokołach, eksportach (migracja `20261102200000_wbs_node_short_name`, kopiowane w `cloneVersionData`)
+
+### architektura / API
+- dodano `back-endpoint` `POST /orders/:nodeId/start-realization` — `orderStage` ZAAKCEPTOWANE → REALIZACJA, ADMIN/MANAGER, AuditLog `START_REALIZATION`
+- dodano `back-endpoint` `POST /orders/:nodeId/stop-realization` — REALIZACJA → ZAAKCEPTOWANE, AuditLog `STOP_REALIZATION`
+- zmieniono `back-endpoint` `POST /orders/:nodeId/revoke-accept` — odmowa przy etapie REALIZACJA
+- zmieniono `back-endpoint` `PATCH /wbs-nodes/:id` — przyjmuje `shortName` (pusty = NULL); `GET /wbs-nodes/unified/:nodeId` zwraca `shortName`
+- dodano `ui-zakladka` `RealizacjaPanel` (zakładka „Realizacja”), stara zakładka przemianowana na „Realizacja (tabela)”
+- dodano `ui-panel` `SidebarBranchTree` — gałęzie WBS aktywnego zamówienia w lewym panelu (`MainLayout.branchNav` przez kontekst Outlet)
+
+### słownik
+- dodano sekcję „Moduł Realizacja — nowy UI (MVP)” — 41 anchorów (backend orders, DashboardPage, MainLayout, SidebarBranchTree, realizacja/*)
+
+### wytyczne
+- `schema-pole` `WbsNode.shortName` — tylko do wyświetlania; dokumenty (oferta, protokół, eksporty) zawsze używają pełnej `name`
+- `ui-zakladka` `RealizacjaPanel` — w MVP bloker = wpis czatu pozycji typu `URGENT`, zamknięcie = `RESOLVED`; bez nowych tabel
+- `back-endpoint` `revoke-accept` — przy etapie REALIZACJA najpierw `stop-realization`
+
 ## 2026-11-02 — feat(qa): odpowiedzi z maila w Q&A całego drzewa; AI samo wpisuje odpowiedzi klienta i pokazuje popup „Dodano odpowiedzi z maila”
 
 ### schema.prisma
@@ -22,6 +43,20 @@
 ### architektura / API
 - zmieniono `back-endpoint` `GET /my-tasks/by-wbs-node/:wbsNodeId` — nowy parametr `?subtree=1`: zadania węzła z całym poddrzewem
 - `ui-panel` `WbsTasksDrawer` — nowe `ui-propsy` `branch` (gałąź główna z dziećmi): pobiera poddrzewo, przy zadaniu nazwa pozycji; licznik ikony Zadania na gałęzi sumuje poddrzewo
+
+## 2026-11-01 — feat(poczta): strategia PDF mailem tylko do osób z zespołu i bez kopii na OneDrive
+
+### architektura / API
+- zmieniono `back-endpoint` `POST /mail/send-export` — nowe pole `scope`; `scope: 'team'` przepuszcza tylko adresy aktywnych użytkowników Ignite (inaczej 400 z listą adresów spoza zespołu)
+- zmieniono `back-endpoint` `GET /mail/recipients/:nodeId` — nowy parametr `?scope=team`: tylko użytkownicy (właściciel, uprawnieni, zespoły, cały zespół), bez kontaktów klienta, lokalizacji i firmy
+- `ui-modal` `ExportChoiceModal` — nowe `ui-propsy` `recipientScope` ('team') i `mailArchive` (false = wysyłka mailem bez kopii na OneDrive); `ui-input` `RecipientInput` — `scope='team'` odrzuca adres spoza podpowiedzi
+- `ui-przycisk` „Strategia PDF” (UnifiedWbsPanel) — `recipientScope: 'team'`, `mailArchive: false`
+
+### słownik
+- dodano `mail-send-export-team-scope` — mail.service.ts
+
+### wytyczne
+- `ui-propsy` `ExportChoiceModal.recipientScope` — dokumenty wewnętrzne (strategia, notatki zespołu) otwierać z `recipientScope: 'team'`; blokada jest też w backendzie, więc sam front nie wystarcza do obejścia
 
 ## 2026-11-01 — feat(poczta): wysyłka eksportów mailem ze skrzynki firmowej użytkownika (domena zamówienia, podpis, kopia w „Wysłanych”)
 

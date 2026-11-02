@@ -147,6 +147,8 @@ export class VersioningService {
                     versionId: targetVersionId,
                     parentId: null, // set in second pass
                     name: wn.name,
+                    // Krótka nazwa jedzie z klonem — inaczej każda nowa wersja gubiłaby poprawki PM.
+                    shortName: (wn as any).shortName ?? null,
                     type: wn.type,
                     status: wn.status,
                     // Osie realizacji jadą z klonem, tak samo jak status planu: nowa wersja

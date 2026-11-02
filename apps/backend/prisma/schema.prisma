@@ -1406,6 +1406,10 @@ model WbsNode {
   versionId String?
   /// @anchor wbs-node-name
   name      String
+  /// @anchor wbs-node-short-name
+  /// Krótka nazwa do drzewa i tabel realizacji („Szafa zasil. Eltek 6 kW”). NULL = widok skraca
+  /// `name` sam. Pełna `name` zostaje w ofercie, protokołach i eksportach — dlatego osobne pole.
+  shortName String?
   /// @anchor wbs-node-type
   type      String   @default("") // work | material | equipment | service | ""
   /// @anchor wbs-node-status
