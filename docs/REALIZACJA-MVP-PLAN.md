@@ -61,3 +61,9 @@ po prawej Kokpit gałęzi albo Macierz pozycji z rozwijanym wątkiem. Bez nowych
 - Lookahead 14 dni: daty robót tylko z Gantta, dostawy z FORECAST, gotowość MAT / PYT / BLK.
 - Kontrola kolizji dostaw: dostawa materiału < 2 dni przed robotami w gałęzi → karta w Kokpicie, „→ bloker”, czerwony romb.
 - Wygląd zakładki Realizacja jak w mockupie (`realizacja.css`).
+
+## Etap 3 — w toku
+- Tablica statusów (2026-11-02): karty pozycji w kolumnach osi robót albo zakupu, tory = podgałęzie zoomu,
+  przeciągnięcie zapisuje status przez `saveAxis` (tylko w tym samym torze; „Odebrane protokołem” wyłączone,
+  karty za bramką etapu leżą w pierwszej kolumnie i się nie przeciągają). Bez nowych tabel.
+- Dalej do wyboru: Teren (telefon) + DailyLog, gałąź = Site + Rollout + Permit, ChangeOrder + prognoza EAC.

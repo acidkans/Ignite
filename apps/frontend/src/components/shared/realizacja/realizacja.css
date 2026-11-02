@@ -161,3 +161,24 @@
 .rz .legend .bar, .rz .legend .diam { position: static; display: inline-block; }
 .rz .legend .bar { width: 26px; height: 10px; padding: 0; }
 .rz .lahead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; font-size: 12.5px; color: var(--muted); }
+
+/* tablica statusów */
+.rz .kb-wrap { overflow-x: auto; }
+.rz .kbh, .rz .kb { display: grid; gap: 10px; min-width: max-content; }
+.rz .kbh { position: sticky; top: -16px; background: var(--surface); z-index: 2; padding-block: 4px; }
+.rz .kbh div { font: 500 11px var(--f-mono); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); display: flex; justify-content: space-between; gap: 6px; border-bottom: 2px solid var(--line); padding-bottom: 4px; }
+.rz .lane { font-size: 12.5px; font-weight: 600; color: var(--muted); grid-column: 1 / -1; border-top: 1px dashed var(--line); padding-top: 8px; display: flex; gap: 8px; align-items: center; }
+.rz .lane button { background: none; border: 0; padding: 0; cursor: pointer; color: inherit; font-weight: 600; }
+.rz .lane button:hover { color: var(--info); }
+.rz .kcol { display: flex; flex-direction: column; gap: 8px; min-height: 30px; border-radius: 6px; padding: 2px; }
+.rz .kcol.can-drop { outline: 1px dashed var(--line); }
+.rz .kcol.over { outline: 2px dashed var(--accent); background: var(--accent-soft); }
+.rz .kcol.no-drop { opacity: .55; }
+.rz .kc { border: 1px solid var(--line); border-radius: 6px; padding: 8px 9px; font-size: 12.5px; background: var(--surface); display: flex; flex-direction: column; gap: 5px; cursor: pointer; }
+.rz .kc:hover { border-color: var(--muted); }
+.rz .kc.drag { cursor: grab; }
+.rz .kc.ghost { opacity: .4; }
+.rz .kc.blk { border-color: var(--bad); box-shadow: inset 3px 0 0 var(--bad); }
+.rz .kc .t { font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.rz .kc .m { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 11px; color: var(--muted); }
+.rz .kc .gate { font-size: 11px; font-style: italic; color: var(--warn); }

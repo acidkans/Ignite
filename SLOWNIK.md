@@ -301,6 +301,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-formularz | BlokerForm | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-bloker-form |
 | ui-funkcja | decyzje (sortowanie blokerów) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolejnosc-blokerow |
 | ui-sekcja | Lookahead | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-lookahead |
+| ui-sekcja | Tablica | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tablica |
+| ui-stala | TABLICA_KOLUMNY | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tablica-kolumny |
 | ui-stala | RODZAJE_BLOKERA | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor rodzaje-blokera |
 | ui-funkcja | dniOkna | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor dni-okna |
 | ui-funkcja | indeksDnia | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor indeks-dnia |

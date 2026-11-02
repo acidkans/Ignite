@@ -1,6 +1,6 @@
 // Zakładka „Realizacja" — nowy UI (docs/REALIZACJA-MVP-PLAN.md, mockup w artefakcie
-// „Ignite Realizacja"; wygląd 1:1 z mockupu, style w `realizacja.css` pod `.rz`). Środek ma trzy
-// widoki na całą szerokość: KOKPIT gałęzi, MACIERZ pozycji i LOOKAHEAD 14 dni (z Gantta).
+// „Ignite Realizacja"; wygląd 1:1 z mockupu, style w `realizacja.css` pod `.rz`). Środek ma cztery
+// widoki na całą szerokość: KOKPIT gałęzi, MACIERZ pozycji, TABLICA statusów i LOOKAHEAD 14 dni (z Gantta).
 // Drzewo gałęzi NIE siedzi tutaj — panel publikuje je przez `setBranchNav` do lewego panelu
 // aplikacji (`SidebarBranchTree` pod aktywnym zamówieniem). Klik w gałąź tam = zoom tutaj.
 //
@@ -33,7 +33,8 @@ const czytaj = (k, d) => { try { return sessionStorage.getItem(k) ?? d; } catch 
 const zapisz = (k, v) => { try { sessionStorage.setItem(k, v); } catch { /* tryb prywatny */ } };
 
 // @anchor realizacja-widoki — przełącznik widoków w nagłówku zoomu.
-const WIDOKI = [['kokpit', 'Kokpit'], ['macierz', 'Macierz'], ['lookahead', 'Lookahead 14 dni']];
+const WIDOKI = [['kokpit', 'Kokpit'], ['macierz', 'Macierz'], ['tablica', 'Tablica'], ['lookahead', 'Lookahead 14 dni']];
+const OS_KEY = 'realizacja-tablica-os';
 const LOOKAHEAD_DNI = 14;
 const DNI_TYG = ['nd', 'pn', 'wt', 'śr', 'cz', 'pt', 'sb'];
 const dzienMies = (d) => `${new Date(d).getDate()}.${String(new Date(d).getMonth() + 1).padStart(2, '0')}`;
@@ -311,6 +312,12 @@ export default function RealizacjaPanel({
                         saveAxis={saveAxis} zapiszShort={zapiszShort}
                         wyslij={wyslij} dodajBloker={dodajBloker} akcje={akcje} ownerUsers={ownerUsers}
                         gotowosc={gotowosc}
+                    />
+                )}
+                {widok === 'tablica' && (
+                    <Tablica
+                        grupy={grupy} actualsOf={actualsOf} sygnaly={sygnaly} pelne={pelne} canEdit={canEdit}
+                        saveAxis={saveAxis} onZoom={setFocus} onOtworz={otworzPozycje}
                     />
                 )}
                 {widok === 'lookahead' && (
@@ -784,6 +791,136 @@ const Kafel = ({ l, v, s, alarm, alarmS }) => (
         <span className="s" style={alarmS ? { color: 'var(--bad)' } : undefined}>{s}</span>
     </div>
 );
+
+// ─── Tablica ─────────────────────────────────────────────────────────────────
+
+// @anchor realizacja-tablica-kolumny — kolumny tablicy na każdej osi. Statusy zamykające
+// „bokiem" (anulowane, niedokończone, zafakturowane) dostają kolumnę tylko, gdy coś w nich leży.
+const TABLICA_KOLUMNY = {
+    exec: { stale: ['TO_DO', 'IN_PROGRESS', 'ON_HOLD', 'DONE', 'HANDED_OVER'], opcjonalne: ['UNFINISHED', 'INVOICED', 'CANCELLED'] },
+    purchase: { stale: ['TO_ORDER', 'ORDERED', 'PARTIALLY_DELIVERED', 'DELIVERED', 'ISSUED', 'INVOICED'], opcjonalne: ['CANCELLED'] },
+};
+// „Odebrane protokołem" ustawia protokół odbioru — ręcznie nie wrzucamy tam karty i jej stamtąd nie wyjmujemy.
+const TABLICA_TYLKO_PROTOKOL = 'HANDED_OVER';
+
+// @anchor realizacja-tablica — tablica statusów do porannej odprawy: karty pozycji w kolumnach
+// statusu wybranej osi (roboty / zakup), tory = bezpośrednie podgałęzie zoomu. Przeciągnięcie
+// karty do innej kolumny w tym samym torze zapisuje status przez `saveAxis` (te same reguły co lista
+// w Macierzy). Karta za bramką etapu (np. montaż czekający na dostawę) leży w pierwszej kolumnie
+// z podpisem bramki i nie da się jej przeciągnąć. Czerwony brzeg = otwarty bloker albo kolizja dostawy.
+function Tablica({ grupy, actualsOf, sygnaly, pelne, canEdit, saveAxis, onZoom, onOtworz }) {
+    const [os, setOsState] = useState(() => (czytaj(OS_KEY, 'exec') === 'purchase' ? 'purchase' : 'exec'));
+    const setOs = (v) => { setOsState(v); zapisz(OS_KEY, v); };
+    const [ciagniete, setCiagniete] = useState(null);   // { id, tor, status }
+    const [nad, setNad] = useState(null);               // `${tor}|${status}`
+
+    const pole = os === 'purchase' ? 'purchaseStatus' : 'execStatus';
+    const domyslny = os === 'purchase' ? DEFAULT_PURCHASE_STATUS : DEFAULT_EXEC_STATUS;
+    const naOsi = os === 'purchase' ? hasPurchaseAxis : hasExecAxis;
+    const etykieta = (node, k) => (os === 'exec' ? execStatusLabel(node?.type, k) : PURCHASE_STATUS_META[k]?.label) || k;
+
+    const tory = useMemo(() => grupy.map(({ galaz, liscie }) => ({
+        galaz,
+        karty: liscie.filter(l => naOsi(l.type)).map(l => {
+            const bramka = axisGateOf(l, os);
+            return { l, bramka, status: bramka ? domyslny : (l[pole] || domyslny) };
+        }),
+    })).filter(t => t.karty.length), [grupy, os]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const wszystkie = tory.flatMap(t => t.karty);
+    const { stale, opcjonalne } = TABLICA_KOLUMNY[os];
+    const kolumny = [...stale, ...opcjonalne.filter(k => wszystkie.some(c => c.status === k))];
+    // Kolumna z kodem spoza słownika (stare dane) — nie gubimy karty, tylko dokładamy kolumnę.
+    for (const c of wszystkie) if (!kolumny.includes(c.status)) kolumny.push(c.status);
+    const siatka = { gridTemplateColumns: `repeat(${kolumny.length}, minmax(150px, 1fr))` };
+
+    const mozeCiagnac = (c) => canEdit && !c.bramka && !(os === 'exec' && c.status === TABLICA_TYLKO_PROTOKOL);
+    const mozeUpuscic = (tor, k) => ciagniete && ciagniete.tor === tor && ciagniete.status !== k
+        && !(os === 'exec' && k === TABLICA_TYLKO_PROTOKOL);
+    const upusc = (tor, k) => {
+        const c = ciagniete;
+        setCiagniete(null); setNad(null);
+        if (!c || !mozeUpuscic(tor, k)) return;
+        const karta = wszystkie.find(x => x.l.id === c.id);
+        if (karta) saveAxis(karta.l, pole, k);
+    };
+
+    // Termin na karcie: oś robót = start z Gantta, oś zakupu = najbliższa przewidywana dostawa (FORECAST).
+    const termin = (l) => {
+        if (os === 'exec') return l.ganttStart ? `rob. ${dzienMies(l.ganttStart)}` : null;
+        const d = actualsOf(l).filter(e => entryStatusOf(e) === 'FORECAST' && e.entryDate).map(e => new Date(e.entryDate)).sort((a, b) => a - b)[0];
+        return d ? `dost. ${dzienMies(d)}` : null;
+    };
+
+    if (!tory.length) return <div className="empty">Brak pozycji z osią {os === 'exec' ? 'robót' : 'zakupu'} w tej gałęzi.</div>;
+    return (
+        <>
+            <div className="lahead">
+                <span className="seg">
+                    <button className={os === 'exec' ? 'on' : ''} onClick={() => setOs('exec')}>Oś robót</button>
+                    <button className={os === 'purchase' ? 'on' : ''} onClick={() => setOs('purchase')}>Oś zakupu</button>
+                </span>
+                <span>Tory = podgałęzie. {canEdit ? 'Przeciągnięcie karty zmienia status (oprócz „Odebrane protokołem”, które ustawia protokół).' : 'Podgląd — statusy zmieniają kierownik i logistyk.'} Klik w kartę otwiera ją w Macierzy.</span>
+            </div>
+            <div className="kb-wrap">
+                <div className="kbh" style={siatka}>
+                    {kolumny.map(k => (
+                        <div key={k}><span>{etykieta(null, k)}</span><span>{wszystkie.filter(c => c.status === k).length}</span></div>
+                    ))}
+                </div>
+                <div className="kb" style={siatka}>
+                    {tory.map(({ galaz, karty }) => {
+                        const tor = galaz?.id || '_wprost';
+                        return (
+                            <React.Fragment key={tor}>
+                                {galaz
+                                    ? <div className="lane" title={galaz.name}>
+                                        <button onClick={() => onZoom(galaz.id)} title={`${galaz.name} — pokaż tylko tę gałąź`}>{nazwaWyswietlana(galaz, pelne)}</button>
+                                        <span className="mono" style={{ fontWeight: 400 }}>· {karty.length} poz.</span>
+                                    </div>
+                                    : grupy.length > 1 && <div className="lane">Pozycje wprost w tej gałęzi</div>}
+                                {kolumny.map(k => {
+                                    const klucz = `${tor}|${k}`;
+                                    const cel = mozeUpuscic(tor, k);
+                                    return (
+                                        <div key={k}
+                                            className={`kcol${ciagniete ? (cel ? ' can-drop' : ' no-drop') : ''}${nad === klucz && cel ? ' over' : ''}`}
+                                            onDragOver={e => { if (cel) { e.preventDefault(); if (nad !== klucz) setNad(klucz); } }}
+                                            onDragLeave={() => { if (nad === klucz) setNad(null); }}
+                                            onDrop={e => { e.preventDefault(); upusc(tor, k); }}>
+                                            {karty.filter(c => c.status === k).map(c => {
+                                                const s = sygnaly[c.l.id];
+                                                const alarm = (s?.blok || 0) > 0 || (s?.kol || 0) > 0;
+                                                const t = termin(c.l);
+                                                const drag = mozeCiagnac(c);
+                                                return (
+                                                    <div key={c.l.id} className={`kc${alarm ? ' blk' : ''}${drag ? ' drag' : ''}${ciagniete?.id === c.l.id ? ' ghost' : ''}`}
+                                                        draggable={drag} title={c.l.name}
+                                                        onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c.l.id); setCiagniete({ id: c.l.id, tor, status: c.status }); }}
+                                                        onDragEnd={() => { setCiagniete(null); setNad(null); }}
+                                                        onClick={() => onOtworz(c.l.id)}>
+                                                        <span className="t">{nazwaWyswietlana(c.l, pelne)}</span>
+                                                        <span className="m">
+                                                            <span className="typ">{TYPE_META[c.l.type]?.label || c.l.type}</span>
+                                                            {t && <span className="mono">{t}</span>}
+                                                            {c.l.owner && <span>{c.l.owner}</span>}
+                                                        </span>
+                                                        {c.bramka && <span className="gate" title={c.bramka.title}>{c.bramka.label}</span>}
+                                                        {s && (s.blok || s.kol || s.pyt || s.zad) ? <SygnalyCell s={{ ...s, czat: 0 }} /> : null}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                })}
+                            </React.Fragment>
+                        );
+                    })}
+                </div>
+            </div>
+        </>
+    );
+}
 
 // ─── Lookahead ───────────────────────────────────────────────────────────────
 
