@@ -52,4 +52,20 @@ export class OrdersController {
     revokeAccept(@Param('nodeId') nodeId: string, @Body() body: { reason: string }, @Req() req: any) {
         return this.service.revokeAccept(nodeId, body?.reason ?? '', req.user?.email);
     }
+
+    // @anchor orders-start-realization-endpoint — POST /orders/:nodeId/start-realization
+    // — ZAAKCEPTOWANE → REALIZACJA; tylko manager/admin.
+    @Post(':nodeId/start-realization')
+    @Roles('ADMIN', 'MANAGER')
+    startRealization(@Param('nodeId') nodeId: string, @Req() req: any) {
+        return this.service.startRealization(nodeId, req.user?.email);
+    }
+
+    // @anchor orders-stop-realization-endpoint — POST /orders/:nodeId/stop-realization
+    // — REALIZACJA → ZAAKCEPTOWANE (cofnięcie pomyłki); tylko manager/admin.
+    @Post(':nodeId/stop-realization')
+    @Roles('ADMIN', 'MANAGER')
+    stopRealization(@Param('nodeId') nodeId: string, @Req() req: any) {
+        return this.service.stopRealization(nodeId, req.user?.email);
+    }
 }

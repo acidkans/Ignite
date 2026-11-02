@@ -513,6 +513,8 @@ export class WbsNodesService {
                 id: node.id,
                 parentId: node.parentId,
                 name: node.name,
+                // Krótka nazwa do drzewa i Macierzy realizacji — NULL = widok skraca `name` sam.
+                shortName: node.shortName,
                 type: node.type,
                 status: node.status,
                 // Osie realizacji — NULL, dopóki nikt pozycji nie ruszył (patrz migracja
@@ -630,9 +632,11 @@ export class WbsNodesService {
         // `purchaseStatus` i `execStatus` to osie REALIZACJI — osobne kolumny, żeby zmiana
         // statusu w planowaniu nie kasowała stanu zakupu ani montażu (tak działo się, dopóki
         // wszystkie trzy etapy jechały jednym polem `status`).
-        for (const key of ['name', 'type', 'status', 'purchaseStatus', 'execStatus', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment', 'strategy', 'unit', 'unitPrice']) {
+        for (const key of ['name', 'shortName', 'type', 'status', 'purchaseStatus', 'execStatus', 'owner', 'resources', 'cost', 'parentId', 'sortOrder', 'comment', 'strategy', 'unit', 'unitPrice']) {
             if (data[key] !== undefined) allowed[key] = data[key];
         }
+        // Pusta krótka nazwa = brak (widok wraca do skracania pełnej `name`).
+        if (typeof allowed.shortName === 'string') allowed.shortName = allowed.shortName.trim() || null;
         // Flaga „pokaż w opisie zakresu" — wybór pozycji do tabeli ilościowej (ScopeDocument).
         if (data.showInScope !== undefined) allowed.showInScope = !!data.showInScope;
         if (data.ganttStart !== undefined) {

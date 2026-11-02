@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { API_URL } from '../../config';
+import SidebarBranchTree from './SidebarBranchTree';
 
 // Rekurencyjne filtrowanie drzewa — zwraca węzeł jeśli on lub potomek pasuje do frazy
 function filterNode(node, query) {
@@ -14,7 +15,7 @@ function filterNode(node, query) {
     return null;
 }
 
-export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, loading, userRoles = [], leavesEnabled = false, onReloadTree, onOpenMyAccount }) {
+export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, loading, userRoles = [], leavesEnabled = false, onReloadTree, onOpenMyAccount, branchNav = null }) {
     const canManageTree = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
     // @anchor sidebar-is-admin
     /// Pozycje „Użytkownicy" i „Firma" widzi wyłącznie ADMIN — routy i API też tego pilnują.
@@ -123,6 +124,7 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                                     dragOverPos={dragOverPos}
                                     setDragOverPos={setDragOverPos}
                                     onSidebarMove={handleSidebarMove}
+                                    branchNav={branchNav}
                                 />
                             ))
                         }
@@ -270,7 +272,7 @@ function nodeContainsId(node, id) {
     return (node.children || []).some(c => nodeContainsId(c, id));
 }
 
-function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, level = 0, forceExpanded = false, unreadOrderIds = new Set(), isLogistykArea = false, canManageTree = false, dragId = null, setDragId = () => {}, dragOverId = null, setDragOverId = () => {}, dragOverPos = null, setDragOverPos = () => {}, onSidebarMove }) {
+function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, level = 0, forceExpanded = false, unreadOrderIds = new Set(), isLogistykArea = false, canManageTree = false, dragId = null, setDragId = () => {}, dragOverId = null, setDragOverId = () => {}, dragOverPos = null, setDragOverPos = () => {}, onSidebarMove, branchNav = null }) {
     const [expanded, setExpanded] = useState(false);
     const [editing, setEditing] = useState(false);
     const [editName, setEditName] = useState(node.name);
@@ -432,6 +434,11 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                 </div>
             </div>
 
+            {/* Gałęzie WBS aktywnego zamówienia — tylko gdy zakładka Realizacja je opublikowała. */}
+            {isActive && branchNav && String(branchNav.orderId) === String(node.id) && (
+                <SidebarBranchTree nav={branchNav} level={level} />
+            )}
+
             {isExpanded && hasChildren && (
                 <div className="mt-0.5 animate-fade-in">
                     {nonDocumentChildren.map(child => (
@@ -454,6 +461,7 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                             dragOverPos={dragOverPos}
                             setDragOverPos={setDragOverPos}
                             onSidebarMove={onSidebarMove}
+                            branchNav={branchNav}
                         />
                     ))}
                 </div>
