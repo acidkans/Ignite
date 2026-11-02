@@ -27,7 +27,7 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
         return out;
     }, [byId, focus]);
 
-    const maSyg = (g) => g.syg.blok > 0 || g.syg.pyt > 0 || g.syg.poTerminie > 0;
+    const maSyg = (g) => g.syg.blok > 0 || g.syg.pyt > 0 || g.syg.poTerminie > 0 || g.syg.kol > 0;
     const pad = (d) => ({ paddingLeft: `${(level + d) * 10 + 8}px` });
 
     const zapiszEdycje = () => {
@@ -69,7 +69,8 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
                             {nazwaWyswietlana(g, nav.pelne)}
                         </span>
                     )}
-                    {g.syg.blok > 0 && <span title="Blokery (pilne wpisy czatu)" className="shrink-0 rounded bg-red-500/20 px-1 font-mono text-[10px] text-red-300">{g.syg.blok}</span>}
+                    {g.syg.blok > 0 && <span title="Otwarte blokery (rejestr blokerów i pilne wpisy czatu)" className="shrink-0 rounded bg-red-500/20 px-1 font-mono text-[10px] text-red-300">{g.syg.blok}</span>}
+                    {g.syg.kol > 0 && <span title="Kolizje dostaw: dostawa za blisko startu robót" className="shrink-0 rounded bg-orange-500/20 px-1 font-mono text-[10px] text-orange-300">{g.syg.kol}K</span>}
                     {g.syg.pyt > 0 && <span title="Pytania bez odpowiedzi" className="shrink-0 rounded bg-amber-500/20 px-1 font-mono text-[10px] text-amber-300">{g.syg.pyt}?</span>}
                     {g.syg.poTerminie > 0 && <span title="Zadania po terminie" className="size-1.5 shrink-0 rounded-full bg-red-400" />}
                 </div>
@@ -86,7 +87,7 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
         <div className="mt-0.5 mb-1 border-l border-fuchsia-500/20 ml-3">
             <div className="flex items-center gap-2 px-2 py-1 text-[9.5px] font-bold uppercase tracking-widest text-gray-600">
                 <span className="flex-1">Gałęzie</span>
-                <label title="Pokaż tylko gałęzie z blokerami, pytaniami albo zadaniami po terminie" className="flex cursor-pointer items-center gap-1 normal-case tracking-normal">
+                <label title="Pokaż tylko gałęzie z blokerami, kolizjami dostaw, pytaniami albo zadaniami po terminie" className="flex cursor-pointer items-center gap-1 normal-case tracking-normal">
                     <input type="checkbox" checked={tylkoSyg} onChange={e => setTylkoSyg(e.target.checked)} className="accent-fuchsia-500" /> sygnały
                 </label>
                 <label title="Pełne nazwy zamiast krótkich" className="flex cursor-pointer items-center gap-1 normal-case tracking-normal">

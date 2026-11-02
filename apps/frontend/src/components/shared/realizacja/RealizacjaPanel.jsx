@@ -1,13 +1,14 @@
-// Zakładka „Realizacja" — nowy UI (MVP, docs/REALIZACJA-MVP-PLAN.md, mockup w artefakcie
-// „Ignite Realizacja"). Środek ma dwa widoki na całą szerokość: KOKPIT gałęzi i MACIERZ pozycji.
+// Zakładka „Realizacja" — nowy UI (docs/REALIZACJA-MVP-PLAN.md, mockup w artefakcie
+// „Ignite Realizacja"; wygląd 1:1 z mockupu, style w `realizacja.css` pod `.rz`). Środek ma cztery
+// widoki na całą szerokość: KOKPIT gałęzi, MACIERZ pozycji, TABLICA statusów i LOOKAHEAD 14 dni (z Gantta).
 // Drzewo gałęzi NIE siedzi tutaj — panel publikuje je przez `setBranchNav` do lewego panelu
 // aplikacji (`SidebarBranchTree` pod aktywnym zamówieniem). Klik w gałąź tam = zoom tutaj.
 //
 // Zapisuje tylko: osie realizacji (`saveAxis`, te same reguły co „Realizacja (tabela)"),
-// krótką nazwę pozycji (`WbsNode.shortName`) i wpisy czatu pozycji (z flagą „pilne" = bloker).
+// krótką nazwę pozycji (`WbsNode.shortName`), wpisy czatu pozycji i blokery (`Constraint`).
 // Wpisy zakupów (`LeafActual`) i protokoły zostają w zakładce „Realizacja (tabela)".
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Loader2, ChevronRight, Send, AlertTriangle, Check } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { useRealizationData } from '../wbs/useRealizationData';
 import { buildBranchIndex, SYNTHETIC_ROOT } from '../RealizationNewTab';
@@ -20,8 +21,10 @@ import {
 } from '../wbs/wbsConstants';
 import { useWatekRealizacji } from './useWatekRealizacji';
 import {
-    nazwaWyswietlana, WATEK_RODZAJE, zbudujWatek, sygnalyWezlow, sumaSygnalow, kiedyTekst,
+    nazwaWyswietlana, WATEK_RODZAJE, RODZAJE_BLOKERA, zbudujWatek, sygnalyWezlow, sumaSygnalow, kiedyTekst,
+    dniOkna, indeksDnia, gotowoscPozycji, wykryjKolizje, BUFOR_DOSTAWY_DNI,
 } from './realizacjaShared';
+import './realizacja.css';
 
 const FOCUS_KEY = (nodeId) => `realizacja-focus-${nodeId}`;
 const WIDOK_KEY = 'realizacja-widok';
@@ -29,10 +32,16 @@ const PELNE_KEY = 'realizacja-pelne-nazwy';
 const czytaj = (k, d) => { try { return sessionStorage.getItem(k) ?? d; } catch { return d; } };
 const zapisz = (k, v) => { try { sessionStorage.setItem(k, v); } catch { /* tryb prywatny */ } };
 
+// @anchor realizacja-widoki — przełącznik widoków w nagłówku zoomu.
+const WIDOKI = [['kokpit', 'Kokpit'], ['macierz', 'Macierz'], ['tablica', 'Tablica'], ['lookahead', 'Lookahead 14 dni']];
+const OS_KEY = 'realizacja-tablica-os';
+const LOOKAHEAD_DNI = 14;
+const DNI_TYG = ['nd', 'pn', 'wt', 'śr', 'cz', 'pt', 'sb'];
+const dzienMies = (d) => `${new Date(d).getDate()}.${String(new Date(d).getMonth() + 1).padStart(2, '0')}`;
+
 // @anchor realizacja-droga — „droga pozycji": kolejne etapy od zamówienia do odbioru.
 // Materiał i sprzęt idą przez zakup i montaż, praca i usługa — tylko przez wykonanie.
 const PURCHASE_KROK = { ORDERED: 1, PARTIALLY_DELIVERED: 1, DELIVERED: 2, ISSUED: 2, INVOICED: 2 };
-const EXEC_KROK = { IN_PROGRESS: 0, ON_HOLD: 0, DONE: 1, UNFINISHED: 1, HANDED_OVER: 2, INVOICED: 2 };
 function drogaPozycji(node) {
     const zakup = hasPurchaseAxis(node?.type);
     const roboty = hasExecAxis(node?.type);
@@ -77,9 +86,9 @@ export default function RealizacjaPanel({
     // Ta sama reguła co w „Realizacji (tabela)" (`realization-new-visible-types`).
     const visibleTypes = isManagerOrAdmin ? LEAF_TYPES : OPEN_LEAF_TYPES;
 
-    const { loading, wbsNodes, actuals, saveAxis, actualsOf, rowOf } =
+    const { loading, wbsNodes, actuals, saveAxis, actualsOf, rowOf, ownerUsers } =
         useRealizationData({ nodeId, versionId, acceptedAt, isManagerOrAdmin });
-    const { comments, tasks, protocols, wyslij, zamknijBloker } = useWatekRealizacji(nodeId);
+    const { comments, tasks, protocols, constraints, wyslij, zamknijBloker, dodajBloker, zmienBloker } = useWatekRealizacji(nodeId);
 
     // @anchor realizacja-short-overrides — krótkie nazwy zapisane w tej sesji (bez przeładowania drzewa).
     const [shortOverrides, setShortOverrides] = useState({});
@@ -94,16 +103,22 @@ export default function RealizacjaPanel({
     // Zapamiętana gałąź mogła zniknąć w nowej wersji — wtedy wracamy do całego zamówienia.
     const focusId = idx.nodeById[focus] && !LEAF_TYPES.includes(idx.nodeById[focus]?.type) ? focus : SYNTHETIC_ROOT;
 
-    const [widok, setWidokState] = useState(() => czytaj(WIDOK_KEY, 'macierz'));
+    const [widok, setWidokState] = useState(() => {
+        const v = czytaj(WIDOK_KEY, 'macierz');
+        return WIDOKI.some(([k]) => k === v) ? v : 'macierz';
+    });
     const setWidok = (v) => { setWidokState(v); zapisz(WIDOK_KEY, v); };
     const [pelne, setPelneState] = useState(() => czytaj(PELNE_KEY, '0') === '1');
     const setPelne = useCallback((v) => { setPelneState(v); zapisz(PELNE_KEY, v ? '1' : '0'); }, []);
     const [otwarta, setOtwarta] = useState(null);
     const [filtr, setFiltr] = useState('all');
 
-    const wpisy = useMemo(() => zbudujWatek({ wbsNodes: nodes, comments, tasks, actuals, protocols }),
-        [nodes, comments, tasks, actuals, protocols]);
-    const sygnaly = useMemo(() => sygnalyWezlow(wpisy), [wpisy]);
+    const wpisy = useMemo(() => zbudujWatek({ wbsNodes: nodes, comments, tasks, actuals, protocols, constraints }),
+        [nodes, comments, tasks, actuals, protocols, constraints]);
+    // @anchor realizacja-kolizje — kolizje dostaw całego zamówienia (zoom tylko filtruje).
+    const kolizje = useMemo(() => wykryjKolizje({ liscie: idx.leavesOfSubtree(SYNTHETIC_ROOT), actualsOf, constraints }),
+        [idx, actualsOf, constraints]);
+    const sygnaly = useMemo(() => sygnalyWezlow(wpisy, kolizje), [wpisy, kolizje]);
 
     // Węzły poddrzewa gałęzi (gałęzie + liście) — do sumowania sygnałów i filtrowania wątku.
     const idsPoddrzewa = useCallback((id) => {
@@ -127,6 +142,29 @@ export default function RealizacjaPanel({
             alert('Nie udało się zapisać krótkiej nazwy');
         }
     }, []);
+
+    // @anchor realizacja-akcje-blokera — zamknięcie blokera (Constraint albo dawny pilny wpis czatu)
+    // i zamiana otwartego pytania Q&A w bloker „decyzja klienta".
+    const akcje = useMemo(() => {
+        const bezpiecznie = (fn, komunikat) => async (...a) => {
+            try { await fn(...a); } catch (e) { console.error('[RealizacjaPanel]', e); alert(komunikat); }
+        };
+        return {
+            zamknij: bezpiecznie((w) => (w.constraintId ? zmienBloker(w.constraintId, { status: 'CLOSED' }) : zamknijBloker(w.commentId)),
+                'Nie udało się zamknąć blokera'),
+            otworz: bezpiecznie((w) => zmienBloker(w.constraintId, { status: 'OPEN' }), 'Nie udało się otworzyć blokera'),
+            zPytania: bezpiecznie((w) => dodajBloker({
+                wbsNodeId: w.nodeId, title: w.tekst, kind: 'CLIENT', sourceType: 'QA', sourceId: w.qaId,
+            }), 'Nie udało się utworzyć blokera'),
+            // Kolizja dostawy → bloker materiałowy na pozycji materiału; termin = start robót,
+            // wpływ = o ile dni roboty przesuną się, żeby zachować bufor dostawy.
+            zKolizji: bezpiecznie((k) => dodajBloker({
+                wbsNodeId: k.materialId, kind: 'MATERIAL', sourceType: 'COLLISION', sourceId: k.id,
+                title: `Dostawa ${dzienMies(k.dostawa)} za późno na roboty „${nazwaWyswietlana(k.robota)}” od ${dzienMies(k.startRobot)}`,
+                dueAt: k.startRobot.toISOString(), impactDays: Math.max(1, BUFOR_DOSTAWY_DNI - k.zapasDni),
+            }), 'Nie udało się utworzyć blokera'),
+        };
+    }, [zmienBloker, zamknijBloker, dodajBloker]);
 
     // ── Drzewo do lewego panelu ──────────────────────────────────────────────
     // @anchor realizacja-branch-nav — gałęzie z sygnałami poddrzewa dla `SidebarBranchTree`.
@@ -178,6 +216,20 @@ export default function RealizacjaPanel({
         return out;
     }, [idx, focusId, liscie]);
 
+    // @anchor realizacja-gotowosc — gotowość każdej pozycji: materiał (sama pozycja z osią zakupu
+    // albo materiał z tej samej gałęzi), otwarte pytania i blokery pozycji oraz jej gałęzi.
+    const gotowosc = useCallback((l) => {
+        const rodzenstwo = idx.leavesOfSubtree(l.branchId || SYNTHETIC_ROOT).filter(x => x.branchId === l.branchId);
+        const material = hasPurchaseAxis(l.type) ? [l] : rodzenstwo.filter(x => hasPurchaseAxis(x.type));
+        const sL = sygnaly[l.id] || {};
+        const sG = sygnaly[l.branchId] || {};
+        return gotowoscPozycji({
+            material,
+            pytOtwarte: (sL.pyt || 0) + (sG.pyt || 0),
+            blokOtwarte: (sL.blok || 0) + (sG.blok || 0),
+        });
+    }, [idx, sygnaly]);
+
     const sciezka = useMemo(() => {
         const out = [];
         let id = focusId;
@@ -188,78 +240,90 @@ export default function RealizacjaPanel({
 
     if (loading) {
         return (
-            <div className="flex h-full items-center justify-center gap-2 text-sm text-gray-500">
-                <Loader2 size={16} className="animate-spin" /> Wczytywanie realizacji…
+            <div className="rz">
+                <div className="empty" style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}>
+                    <Loader2 size={16} className="animate-spin" /> Wczytywanie realizacji…
+                </div>
             </div>
         );
     }
 
     const fokus = idx.nodeById[focusId];
     const sygFokus = sumaSygnalow(idsPoddrzewa(focusId), sygnaly);
+    const otworzPozycje = (id) => {
+        // Wpis gałęzi (czat gałęzi) = zoom na nią; wpis pozycji = rozwinięty wiersz w Macierzy.
+        if (LEAF_TYPES.includes(idx.nodeById[id]?.type)) { setOtwarta(id); setWidok('macierz'); }
+        else if (idx.nodeById[id]) setFocus(id);
+    };
 
     return (
-        <div className="flex h-full flex-col bg-[#030712] text-gray-200">
+        <div className={`rz${pelne ? ' full' : ''}`}>
             {/* ── Nagłówek zoomu ── */}
-            <div className="shrink-0 border-b border-white/[.07] bg-[#0a1120] px-4 py-2.5">
-                <div className="mb-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-500">
-                    {sciezka.slice(0, -1).map(n => (
+            <div className="mhead">
+                <div className="crumbs">
+                    {sciezka.length > 1 ? sciezka.slice(0, -1).map(n => (
                         <React.Fragment key={n.id}>
-                            <button onClick={() => setFocus(n.id)} title={n.name} className="max-w-[220px] truncate text-sky-300/80 hover:text-sky-200">
+                            <button onClick={() => setFocus(n.id)} title={n.name}>
                                 {n.id === SYNTHETIC_ROOT ? (orderName || 'Zamówienie') : nazwaWyswietlana(n, pelne)}
                             </button>
-                            <ChevronRight size={11} className="shrink-0 text-gray-600" />
+                            <span className="sep">›</span>
                         </React.Fragment>
-                    ))}
-                    {sciezka.length <= 1 && <span>Całe zamówienie</span>}
+                    )) : <span>Całe zamówienie</span>}
+                    {sciezka.length > 1 && <span>tu jesteś</span>}
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                    <span title={fokus?.name} className="max-w-[46ch] truncate text-lg font-bold text-white">
+                <div className="mrow">
+                    <span className="ttl" title={fokus?.name}>
                         {focusId === SYNTHETIC_ROOT ? (orderName || 'Zamówienie') : nazwaWyswietlana(fokus, pelne)}
                     </span>
                     {stage === 'REALIZACJA'
-                        ? <span className="rounded border border-fuchsia-500/30 bg-fuchsia-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-fuchsia-300">Realizacja</span>
-                        : <span title="Realizację uruchamia się przyciskiem w nagłówku zamówienia, po akceptacji baseline." className="cursor-help rounded border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">Realizacja nie uruchomiona</span>}
-                    {planLabel && <span className="rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300">{planLabel}</span>}
-                    {sygFokus.blok > 0 && <span className="rounded border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-300">{sygFokus.blok} bloker{sygFokus.blok > 1 ? 'y' : ''}</span>}
-                    {sygFokus.pyt > 0 && <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">{sygFokus.pyt} pytań otwartych</span>}
-                    <div className="ml-auto flex items-center gap-2">
-                        <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-gray-400">
-                            <input type="checkbox" checked={pelne} onChange={e => setPelne(e.target.checked)} className="accent-teal-500" />
-                            pełne nazwy
-                        </label>
-                        <div className="flex overflow-hidden rounded-md border border-white/10">
-                            {[['kokpit', 'Kokpit'], ['macierz', 'Macierz']].map(([k, l]) => (
-                                <button key={k} onClick={() => setWidok(k)}
-                                    className={`px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${widok === k ? 'bg-teal-500/20 text-teal-200' : 'text-gray-500 hover:text-gray-300'}`}>
-                                    {l}
-                                </button>
+                        ? <span className="pill p-acc">REALIZACJA{planLabel ? ` · ${planLabel}` : ''}</span>
+                        : <span className="pill p-mut" title="Realizację uruchamia się przyciskiem w nagłówku zamówienia, po akceptacji baseline.">realizacja nie uruchomiona</span>}
+                    {stage !== 'REALIZACJA' && planLabel && <span className="pill p-ok">{planLabel}</span>}
+                    {sygFokus.blok > 0 && <span className="pill p-bad">{sygFokus.blok} bloker{sygFokus.blok > 1 ? 'y' : ''}</span>}
+                    {sygFokus.pyt > 0 && <span className="pill p-warn">{sygFokus.pyt} pytań otwartych</span>}
+                    {sygFokus.kol > 0 && <span className="pill p-bad" title="Dostawy za blisko startu robót, bez blokera">{sygFokus.kol} kolizj{sygFokus.kol > 1 ? 'e' : 'a'} dostaw</span>}
+                    <div className="mtools">
+                        <label><input type="checkbox" checked={pelne} onChange={e => setPelne(e.target.checked)} /> pełne nazwy</label>
+                        <span className="seg">
+                            {WIDOKI.map(([k, l]) => (
+                                <button key={k} onClick={() => setWidok(k)} className={widok === k ? 'on' : ''}>{l}</button>
                             ))}
-                        </div>
+                        </span>
                     </div>
                 </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
-                {widok === 'kokpit' ? (
+            <div className="mbody">
+                {widok === 'kokpit' && (
                     <Kokpit
                         liscie={idx.leavesOfSubtree(focusId)} rowOf={rowOf} actualsOf={actualsOf}
                         wpisy={wpisy.filter(w => idsPoddrzewa(focusId).has(w.nodeId))}
-                        protocols={protocols} sygFokus={sygFokus} canSeeMoney={canSeeMoney}
+                        protocols={protocols} sygFokus={sygFokus} canSeeMoney={canSeeMoney} canEdit={canEdit}
                         nodeById={idx.nodeById} pelne={pelne} filtr={filtr} setFiltr={setFiltr}
-                        onOtworz={(id) => {
-                            // Wpis gałęzi (czat gałęzi) = zoom na nią; wpis pozycji = rozwinięty wiersz w Macierzy.
-                            if (LEAF_TYPES.includes(idx.nodeById[id]?.type)) { setOtwarta(id); setWidok('macierz'); }
-                            else if (idx.nodeById[id]) setFocus(id);
-                        }}
-                        onZamknijBloker={zamknijBloker}
+                        onOtworz={otworzPozycje} akcje={akcje} gotowosc={gotowosc}
+                        kolizje={kolizje.filter(k => idsPoddrzewa(focusId).has(k.materialId))}
                     />
-                ) : (
+                )}
+                {widok === 'macierz' && (
                     <Macierz
                         grupy={grupy} rowOf={rowOf} actualsOf={actualsOf} wpisy={wpisy} sygnaly={sygnaly}
                         pelne={pelne} canEdit={canEdit} canSeeMoney={canSeeMoney}
                         otwarta={otwarta} setOtwarta={setOtwarta} onZoom={setFocus}
                         saveAxis={saveAxis} zapiszShort={zapiszShort}
-                        wyslij={wyslij} zamknijBloker={zamknijBloker}
+                        wyslij={wyslij} dodajBloker={dodajBloker} akcje={akcje} ownerUsers={ownerUsers}
+                        gotowosc={gotowosc}
+                    />
+                )}
+                {widok === 'tablica' && (
+                    <Tablica
+                        grupy={grupy} actualsOf={actualsOf} sygnaly={sygnaly} pelne={pelne} canEdit={canEdit}
+                        saveAxis={saveAxis} onZoom={setFocus} onOtworz={otworzPozycje}
+                    />
+                )}
+                {widok === 'lookahead' && (
+                    <Lookahead
+                        grupy={grupy} actualsOf={actualsOf} pelne={pelne}
+                        gotowosc={gotowosc} onZoom={setFocus} onOtworz={otworzPozycje} kolizje={kolizje}
                     />
                 )}
             </div>
@@ -275,55 +339,81 @@ function DrogaPasek({ node }) {
     const podpis = [osEtykieta(node, 'purchase'), osEtykieta(node, 'exec')].filter(Boolean).join(' · ');
     return (
         <div title={etapy.map((e, i) => `${i < pelne ? '✓' : '·'} ${e}`).join('\n')}>
-            <div className="flex w-36 gap-0.5">
+            <div className="pipe">
                 {etapy.map((e, i) => (
-                    <i key={e} className={`h-2 flex-1 rounded-sm ${i < pelne ? 'bg-teal-400'
-                        : i === stop ? 'bg-red-500'
-                            : i === wToku ? 'bg-amber-400' : 'bg-white/10'}`} />
+                    <i key={e} className={i < pelne ? 'f' : i === stop ? 'x' : i === wToku ? 'h' : ''} />
                 ))}
             </div>
-            <div className="mt-1 text-[10.5px] text-gray-500">{podpis}</div>
+            <div className="pipe-l">{podpis}</div>
         </div>
     );
 }
 
 // @anchor realizacja-sygnaly-cell — liczniki sygnałów pozycji.
 function SygnalyCell({ s }) {
-    if (!s) return <span className="text-gray-700">—</span>;
+    if (!s) return <span className="muted">—</span>;
     return (
-        <div className="flex flex-wrap gap-1 font-mono text-[10.5px]">
-            {s.blok > 0 && <span className="rounded bg-red-500/15 px-1 text-red-300">{s.blok} bloker</span>}
-            {s.pyt > 0 && <span className="rounded bg-amber-500/15 px-1 text-amber-300">{s.pyt} pyt.</span>}
-            {s.czat > 0 && <span className="rounded bg-sky-500/15 px-1 text-sky-300">{s.czat} czat</span>}
-            {s.zad > 0 && <span className={`rounded px-1 ${s.poTerminie ? 'bg-red-500/15 text-red-300' : 'bg-white/10 text-gray-300'}`}>{s.zad} zad.{s.poTerminie ? ' !' : ''}</span>}
+        <div className="sigcell">
+            {s.blok > 0 && <span className="cnt c-bad">{s.blok} bloker</span>}
+            {s.kol > 0 && <span className="cnt c-bad" title="Dostawa za blisko startu robót w gałęzi">kolizja</span>}
+            {s.pyt > 0 && <span className="cnt c-warn">{s.pyt} pyt.</span>}
+            {s.czat > 0 && <span className="cnt c-info">{s.czat} czat</span>}
+            {s.zad > 0 && <span className={`cnt ${s.poTerminie ? 'c-bad' : 'c-info'}`}>{s.zad} zad.{s.poTerminie ? ' !' : ''}</span>}
         </div>
     );
 }
 
-// @anchor realizacja-wpis — jeden wpis wątku.
-function Wpis({ w, nazwaPozycji, onPozycja, onZamknijBloker }) {
-    const r = WATEK_RODZAJE[w.rodzaj];
+// @anchor realizacja-gotowosc-chipy — chipy MAT / PYT / BLK (zielone = gotowe, żółte = czeka, czerwone = brak).
+const GOT_KLASA = { ok: 'r-ok', q: 'r-q', no: 'r-no', na: 'r-na' };
+const GOT_OPIS = { ok: 'gotowe', q: 'czeka', no: 'brak', na: 'nie dotyczy' };
+function GotowoscChipy({ g }) {
+    if (!g) return <span className="muted">—</span>;
     return (
-        <div className="grid grid-cols-[24px_1fr] gap-2 border-b border-white/[.05] px-3 py-2 text-[13px] last:border-b-0">
-            <span className={`grid size-6 place-items-center rounded font-mono text-[10px] font-bold ${r.cls}`}>{r.znak}</span>
-            <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-gray-500">
-                    {w.kto && <b className="font-semibold text-gray-300">{w.kto}</b>}
-                    <span>{kiedyTekst(w.kiedy)}</span>
-                    {nazwaPozycji && <button onClick={onPozycja} className="max-w-[220px] truncate text-sky-300/80 hover:text-sky-200">{nazwaPozycji}</button>}
-                    {w.mail && <span className="text-amber-300/70">{w.mail}</span>}
-                    {w.prognoza && <span className="text-violet-300/80">prognoza</span>}
-                    {w.otwarte && (w.rodzaj === 'block' || w.rodzaj === 'qa') && <span className="rounded-full border border-red-400/40 px-1.5 text-[10px] text-red-300">otwarte</span>}
-                    {w.zamkniety && <span className="text-emerald-400/70">zamknięty</span>}
-                    {w.rodzaj === 'block' && w.otwarte && onZamknijBloker && (
-                        <button onClick={() => onZamknijBloker(w.commentId)} title="Oznacz jako rozwiązane — czerwony licznik zgaśnie"
-                            className="ml-auto flex items-center gap-1 rounded border border-emerald-500/30 px-1.5 text-[10px] text-emerald-300 hover:bg-emerald-500/10">
-                            <Check size={10} /> rozwiązane
-                        </button>
+        <span className="ready">
+            <span className={GOT_KLASA[g.mat]} title={`Materiał: ${GOT_OPIS[g.mat]}`}>MAT</span>
+            <span className={GOT_KLASA[g.pyt]} title={`Pytania: ${g.pyt === 'ok' ? 'brak otwartych' : 'są otwarte'}`}>PYT</span>
+            <span className={GOT_KLASA[g.blk]} title={`Blokery: ${g.blk === 'ok' ? 'brak' : 'są otwarte'}`}>BLK</span>
+        </span>
+    );
+}
+
+// @anchor realizacja-wpis — jeden wpis wątku (czat, bloker, pytanie, zakup, zadanie, odbiór).
+function Wpis({ w, nazwaPozycji, onPozycja, akcje }) {
+    const r = WATEK_RODZAJE[w.rodzaj];
+    const blokerKonstr = w.rodzaj === 'block' && w.constraintId;
+    return (
+        <div className="ev">
+            <span className={`ik ${r.cls}`}>{r.znak}</span>
+            <div style={{ minWidth: 0 }}>
+                <div className="who">
+                    {w.kto && <b>{w.kto}</b>}
+                    {w.kiedy && <span>{kiedyTekst(w.kiedy)}</span>}
+                    {nazwaPozycji && <button className="lnk" onClick={onPozycja}>{nazwaPozycji}</button>}
+                    {blokerKonstr && <span className="cnt c-mut">{RODZAJE_BLOKERA[w.rodzajBlokera]?.label || w.rodzajBlokera}</span>}
+                    {blokerKonstr && w.termin && <span className={w.poTerminie ? 'dpos' : ''}>termin {dzienMies(w.termin)}{w.poTerminie ? ' — minął' : ''}</span>}
+                    {blokerKonstr && w.wplywDni ? <span>wpływ +{w.wplywDni} dni</span> : null}
+                    {w.mail && <span className="mono">{w.mail}</span>}
+                    {w.prognoza && <span className="p-info">prognoza</span>}
+                    {w.otwarte && (w.rodzaj === 'block' || w.rodzaj === 'qa') && <span className="pill p-bad" style={{ padding: '0 6px' }}>otwarte</span>}
+                    {w.zamkniety && <span className="p-ok">zamknięty</span>}
+                    {w.blokerem && <span className="cnt c-bad">bloker</span>}
+                    {akcje && (
+                        <span className="act">
+                            {w.rodzaj === 'block' && w.otwarte && (
+                                <button className="mini-btn ok" onClick={() => akcje.zamknij(w)} title="Przeszkoda usunięta — czerwony licznik zgaśnie">rozwiązane</button>
+                            )}
+                            {blokerKonstr && !w.otwarte && (
+                                <button className="mini-btn" onClick={() => akcje.otworz(w)}>otwórz ponownie</button>
+                            )}
+                            {w.rodzaj === 'qa' && w.otwarte && !w.blokerem && w.qaId && (
+                                <button className="mini-btn bad" onClick={() => akcje.zPytania(w)} title="Bez odpowiedzi nie ruszymy — pytanie staje się blokerem „decyzja klienta”">→ bloker</button>
+                            )}
+                        </span>
                     )}
                 </div>
-                <div className="whitespace-pre-wrap break-words text-gray-200">{w.tekst}</div>
-                {w.odpowiedz && <div className="mt-1 rounded-r border-l-2 border-emerald-400 bg-emerald-500/10 px-2 py-1 text-gray-200">{w.odpowiedz}</div>}
+                <div className="txt">{w.tekst}</div>
+                {w.notatka && <div className="muted" style={{ fontSize: 12 }}>{w.notatka}</div>}
+                {w.odpowiedz && <div className="ans">{w.odpowiedz}</div>}
             </div>
         </div>
     );
@@ -333,13 +423,12 @@ function Wpis({ w, nazwaPozycji, onPozycja, onZamknijBloker }) {
 function FiltryWatku({ wpisy, filtr, setFiltr }) {
     const klucze = ['all', ...Object.keys(WATEK_RODZAJE)];
     return (
-        <div className="flex flex-wrap gap-1 border-b border-white/[.07] px-3 py-2">
+        <div className="chips">
             {klucze.map(k => {
                 const n = k === 'all' ? wpisy.length : wpisy.filter(w => w.rodzaj === k).length;
                 return (
-                    <button key={k} onClick={() => setFiltr(k)}
-                        className={`rounded-full border px-2 py-0.5 text-[11px] ${filtr === k ? 'border-teal-400/50 bg-teal-500/15 text-teal-200' : 'border-white/10 text-gray-500 hover:text-gray-300'}`}>
-                        {k === 'all' ? 'Wszystko' : WATEK_RODZAJE[k].label} <span className="font-mono">{n}</span>
+                    <button key={k} onClick={() => setFiltr(k)} className={`chip${filtr === k ? ' on' : ''}`}>
+                        {k === 'all' ? 'Wszystko' : WATEK_RODZAJE[k].label} <span className="mono">{n}</span>
                     </button>
                 );
             })}
@@ -347,45 +436,82 @@ function FiltryWatku({ wpisy, filtr, setFiltr }) {
     );
 }
 
-const Karta = ({ tytul, prawa, children, className = '' }) => (
-    <div className={`flex min-w-0 flex-col rounded-lg border border-white/[.08] bg-[#0a1120] ${className}`}>
-        <div className="flex items-center gap-2 border-b border-white/[.07] px-3 py-2 text-[12px] font-bold uppercase tracking-wider text-teal-300">
-            {tytul}{prawa && <span className="ml-auto text-[11px] font-normal normal-case tracking-normal text-gray-500">{prawa}</span>}
-        </div>
+const Karta = ({ tytul, prawa, children, style }) => (
+    <div className="card" style={style}>
+        <header>{tytul}{prawa && <span className="r">{prawa}</span>}</header>
         {children}
     </div>
 );
 
+const Pusto = ({ children }) => <div className="ev"><span /><div className="muted">{children}</div></div>;
+
+// @anchor realizacja-bloker-form — nowy bloker na pozycji: opis, rodzaj, termin usunięcia,
+// wpływ w dniach i właściciel (konto z zespołu zamówienia).
+function BlokerForm({ wbsNodeId, dodajBloker, ownerUsers = [] }) {
+    const pusty = { title: '', kind: 'MATERIAL', dueAt: '', impactDays: '', ownerId: '' };
+    const [f, setF] = useState(pusty);
+    const [zapis, setZapis] = useState(false);
+    const ustaw = (k) => (e) => setF(prev => ({ ...prev, [k]: e.target.value }));
+    const dodaj = async () => {
+        if (!f.title.trim() || zapis) return;
+        setZapis(true);
+        try {
+            await dodajBloker({
+                wbsNodeId, title: f.title.trim(), kind: f.kind, dueAt: f.dueAt || null,
+                impactDays: f.impactDays === '' ? null : Number(f.impactDays), ownerId: f.ownerId || null,
+            });
+            setF(pusty);
+        } catch { alert('Nie udało się dodać blokera'); }
+        finally { setZapis(false); }
+    };
+    return (
+        <div className="blkform">
+            <input className="in full" value={f.title} onChange={ustaw('title')} placeholder="Co blokuje? np. brak zgody ZDM na zajęcie pasa"
+                onKeyDown={e => { if (e.key === 'Enter') dodaj(); }} />
+            <select className="in" value={f.kind} onChange={ustaw('kind')} title="Rodzaj blokera">
+                {Object.entries(RODZAJE_BLOKERA).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
+            </select>
+            <input className="in" type="date" value={f.dueAt} onChange={ustaw('dueAt')} title="Termin usunięcia" />
+            <div className="row2">
+                <select className="in" value={f.ownerId} onChange={ustaw('ownerId')} title="Kto usuwa przeszkodę" style={{ flex: 1 }}>
+                    <option value="">właściciel —</option>
+                    {ownerUsers.map(u => <option key={u.id} value={u.id}>{[u.firstName, u.lastName].filter(Boolean).join(' ') || u.email}</option>)}
+                </select>
+                <input className="in" type="number" min="0" value={f.impactDays} onChange={ustaw('impactDays')} placeholder="wpływ, dni" title="O ile dni przesunie roboty" style={{ width: 96, flex: 'none' }} />
+                <button className="btn acc" onClick={dodaj} disabled={!f.title.trim() || zapis}>Dodaj bloker</button>
+            </div>
+        </div>
+    );
+}
+
 // ─── Macierz ─────────────────────────────────────────────────────────────────
 
 // @anchor realizacja-macierz — wiersz = pozycja; klik rozwija wątek, osie i powiązania.
-function Macierz({ grupy, rowOf, actualsOf, wpisy, sygnaly, pelne, canEdit, canSeeMoney, otwarta, setOtwarta, onZoom, saveAxis, zapiszShort, wyslij, zamknijBloker }) {
+function Macierz({ grupy, rowOf, actualsOf, wpisy, sygnaly, pelne, canEdit, canSeeMoney, otwarta, setOtwarta, onZoom, saveAxis, zapiszShort, wyslij, dodajBloker, akcje, ownerUsers, gotowosc }) {
     const kolumn = canSeeMoney ? 8 : 5;
-    if (!grupy.length) return <div className="pt-16 text-center text-sm text-gray-600">Brak pozycji w tej gałęzi.</div>;
+    if (!grupy.length) return <div className="empty">Brak pozycji w tej gałęzi.</div>;
     return (
-        <table className="w-full border-collapse text-[13px]">
-            <thead className="sticky top-0 z-10 bg-[#030712]">
-                <tr className="border-b border-white/10 text-left font-mono text-[10.5px] uppercase tracking-wider text-gray-500">
-                    <th className="px-2 py-2 font-medium">Pozycja</th>
-                    <th className="px-2 py-2 font-medium">Droga pozycji</th>
-                    {canSeeMoney && <th className="px-2 py-2 text-right font-medium">Plan</th>}
-                    {canSeeMoney && <th className="px-2 py-2 text-right font-medium">Poniesione</th>}
-                    {canSeeMoney && <th className="px-2 py-2 text-right font-medium">Różnica</th>}
-                    <th className="px-2 py-2 font-medium">Terminy</th>
-                    <th className="px-2 py-2 font-medium">Sygnały</th>
-                    <th className="w-6 px-2 py-2" />
+        <table>
+            <thead>
+                <tr>
+                    <th>Pozycja</th>
+                    <th>Droga pozycji</th>
+                    {canSeeMoney && <th className="num">Plan</th>}
+                    {canSeeMoney && <th className="num">Real.</th>}
+                    {canSeeMoney && <th className="num">Różn.</th>}
+                    <th>Terminy</th>
+                    <th>Sygnały</th>
+                    <th />
                 </tr>
             </thead>
             <tbody>
                 {grupy.map(({ galaz, liscie }) => (
                     <React.Fragment key={galaz?.id || '_wprost'}>
                         {galaz && (
-                            <tr className="border-b border-white/[.07] bg-white/[.02]">
-                                <td colSpan={kolumn} className="px-2 py-1.5 text-[12px] font-semibold text-gray-400">
-                                    <button onClick={() => onZoom(galaz.id)} title={`${galaz.name} — pokaż tylko tę gałąź`} className="hover:text-sky-200">
-                                        {nazwaWyswietlana(galaz, pelne)}
-                                    </button>
-                                    <span className="ml-2 font-mono font-normal text-gray-600">· {liscie.length} poz.{canSeeMoney ? ` · ${fmtZl(liscie.reduce((s, l) => s + rowOf(l).planValue, 0))} zł` : ''}</span>
+                            <tr className="grp">
+                                <td colSpan={kolumn} title={galaz.name}>
+                                    <button onClick={() => onZoom(galaz.id)} title={`${galaz.name} — pokaż tylko tę gałąź`}>{nazwaWyswietlana(galaz, pelne)}</button>
+                                    <span className="mono" style={{ fontWeight: 400 }}> · {liscie.length} poz.{canSeeMoney ? ` · ${fmtZl(liscie.reduce((s, l) => s + rowOf(l).planValue, 0))} zł` : ''}</span>
                                 </td>
                             </tr>
                         )}
@@ -396,33 +522,35 @@ function Macierz({ grupy, rowOf, actualsOf, wpisy, sygnaly, pelne, canEdit, canS
                             const otw = otwarta === l.id;
                             return (
                                 <React.Fragment key={l.id}>
-                                    <tr onClick={() => setOtwarta(otw ? null : l.id)}
-                                        className={`cursor-pointer border-b border-white/[.05] ${otw ? 'bg-sky-500/10' : 'hover:bg-white/[.03]'}`}>
-                                        <td className="max-w-[320px] px-2 py-2">
-                                            <span title={l.name} className={`block font-medium text-gray-100 ${pelne ? 'whitespace-normal' : 'truncate'}`}>{nazwaWyswietlana(l, pelne)}</span>
-                                            <span className="font-mono text-[10px] uppercase text-gray-500">{TYPE_META[l.type]?.label || l.type}{l.owner ? ` · ${l.owner}` : ''}</span>
+                                    <tr onClick={() => setOtwarta(otw ? null : l.id)} className={`row${otw ? ' sel' : ''}`}>
+                                        <td className="nm-cell">
+                                            <span className="t" title={l.name}>{nazwaWyswietlana(l, pelne)}</span>
+                                            <span className="typ">{TYPE_META[l.type]?.label || l.type}{l.owner ? ` · ${l.owner}` : ''}</span>
                                         </td>
-                                        <td className="px-2 py-2"><DrogaPasek node={l} /></td>
-                                        {canSeeMoney && <td className="px-2 py-2 text-right font-mono tabular-nums">{fmtZl(planValue)}</td>}
-                                        {canSeeMoney && <td className="px-2 py-2 text-right font-mono tabular-nums">{r.value ? fmtZl(r.value) : '—'}</td>}
-                                        {canSeeMoney && <td className={`px-2 py-2 text-right font-mono text-[12px] tabular-nums ${roznica > 0.005 ? 'text-red-400' : roznica < -0.005 ? 'text-emerald-400' : 'text-gray-600'}`}>
-                                            {r.value ? `${roznica > 0 ? '+' : ''}${fmtZl(roznica)}` : '—'}
+                                        <td><DrogaPasek node={l} /></td>
+                                        {canSeeMoney && <td className="num">{fmtZl(planValue)}</td>}
+                                        {canSeeMoney && <td className="num">{r.value ? fmtZl(r.value) : '—'}</td>}
+                                        {canSeeMoney && <td className="num" style={{ fontSize: 12 }}>
+                                            {r.value ? <span className={roznica > 0.005 ? 'dpos' : roznica < -0.005 ? 'dneg' : 'muted'}>{roznica > 0 ? '+' : ''}{fmtZl(roznica)}</span> : <span className="muted">—</span>}
                                         </td>}
-                                        <td className="px-2 py-2 font-mono text-[11.5px] text-gray-400">
-                                            {prognozy[0] && <div title="Data z wpisu prognozowanego (FORECAST)">dost. {kiedyTekst(prognozy[0])}</div>}
-                                            {l.ganttStart && <div>rob. {kiedyTekst(l.ganttStart)}</div>}
+                                        <td className="mono" style={{ fontSize: 12 }}>
+                                            {prognozy[0] && (hasPurchaseAxis(l.type)
+                                                ? <div title="Przewidywana dostawa — data z wpisu prognozowanego (FORECAST)">dost. {dzienMies(prognozy[0])}</div>
+                                                : <div title="Data kosztu prognozowanego (FORECAST) — to nie dostawa materiału">progn. {dzienMies(prognozy[0])}</div>)}
+                                            {l.ganttStart && <div title="Start z harmonogramu (Gantt)">rob. {dzienMies(l.ganttStart)}</div>}
                                         </td>
-                                        <td className="px-2 py-2"><SygnalyCell s={sygnaly[l.id]} /></td>
-                                        <td className="px-2 py-2 text-gray-600">{otw ? '▴' : '▾'}</td>
+                                        <td><SygnalyCell s={sygnaly[l.id]} /></td>
+                                        <td className="muted" style={{ fontSize: 12 }}>{otw ? '▴' : '▾'}</td>
                                     </tr>
                                     {otw && (
-                                        <tr className="border-b border-white/[.07] bg-black/30">
-                                            <td colSpan={kolumn} className="p-3">
+                                        <tr className="exp">
+                                            <td colSpan={kolumn}>
                                                 <RozwinietaPozycja
                                                     node={l} r={r} planValue={planValue} canEdit={canEdit} canSeeMoney={canSeeMoney}
                                                     wpisy={wpisy.filter(w => w.nodeId === l.id)}
                                                     saveAxis={saveAxis} zapiszShort={zapiszShort}
-                                                    wyslij={wyslij} zamknijBloker={zamknijBloker}
+                                                    wyslij={wyslij} dodajBloker={dodajBloker} akcje={canEdit ? akcje : null}
+                                                    ownerUsers={ownerUsers} gotowosc={gotowosc(l)}
                                                 />
                                             </td>
                                         </tr>
@@ -437,45 +565,40 @@ function Macierz({ grupy, rowOf, actualsOf, wpisy, sygnaly, pelne, canEdit, canS
     );
 }
 
-// @anchor realizacja-rozwinieta-pozycja — trzy karty pod wierszem: wątek · zakup i realizacja · powiązania.
-function RozwinietaPozycja({ node, r, planValue, canEdit, canSeeMoney, wpisy, saveAxis, zapiszShort, wyslij, zamknijBloker }) {
+// @anchor realizacja-rozwinieta-pozycja — trzy karty pod wierszem: wątek · zakup i realizacja · blokery i powiązania.
+function RozwinietaPozycja({ node, r, planValue, canEdit, canSeeMoney, wpisy, saveAxis, zapiszShort, wyslij, dodajBloker, akcje, ownerUsers, gotowosc }) {
     const [tekst, setTekst] = useState('');
-    const [pilne, setPilne] = useState(false);
     const [wysylam, setWysylam] = useState(false);
     const [short, setShort] = useState(node.shortName || '');
     const zadania = wpisy.filter(w => w.rodzaj === 'task');
     const pytania = wpisy.filter(w => w.rodzaj === 'qa');
+    const blokery = wpisy.filter(w => w.rodzaj === 'block' && w.otwarte);
+    const watek = wpisy.filter(w => !(w.rodzaj === 'block' && w.constraintId));
 
     const wyslijWpis = async () => {
         if (!tekst.trim() || wysylam) return;
         setWysylam(true);
-        try { await wyslij(node.id, tekst.trim(), pilne); setTekst(''); setPilne(false); }
+        try { await wyslij(node.id, tekst.trim()); setTekst(''); }
         catch { alert('Nie udało się wysłać wpisu'); }
         finally { setWysylam(false); }
     };
 
     return (
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.4fr_1fr_1fr]">
-            <Karta tytul="Wątek pozycji" prawa={`${wpisy.length} wpisów`}>
-                <div className="max-h-80 overflow-auto">
-                    {wpisy.length ? wpisy.map(w => <Wpis key={w.id} w={w} onZamknijBloker={canEdit ? zamknijBloker : null} />)
-                        : <div className="px-3 py-4 text-[12px] text-gray-600">Brak wpisów — pierwszy dodasz poniżej.</div>}
+        <div className="expin">
+            <Karta tytul="Wątek pozycji" prawa={`${watek.length} wpisów`}>
+                <div className="feed scroll" style={{ maxHeight: 320 }}>
+                    {watek.length ? watek.map(w => <Wpis key={w.id} w={w} akcje={akcje} />)
+                        : <Pusto>Brak wpisów — pierwszy dodasz poniżej.</Pusto>}
                 </div>
-                <div className="flex items-center gap-2 border-t border-white/[.07] px-3 py-2">
-                    <input value={tekst} onChange={e => setTekst(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') wyslijWpis(); }}
-                        placeholder="Napisz do czatu pozycji…" className="min-w-0 flex-1 rounded border border-white/10 bg-black/30 px-2 py-1 text-[12.5px] text-gray-200 placeholder-gray-600 focus:border-teal-500/50 focus:outline-none" />
-                    <label title="Pilny wpis = bloker: czerwony licznik w drzewie, dopóki ktoś nie oznaczy go jako rozwiązany"
-                        className={`flex cursor-pointer items-center gap-1 text-[11px] ${pilne ? 'text-red-300' : 'text-gray-500'}`}>
-                        <input type="checkbox" checked={pilne} onChange={e => setPilne(e.target.checked)} className="accent-red-500" />
-                        <AlertTriangle size={11} /> bloker
-                    </label>
-                    <button onClick={wyslijWpis} disabled={!tekst.trim() || wysylam}
-                        className="rounded border border-teal-500/40 bg-teal-500/10 p-1.5 text-teal-300 hover:bg-teal-500/20 disabled:opacity-40"><Send size={12} /></button>
+                <div className="reply">
+                    <input className="in" value={tekst} onChange={e => setTekst(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') wyslijWpis(); }}
+                        placeholder="Napisz do czatu pozycji…" />
+                    <button className="btn" onClick={wyslijWpis} disabled={!tekst.trim() || wysylam}>Wyślij</button>
                 </div>
             </Karta>
 
             <Karta tytul="Zakup i realizacja">
-                <div className="flex flex-col gap-2 p-3 text-[12.5px]">
+                <div className="mini">
                     {hasPurchaseAxis(node.type) && <OsWybor node={node} axis="purchase" readOnly={!canEdit} saveAxis={saveAxis} />}
                     {hasExecAxis(node.type) && <OsWybor node={node} axis="exec" readOnly={!canEdit} saveAxis={saveAxis} />}
                     {canSeeMoney && (
@@ -487,26 +610,28 @@ function RozwinietaPozycja({ node, r, planValue, canEdit, canSeeMoney, wpisy, sa
                         </>
                     )}
                     <Wiersz l="Ilość" v={`${r.qty} z ${r.plan} ${node.unit || ''}`} />
-                    <p className="text-[11px] text-gray-600">Wpisy zakupów i protokoły odbioru prowadzisz w zakładce „Realizacja (tabela)”.</p>
+                    <div className="r"><span>Gotowość do robót</span><GotowoscChipy g={gotowosc} /></div>
+                    <div className="r"><span>Pełna nazwa</span></div>
+                    <div className="muted" style={{ fontSize: 12 }}>{node.name}</div>
+                    <p className="muted" style={{ fontSize: 11 }}>Wpisy zakupów i protokoły odbioru prowadzisz w zakładce „Realizacja (tabela)”.</p>
                 </div>
             </Karta>
 
-            <Karta tytul="Powiązania">
-                <div className="flex flex-col gap-2 p-3 text-[12.5px]">
+            <Karta tytul="Blokery i powiązania" prawa={blokery.length ? `${blokery.length} otwarte` : null}>
+                <div className="feed">
+                    {blokery.length ? blokery.map(w => <Wpis key={w.id} w={w} akcje={akcje} />) : <Pusto>Nic nie blokuje tej pozycji.</Pusto>}
+                </div>
+                {canEdit && <BlokerForm wbsNodeId={node.id} dodajBloker={dodajBloker} ownerUsers={ownerUsers} />}
+                <div className="mini" style={{ borderTop: '1px solid var(--line)' }}>
                     <Wiersz l="Zadania otwarte" v={zadania.filter(z => z.otwarte).length + (zadania.some(z => z.poTerminie) ? ' · po terminie' : '')} />
                     <Wiersz l="Pytania bez odpowiedzi" v={pytania.filter(p => p.otwarte).length} />
                     <Wiersz l="Odpowiedzialny" v={node.owner || '—'} />
                     <div>
-                        <div className="mb-1 text-[11px] text-gray-500">Krótka nazwa</div>
-                        <input value={short} onChange={e => setShort(e.target.value)} disabled={!canEdit}
+                        <div className="lab">Krótka nazwa</div>
+                        <input className="in" style={{ width: '100%' }} value={short} onChange={e => setShort(e.target.value)} disabled={!canEdit}
                             onBlur={() => { if ((short.trim() || null) !== (node.shortName || null)) zapiszShort(node.id, short); }}
                             onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                            placeholder={nazwaWyswietlana({ name: node.name })}
-                            className="w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-[12.5px] text-gray-200 placeholder-gray-600 focus:border-teal-500/50 focus:outline-none disabled:opacity-60" />
-                    </div>
-                    <div>
-                        <div className="mb-1 text-[11px] text-gray-500">Pełna nazwa (oferta, protokoły)</div>
-                        <div className="text-[12px] text-gray-400">{node.name}</div>
+                            placeholder={nazwaWyswietlana({ name: node.name })} />
                     </div>
                 </div>
             </Karta>
@@ -515,7 +640,7 @@ function RozwinietaPozycja({ node, r, planValue, canEdit, canSeeMoney, wpisy, sa
 }
 
 const Wiersz = ({ l, v }) => (
-    <div className="flex justify-between gap-3"><span className="text-gray-500">{l}</span><span className="text-right font-mono tabular-nums text-gray-200">{v}</span></div>
+    <div className="r"><span>{l}</span><b className="mono" style={{ fontWeight: 500 }}>{v}</b></div>
 );
 
 // @anchor realizacja-os-wybor — oś realizacji jako lista; bramka etapu = tylko podpis.
@@ -525,12 +650,10 @@ function OsWybor({ node, axis, readOnly, saveAxis }) {
     const gate = axisGateOf(node, axis);
     const wartosc = node[pole] || (axis === 'purchase' ? DEFAULT_PURCHASE_STATUS : DEFAULT_EXEC_STATUS);
     return (
-        <div className="flex items-center justify-between gap-3">
-            <span className="text-gray-500">{axis === 'purchase' ? 'Zakup' : (hasPurchaseAxis(node.type) ? 'Montaż' : 'Wykonanie')}</span>
-            {gate ? <span title={gate.title} className="italic text-gray-500">{gate.label}</span> : (
-                <select value={wartosc} disabled={readOnly}
-                    onChange={e => saveAxis(node, pole, e.target.value)}
-                    className={`rounded border border-white/10 bg-black/40 px-1.5 py-0.5 text-[12px] focus:border-teal-500/50 focus:outline-none ${meta[wartosc]?.color || 'text-gray-200'}`}>
+        <div className="r">
+            <span>{axis === 'purchase' ? 'Status zakupu' : (hasPurchaseAxis(node.type) ? 'Montaż' : 'Status robót')}</span>
+            {gate ? <span title={gate.title} className="muted" style={{ fontStyle: 'italic' }}>{gate.label}</span> : (
+                <select className="in" value={wartosc} disabled={readOnly} onChange={e => saveAxis(node, pole, e.target.value)}>
                     {Object.entries(meta).filter(([k]) => axis === 'purchase' || k !== 'HANDED_OVER' || wartosc === 'HANDED_OVER').map(([k, m]) => (
                         <option key={k} value={k}>{axis === 'exec' ? execStatusLabel(node.type, k) : m.label}</option>
                     ))}
@@ -542,8 +665,8 @@ function OsWybor({ node, axis, readOnly, saveAxis }) {
 
 // ─── Kokpit ──────────────────────────────────────────────────────────────────
 
-// @anchor realizacja-kokpit — KPI gałęzi, blokery i decyzje, najbliższe 14 dni, wątek gałęzi.
-function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMoney, nodeById, pelne, filtr, setFiltr, onOtworz, onZamknijBloker }) {
+// @anchor realizacja-kokpit — KPI gałęzi, blokery i decyzje, najbliższe 14 dni z gotowością, wątek gałęzi.
+function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMoney, canEdit, nodeById, pelne, filtr, setFiltr, onOtworz, akcje, gotowosc, kolizje = [] }) {
     const k = useMemo(() => {
         let plan = 0, real = 0, prognoza = 0, wykonane = 0;
         const roots = new Set();
@@ -562,68 +685,340 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
     }, [liscie, rowOf, protocols]);
 
     const nazwa = (id) => nodeById[id] ? nazwaWyswietlana(nodeById[id], pelne) : '';
-    const decyzje = wpisy.filter(w => w.otwarte && (w.rodzaj === 'block' || w.rodzaj === 'qa'))
-        .sort((a, b) => (a.rodzaj === 'block' ? 0 : 1) - (b.rodzaj === 'block' ? 0 : 1));
-    const teraz = new Date(); teraz.setHours(0, 0, 0, 0);
-    const koniec = new Date(teraz); koniec.setDate(koniec.getDate() + 14);
-    const wOknie = (d) => d && new Date(d) >= teraz && new Date(d) < koniec;
+    // @anchor realizacja-kolejnosc-blokerow — najpierw blokery po terminie, potem wg terminu i wpływu
+    // w dniach (bez terminu na końcu), dalej pytania bez odpowiedzi.
+    const decyzje = wpisy.filter(w => w.otwarte && (w.rodzaj === 'block' || w.rodzaj === 'qa')).sort((a, b) => {
+        const ra = a.rodzaj === 'block' ? 0 : 1, rb = b.rodzaj === 'block' ? 0 : 1;
+        if (ra !== rb) return ra - rb;
+        if (!!a.poTerminie !== !!b.poTerminie) return a.poTerminie ? -1 : 1;
+        const ta = a.termin ? new Date(a.termin).getTime() : Infinity, tb = b.termin ? new Date(b.termin).getTime() : Infinity;
+        if (ta !== tb) return ta - tb;
+        return (b.wplywDni || 0) - (a.wplywDni || 0);
+    });
+    const dni = dniOkna(LOOKAHEAD_DNI);
     const najblizsze = liscie.map(l => {
-        const dost = actualsOf(l).filter(e => entryStatusOf(e) === 'FORECAST' && wOknie(e.entryDate)).map(e => e.entryDate).sort()[0] || null;
-        const rob = wOknie(l.ganttStart) ? l.ganttStart : null;
-        return { l, dost, rob, kiedy: [dost, rob].filter(Boolean).sort()[0] };
-    }).filter(x => x.kiedy).sort((a, b) => new Date(a.kiedy) - new Date(b.kiedy));
+        const d0 = indeksDnia(l.ganttStart, dni[0]);
+        const d1 = indeksDnia(l.ganttEnd || l.ganttStart, dni[0]);
+        // Dostawa = prognoza pozycji z osią zakupu; prognoza pracy czy usługi to tylko przyszły koszt.
+        const dost = actualsOf(l).filter(e => hasPurchaseAxis(l.type) && entryStatusOf(e) === 'FORECAST').map(e => indeksDnia(e.entryDate, dni[0]))
+            .filter(i => i !== null && i >= 0 && i < LOOKAHEAD_DNI).sort((a, b) => a - b)[0];
+        const rob = d0 !== null && d1 >= 0 && d0 < LOOKAHEAD_DNI;
+        return { l, d0, d1, dost, rob, klucz: Math.min(rob ? Math.max(d0, 0) : 99, dost ?? 99) };
+    }).filter(x => x.rob || x.dost !== undefined).sort((a, b) => a.klucz - b.klucz);
     const widoczne = wpisy.filter(w => filtr === 'all' || w.rodzaj === filtr);
 
     return (
-        <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-white/[.08] bg-white/[.08] md:grid-cols-3 xl:grid-cols-6">
+        <>
+            <div className="kpis">
                 {canSeeMoney && <Kafel l="Plan (baseline)" v={`${fmtZl(k.plan)} zł`} s={`${liscie.length} pozycji`} />}
                 {canSeeMoney && <Kafel l="Poniesione" v={`${fmtZl(k.real)} zł`} s={`w tym prognoza ${fmtZl(k.prognoza)} zł`} />}
                 <Kafel l="Zaawansowanie" v={`${k.pct}%`} s="wartościowo, z osi robót" />
                 {canSeeMoney && <Kafel l="Odebrano" v={`${fmtZl(k.odebrano)} zł`} s="protokołami" />}
-                <Kafel l="Blokery" v={sygFokus.blok} s={`${sygFokus.pyt} pytań otwartych`} alarm={sygFokus.blok > 0} />
-                <Kafel l="Zadania otwarte" v={sygFokus.zad} s={`${sygFokus.poTerminie} po terminie`} alarm={sygFokus.poTerminie > 0} />
+                <Kafel l="Blokery" v={sygFokus.blok} s={`${sygFokus.pyt} pytań otwartych${sygFokus.kol ? ` · ${sygFokus.kol} kolizji dostaw` : ''}`} alarm={sygFokus.blok > 0} alarmS={sygFokus.kol > 0} />
+                <Kafel l="Zadania" v={sygFokus.zad} s={`${sygFokus.poTerminie} po terminie`} alarmS={sygFokus.poTerminie > 0} />
             </div>
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_1fr]">
-                <div className="flex min-w-0 flex-col gap-4">
-                    <Karta tytul="Blokery i decyzje" prawa="pilne wpisy czatu i pytania bez odpowiedzi">
-                        {decyzje.length ? decyzje.map(w => (
-                            <Wpis key={w.id} w={w} nazwaPozycji={nazwa(w.nodeId)} onPozycja={() => onOtworz(w.nodeId)} onZamknijBloker={onZamknijBloker} />
-                        )) : <div className="px-3 py-4 text-[12px] text-gray-600">Nic nie blokuje tej gałęzi.</div>}
+            <div className="cols">
+                <div className="stack">
+                    <Karta tytul="Blokery i decyzje" prawa="po terminie i wpływie na roboty">
+                        <div className="feed">
+                            {decyzje.length ? decyzje.map(w => (
+                                <Wpis key={w.id} w={w} nazwaPozycji={nazwa(w.nodeId)} onPozycja={() => onOtworz(w.nodeId)} akcje={canEdit ? akcje : null} />
+                            )) : <Pusto>Nic nie blokuje tej gałęzi.</Pusto>}
+                        </div>
                     </Karta>
-                    <Karta tytul="Najbliższe 14 dni" prawa="dostawy z prognoz, start robót z harmonogramu">
-                        {najblizsze.length ? (
-                            <table className="w-full text-[12.5px]">
-                                <tbody>
-                                    {najblizsze.map(({ l, dost, rob }) => (
-                                        <tr key={l.id} onClick={() => onOtworz(l.id)} className="cursor-pointer border-b border-white/[.05] last:border-b-0 hover:bg-white/[.03]">
-                                            <td className="max-w-[260px] truncate px-3 py-1.5" title={l.name}>{nazwaWyswietlana(l, pelne)}</td>
-                                            <td className="px-3 py-1.5 font-mono text-gray-400">{dost && `dost. ${kiedyTekst(dost)}`}</td>
-                                            <td className="px-3 py-1.5 font-mono text-gray-400">{rob && `rob. ${kiedyTekst(rob)}`}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        ) : <div className="px-3 py-4 text-[12px] text-gray-600">Brak dostaw i startów robót w najbliższych 14 dniach.</div>}
+                    {kolizje.length > 0 && <KolizjeDostaw kolizje={kolizje} pelne={pelne} onOtworz={onOtworz} akcje={canEdit ? akcje : null} />}
+                    <Karta tytul="Najbliższe 14 dni" prawa={`od ${dzienMies(dni[0])}`}>
+                        <table>
+                            <thead><tr><th>Pozycja</th><th>Kiedy</th><th>Gotowość</th></tr></thead>
+                            <tbody>
+                                {najblizsze.length ? najblizsze.map(({ l, d0, d1, dost, rob }) => (
+                                    <tr key={l.id} className="row" onClick={() => onOtworz(l.id)}>
+                                        <td className="nm-cell"><span className="t" title={l.name}>{nazwaWyswietlana(l, pelne)}</span></td>
+                                        <td className="mono" style={{ fontSize: 12 }}>
+                                            {rob && <div>rob. {dzienMies(dni[Math.max(d0, 0)])}{Math.min(d1, LOOKAHEAD_DNI - 1) !== Math.max(d0, 0) ? `–${dzienMies(dni[Math.min(d1, LOOKAHEAD_DNI - 1)])}` : ''}</div>}
+                                            {dost !== undefined && <div>dost. {dzienMies(dni[dost])}</div>}
+                                        </td>
+                                        <td><GotowoscChipy g={gotowosc(l)} /></td>
+                                    </tr>
+                                )) : <tr><td colSpan={3} className="muted">Brak robót i dostaw w oknie.</td></tr>}
+                            </tbody>
+                        </table>
                     </Karta>
                 </div>
-                <Karta tytul="Wątek gałęzi" prawa={`${liscie.length} pozycji`}>
+                <Karta tytul="Wątek gałęzi" prawa={`wszystko z ${liscie.length} pozycji`}>
                     <FiltryWatku wpisy={wpisy} filtr={filtr} setFiltr={setFiltr} />
-                    <div className="max-h-[560px] overflow-auto">
+                    <div className="feed scroll" style={{ maxHeight: 560 }}>
                         {widoczne.length ? widoczne.map(w => (
-                            <Wpis key={w.id} w={w} nazwaPozycji={nazwa(w.nodeId)} onPozycja={() => onOtworz(w.nodeId)} onZamknijBloker={onZamknijBloker} />
-                        )) : <div className="px-3 py-4 text-[12px] text-gray-600">Brak wpisów tego rodzaju.</div>}
+                            <Wpis key={w.id} w={w} nazwaPozycji={nazwa(w.nodeId)} onPozycja={() => onOtworz(w.nodeId)} akcje={canEdit ? akcje : null} />
+                        )) : <Pusto>Brak wpisów tego rodzaju.</Pusto>}
                     </div>
                 </Karta>
             </div>
-        </div>
+        </>
     );
 }
 
-const Kafel = ({ l, v, s, alarm }) => (
-    <div className="flex flex-col gap-0.5 bg-[#0a1120] px-3 py-2.5">
-        <span className="text-[10.5px] uppercase tracking-wider text-gray-500">{l}</span>
-        <span className={`font-mono text-lg tabular-nums ${alarm ? 'text-red-300' : 'text-gray-100'}`}>{v}</span>
-        <span className="text-[11px] text-gray-500">{s}</span>
+// @anchor realizacja-kolizje-dostaw — karta Kokpitu: dostawy za blisko startu robót w gałęzi.
+// Kolizja bez blokera ma przycisk „→ bloker”; z blokerem — znacznik, a sam bloker jest wyżej.
+function KolizjeDostaw({ kolizje, pelne, onOtworz, akcje }) {
+    return (
+        <Karta tytul="Kolizje dostaw" prawa={`bufor ${BUFOR_DOSTAWY_DNI} dni przed robotami`}>
+            <table>
+                <thead><tr><th>Materiał</th><th>Dostawa</th><th>Roboty w gałęzi</th><th className="num">Zapas</th><th /></tr></thead>
+                <tbody>
+                    {kolizje.map(k => (
+                        <tr key={k.id} className="row" onClick={() => onOtworz(k.materialId)}>
+                            <td className="nm-cell"><span className="t" title={k.material.name}>{nazwaWyswietlana(k.material, pelne)}</span></td>
+                            <td className="mono" style={{ fontSize: 12 }}>{dzienMies(k.dostawa)}</td>
+                            <td className="nm-cell"><span className="t" title={k.robota.name}>{nazwaWyswietlana(k.robota, pelne)} · od {dzienMies(k.startRobot)}</span></td>
+                            <td className="num dpos">{k.zapasDni > 0 ? '+' : ''}{k.zapasDni} dni</td>
+                            <td onClick={e => e.stopPropagation()} style={{ textAlign: 'right' }}>
+                                {k.blokerId ? <span className="cnt c-bad">bloker</span>
+                                    : akcje && <button className="mini-btn bad" onClick={() => akcje.zKolizji(k)} title="Utwórz bloker materiałowy z terminem = start robót">→ bloker</button>}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </Karta>
+    );
+}
+
+const Kafel = ({ l, v, s, alarm, alarmS }) => (
+    <div className="kpi">
+        <span className="l">{l}</span>
+        <span className="v" style={alarm ? { color: 'var(--bad)' } : undefined}>{v}</span>
+        <span className="s" style={alarmS ? { color: 'var(--bad)' } : undefined}>{s}</span>
     </div>
 );
+
+// ─── Tablica ─────────────────────────────────────────────────────────────────
+
+// @anchor realizacja-tablica-kolumny — kolumny tablicy na każdej osi. Statusy zamykające
+// „bokiem" (anulowane, niedokończone, zafakturowane) dostają kolumnę tylko, gdy coś w nich leży.
+const TABLICA_KOLUMNY = {
+    exec: { stale: ['TO_DO', 'IN_PROGRESS', 'ON_HOLD', 'DONE', 'HANDED_OVER'], opcjonalne: ['UNFINISHED', 'INVOICED', 'CANCELLED'] },
+    purchase: { stale: ['TO_ORDER', 'ORDERED', 'PARTIALLY_DELIVERED', 'DELIVERED', 'ISSUED', 'INVOICED'], opcjonalne: ['CANCELLED'] },
+};
+// „Odebrane protokołem" ustawia protokół odbioru — ręcznie nie wrzucamy tam karty i jej stamtąd nie wyjmujemy.
+const TABLICA_TYLKO_PROTOKOL = 'HANDED_OVER';
+
+// @anchor realizacja-tablica — tablica statusów do porannej odprawy: karty pozycji w kolumnach
+// statusu wybranej osi (roboty / zakup), tory = bezpośrednie podgałęzie zoomu. Przeciągnięcie
+// karty do innej kolumny w tym samym torze zapisuje status przez `saveAxis` (te same reguły co lista
+// w Macierzy). Karta za bramką etapu (np. montaż czekający na dostawę) leży w pierwszej kolumnie
+// z podpisem bramki i nie da się jej przeciągnąć. Czerwony brzeg = otwarty bloker albo kolizja dostawy.
+function Tablica({ grupy, actualsOf, sygnaly, pelne, canEdit, saveAxis, onZoom, onOtworz }) {
+    const [os, setOsState] = useState(() => (czytaj(OS_KEY, 'exec') === 'purchase' ? 'purchase' : 'exec'));
+    const setOs = (v) => { setOsState(v); zapisz(OS_KEY, v); };
+    const [ciagniete, setCiagniete] = useState(null);   // { id, tor, status }
+    const [nad, setNad] = useState(null);               // `${tor}|${status}`
+
+    const pole = os === 'purchase' ? 'purchaseStatus' : 'execStatus';
+    const domyslny = os === 'purchase' ? DEFAULT_PURCHASE_STATUS : DEFAULT_EXEC_STATUS;
+    const naOsi = os === 'purchase' ? hasPurchaseAxis : hasExecAxis;
+    const etykieta = (node, k) => (os === 'exec' ? execStatusLabel(node?.type, k) : PURCHASE_STATUS_META[k]?.label) || k;
+
+    const tory = useMemo(() => grupy.map(({ galaz, liscie }) => ({
+        galaz,
+        karty: liscie.filter(l => naOsi(l.type)).map(l => {
+            const bramka = axisGateOf(l, os);
+            return { l, bramka, status: bramka ? domyslny : (l[pole] || domyslny) };
+        }),
+    })).filter(t => t.karty.length), [grupy, os]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const wszystkie = tory.flatMap(t => t.karty);
+    const { stale, opcjonalne } = TABLICA_KOLUMNY[os];
+    const kolumny = [...stale, ...opcjonalne.filter(k => wszystkie.some(c => c.status === k))];
+    // Kolumna z kodem spoza słownika (stare dane) — nie gubimy karty, tylko dokładamy kolumnę.
+    for (const c of wszystkie) if (!kolumny.includes(c.status)) kolumny.push(c.status);
+    const siatka = { gridTemplateColumns: `repeat(${kolumny.length}, minmax(150px, 1fr))` };
+
+    const mozeCiagnac = (c) => canEdit && !c.bramka && !(os === 'exec' && c.status === TABLICA_TYLKO_PROTOKOL);
+    const mozeUpuscic = (tor, k) => ciagniete && ciagniete.tor === tor && ciagniete.status !== k
+        && !(os === 'exec' && k === TABLICA_TYLKO_PROTOKOL);
+    const upusc = (tor, k) => {
+        const c = ciagniete;
+        setCiagniete(null); setNad(null);
+        if (!c || !mozeUpuscic(tor, k)) return;
+        const karta = wszystkie.find(x => x.l.id === c.id);
+        if (karta) saveAxis(karta.l, pole, k);
+    };
+
+    // Termin na karcie: oś robót = start z Gantta, oś zakupu = najbliższa przewidywana dostawa (FORECAST).
+    const termin = (l) => {
+        if (os === 'exec') return l.ganttStart ? `rob. ${dzienMies(l.ganttStart)}` : null;
+        const d = actualsOf(l).filter(e => entryStatusOf(e) === 'FORECAST' && e.entryDate).map(e => new Date(e.entryDate)).sort((a, b) => a - b)[0];
+        return d ? `dost. ${dzienMies(d)}` : null;
+    };
+
+    if (!tory.length) return <div className="empty">Brak pozycji z osią {os === 'exec' ? 'robót' : 'zakupu'} w tej gałęzi.</div>;
+    return (
+        <>
+            <div className="lahead">
+                <span className="seg">
+                    <button className={os === 'exec' ? 'on' : ''} onClick={() => setOs('exec')}>Oś robót</button>
+                    <button className={os === 'purchase' ? 'on' : ''} onClick={() => setOs('purchase')}>Oś zakupu</button>
+                </span>
+                <span>Tory = podgałęzie. {canEdit ? 'Przeciągnięcie karty zmienia status (oprócz „Odebrane protokołem”, które ustawia protokół).' : 'Podgląd — statusy zmieniają kierownik i logistyk.'} Klik w kartę otwiera ją w Macierzy.</span>
+            </div>
+            <div className="kb-wrap">
+                <div className="kbh" style={siatka}>
+                    {kolumny.map(k => (
+                        <div key={k}><span>{etykieta(null, k)}</span><span>{wszystkie.filter(c => c.status === k).length}</span></div>
+                    ))}
+                </div>
+                <div className="kb" style={siatka}>
+                    {tory.map(({ galaz, karty }) => {
+                        const tor = galaz?.id || '_wprost';
+                        return (
+                            <React.Fragment key={tor}>
+                                {galaz
+                                    ? <div className="lane" title={galaz.name}>
+                                        <button onClick={() => onZoom(galaz.id)} title={`${galaz.name} — pokaż tylko tę gałąź`}>{nazwaWyswietlana(galaz, pelne)}</button>
+                                        <span className="mono" style={{ fontWeight: 400 }}>· {karty.length} poz.</span>
+                                    </div>
+                                    : grupy.length > 1 && <div className="lane">Pozycje wprost w tej gałęzi</div>}
+                                {kolumny.map(k => {
+                                    const klucz = `${tor}|${k}`;
+                                    const cel = mozeUpuscic(tor, k);
+                                    return (
+                                        <div key={k}
+                                            className={`kcol${ciagniete ? (cel ? ' can-drop' : ' no-drop') : ''}${nad === klucz && cel ? ' over' : ''}`}
+                                            onDragOver={e => { if (cel) { e.preventDefault(); if (nad !== klucz) setNad(klucz); } }}
+                                            onDragLeave={() => { if (nad === klucz) setNad(null); }}
+                                            onDrop={e => { e.preventDefault(); upusc(tor, k); }}>
+                                            {karty.filter(c => c.status === k).map(c => {
+                                                const s = sygnaly[c.l.id];
+                                                const alarm = (s?.blok || 0) > 0 || (s?.kol || 0) > 0;
+                                                const t = termin(c.l);
+                                                const drag = mozeCiagnac(c);
+                                                return (
+                                                    <div key={c.l.id} className={`kc${alarm ? ' blk' : ''}${drag ? ' drag' : ''}${ciagniete?.id === c.l.id ? ' ghost' : ''}`}
+                                                        draggable={drag} title={c.l.name}
+                                                        onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c.l.id); setCiagniete({ id: c.l.id, tor, status: c.status }); }}
+                                                        onDragEnd={() => { setCiagniete(null); setNad(null); }}
+                                                        onClick={() => onOtworz(c.l.id)}>
+                                                        <span className="t">{nazwaWyswietlana(c.l, pelne)}</span>
+                                                        <span className="m">
+                                                            <span className="typ">{TYPE_META[c.l.type]?.label || c.l.type}</span>
+                                                            {t && <span className="mono">{t}</span>}
+                                                            {c.l.owner && <span>{c.l.owner}</span>}
+                                                        </span>
+                                                        {c.bramka && <span className="gate" title={c.bramka.title}>{c.bramka.label}</span>}
+                                                        {s && (s.blok || s.kol || s.pyt || s.zad) ? <SygnalyCell s={{ ...s, czat: 0 }} /> : null}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                })}
+                            </React.Fragment>
+                        );
+                    })}
+                </div>
+            </div>
+        </>
+    );
+}
+
+// ─── Lookahead ───────────────────────────────────────────────────────────────
+
+// @anchor realizacja-lookahead — 14 dni od dziś: paski robót z Gantta (`WbsNode.ganttStart/End`),
+// romby dostaw z wpisów prognozowanych (`LeafActual` FORECAST) materiału i sprzętu, gotowość przy każdej pozycji.
+// Czerwony romb = kolizja dostawy (`wykryj-kolizje`): dostawa mniej niż `BUFOR_DOSTAWY_DNI`
+// przed startem robót w tej samej gałęzi, które w dniu dostawy jeszcze trwają.
+function Lookahead({ grupy, actualsOf, pelne, gotowosc, onZoom, onOtworz, kolizje = [] }) {
+    const dni = useMemo(() => dniOkna(LOOKAHEAD_DNI), []);
+    const start = dni[0];
+
+    const wiersze = useMemo(() => {
+        const kolidujace = new Set(kolizje.map(k => k.id));
+        return grupy.map(({ galaz, liscie }) => {
+            const pozycje = liscie.map(l => {
+                const d0 = indeksDnia(l.ganttStart, start);
+                const d1 = indeksDnia(l.ganttEnd || l.ganttStart, start);
+                const roboty = d0 !== null && d1 >= 0 && d0 < LOOKAHEAD_DNI ? { d0, d1 } : null;
+                const dostawy = new Map();
+                const spoznione = new Set();
+                for (const e of actualsOf(l)) {
+                    if (!hasPurchaseAxis(l.type) || entryStatusOf(e) !== 'FORECAST') continue;
+                    const i = indeksDnia(e.entryDate, start);
+                    if (i === null || i < 0 || i >= LOOKAHEAD_DNI) continue;
+                    dostawy.set(i, true);
+                    if (kolidujace.has(e.id)) spoznione.add(i);
+                }
+                return { l, roboty, dostawy: [...dostawy.keys()], spoznione };
+            }).filter(p => p.roboty || p.dostawy.length);
+            return { galaz, pozycje };
+        }).filter(g => g.pozycje.length);
+    }, [grupy, actualsOf, start, kolizje]);
+
+    const siatka = { gridTemplateColumns: `240px repeat(${LOOKAHEAD_DNI}, minmax(44px, 1fr))` };
+    return (
+        <>
+            <div className="lahead">
+                <span>Okno {dzienMies(dni[0])}–{dzienMies(dni[LOOKAHEAD_DNI - 1])}. Daty robót z harmonogramu (Gantt), dostawy z wpisów prognozowanych. Klik w pozycję otwiera ją w Macierzy.</span>
+            </div>
+            {!wiersze.length ? <div className="empty">Brak robót z Gantta i dostaw w najbliższych 14 dniach.</div> : (
+                <div className="la" style={siatka}>
+                    <div className="hd first">Pozycja · gotowość</div>
+                    {dni.map((d, i) => {
+                        const we = d.getDay() === 0 || d.getDay() === 6;
+                        return <div key={i} className={`hd${we ? ' we' : ''}${i === 0 ? ' today' : ''}`}>{DNI_TYG[d.getDay()]} {d.getDate()}</div>;
+                    })}
+                    {wiersze.map(({ galaz, pozycje }) => (
+                        <React.Fragment key={galaz?.id || '_wprost'}>
+                            {galaz && (
+                                <div className="grpl" title={galaz.name}>
+                                    <button onClick={() => onZoom(galaz.id)}>{nazwaWyswietlana(galaz, pelne)}</button>
+                                    <span className="mono" style={{ fontWeight: 400 }}> · {pozycje.length} poz.</span>
+                                </div>
+                            )}
+                            {pozycje.map(({ l, roboty, dostawy, spoznione }) => (
+                                <React.Fragment key={l.id}>
+                                    <div className="lbl" onClick={() => onOtworz(l.id)} title={l.name}>
+                                        <span className="t">{nazwaWyswietlana(l, pelne)}</span>
+                                        <GotowoscChipy g={gotowosc(l)} />
+                                    </div>
+                                    {dni.map((d, i) => {
+                                        const we = d.getDay() === 0 || d.getDay() === 6;
+                                        const od = roboty ? Math.max(roboty.d0, 0) : -1;
+                                        const pasek = roboty && i === od;
+                                        const dlug = pasek ? Math.min(roboty.d1, LOOKAHEAD_DNI - 1) - od + 1 : 0;
+                                        const wstrzymane = l.execStatus === 'ON_HOLD';
+                                        const zrobione = ['DONE', 'HANDED_OVER', 'INVOICED'].includes(l.execStatus);
+                                        return (
+                                            <div key={i} className={`cell${we ? ' we' : ''}`}>
+                                                {pasek && (
+                                                    <div className={`bar ${wstrzymane ? 'b-hold' : zrobione ? 'b-done' : 'b-work'}${roboty.d0 < 0 ? ' cut-l' : ''}${roboty.d1 >= LOOKAHEAD_DNI ? ' cut-r' : ''}`}
+                                                        style={{ left: 3, width: `calc(${dlug * 100}% + ${dlug - 1}px - 6px)` }}
+                                                        title={`Roboty ${dzienMies(l.ganttStart)}–${dzienMies(l.ganttEnd || l.ganttStart)} · ${execStatusLabel(l.type, l.execStatus || DEFAULT_EXEC_STATUS)}`}>
+                                                        {wstrzymane ? 'wstrzymane' : String(execStatusLabel(l.type, l.execStatus || DEFAULT_EXEC_STATUS) || '').toLowerCase()}
+                                                    </div>
+                                                )}
+                                                {dostawy.includes(i) && (
+                                                    <span className={`diam${spoznione.has(i) ? ' late' : ''}`}
+                                                        title={`Dostawa ${dzienMies(d)}${spoznione.has(i) ? ` — mniej niż ${BUFOR_DOSTAWY_DNI} dni przed robotami w gałęzi` : ''}`} />
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </React.Fragment>
+                            ))}
+                        </React.Fragment>
+                    ))}
+                </div>
+            )}
+            <div className="legend">
+                <span><i className="bar b-work" />roboty</span>
+                <span><i className="bar b-done" />wykonane</span>
+                <span><i className="bar b-hold" />wstrzymane</span>
+                <span><i className="diam" />dostawa</span>
+                <span><i className="diam late" />dostawa za blisko robót</span>
+                <span className="ready"><span className="r-ok">MAT</span><span className="r-q">PYT</span><span className="r-no">BLK</span></span>
+                <span>gotowość: materiał, pytania, blokery (zielone = gotowe, żółte = czeka, czerwone = brak)</span>
+            </div>
+        </>
+    );
+}

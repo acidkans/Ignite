@@ -1,3 +1,27 @@
+## 2026-11-02 — feat(realizacja): rejestr blokerów (Constraint), kontrola kolizji dostaw i Lookahead 14 dni z Gantta; wygląd Realizacji jak w mockupie
+
+### schema.prisma
+- dodano `schema-model` `Constraint` (tabela `wbs_constraints`, migracja `20261102230000_wbs_constraints`) — bloker na pozycji/gałęzi: `kind`, `title`, `note`, `ownerId`, `dueAt`, `impactDays`, `status` OPEN|CLOSED, `sourceType`/`sourceId` (QA → id pary z `WbsNode.qa`, COLLISION → id wpisu dostawy `LeafActual`), `createdById`, `closedAt`, `closedById`
+- dodano `schema-relacja` `ProcessNode.constraints` (Cascade) i `User.ownedConstraints` (`ConstraintOwner`, SetNull)
+
+### architektura / API
+- dodano `back-modul` `ConstraintsModule`: `GET /constraints/order/:nodeId` (każdy zalogowany), `POST /constraints/order/:nodeId`, `PATCH /constraints/:id`, `DELETE /constraints/:id` (ADMIN/MANAGER/LOGISTYK); wpisy w AuditLog (entity `Constraint`)
+- `ui-zakladka` `RealizacjaPanel` — trzeci widok „Lookahead 14 dni”: paski robót z `WbsNode.ganttStart/End`, romby dostaw z `LeafActual` FORECAST (czerwony = mniej niż 2 dni przed robotami w gałęzi), chipy gotowości MAT/PYT/BLK
+- `ui-zakladka` `RealizacjaPanel` — rejestr blokerów: formularz w rozwiniętej pozycji, „rozwiązane” / „otwórz ponownie”, pytanie Q&A „→ bloker” (kind CLIENT); Kokpit sortuje blokery po terminie i wpływie
+- `ui-funkcja` `wykryjKolizje` — kontrola kolizji dostaw: prognozowana dostawa materiału/sprzętu (FORECAST, pozycja niedostarczona) mniej niż 2 dni przed startem robót z Gantta w tej samej gałęzi; karta „Kolizje dostaw” w Kokpicie z „→ bloker” (kind MATERIAL, termin = start robót, wpływ w dniach), czerwony romb w Lookahead, licznik „K” w drzewie, pill w nagłówku
+- Macierz / Kokpit / Lookahead — prognoza pracy i usługi nie jest już podpisywana jako dostawa („progn.” zamiast „dost.”, bez rombu)
+- wygląd Realizacji przeniesiony z mockupu (`realizacja.css` pod `.rz`, fonty Archivo / IBM Plex z Google Fonts w `index.html`)
+
+### słownik
+- dodano 49 anchorów: model `Constraint` i pola, `ConstraintsModule/Controller/Service`, `BlokerForm`, `Lookahead`, `GotowoscChipy`, `gotowoscPozycji`, `dniOkna`, `indeksDnia`, `RODZAJE_BLOKERA`, `dodajBloker`, `zmienBloker`, `ownerUsers`, `wykryjKolizje`, `BUFOR_DOSTAWY_DNI`, `KolizjeDostaw`
+
+### wytyczne
+- `schema-model` `Constraint` — klucz `wbsRootId` jak w `LeafActual`; NIE dodawać do `cloneVersionData`
+- `schema-pole` `WbsNode.qa` — zostaje źródłem prawdy pytań (decyzja 2026-11-02: bez migracji do NodeQuestion); bloker z pytania wskazuje parę przez `Constraint.sourceId = qaId`
+- `ui-funkcja` `wykryjKolizje` — kolizja to sygnał liczony na froncie, nie rekord; bloker powstaje dopiero po „→ bloker” (`sourceType COLLISION`), bez automatycznego zapisu
+- `ui-sekcja` `Lookahead` — daty robót wyłącznie z Gantta (`ganttStart/ganttEnd`), nie z zadań
+- `ui-zakladka` `RealizacjaPanel` — nowe blokery to `Constraint`; dawne pilne wpisy czatu (`URGENT`) nadal liczą się jako blokery, dopóki ktoś ich nie zamknie
+
 ## 2026-11-02 — feat(realizacja): nowy UI realizacji (MVP) — start realizacji po baseline, Kokpit i Macierz z wątkiem pozycji, drzewo gałęzi w lewym panelu
 
 ### schema.prisma
