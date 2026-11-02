@@ -1,3 +1,11 @@
+## 2026-11-03 — fix(materialy): panel Materiały pokazuje tylko materiał i sprzęt, także managerowi
+
+### architektura / API
+- `ui-sekcja` `WbsMaterialsPanel` — `matNodes` filtruje zawsze po `OPEN_LEAF_TYPES` (material, equipment), bez rozróżnienia ról; usunięto prop `userRoles` (podawały go `UnifiedWbsPanel` i `LogistykaMaterialListsTab`). Cofa decyzję z 2026-08-13, kiedy panel dostał praca/usługa/nocleg/paliwo dla managera
+
+### wytyczne
+- `ui-sekcja` `WbsMaterialsPanel` — panel to lista TOWARU: tylko liście `material` i `equipment` dla każdej roli. Wpisy wykonania pracy, usług, noclegów i paliwa prowadzi się w Realizacji, nie w Materiałach
+
 ## 2026-11-02 — feat(realizacja): Lookahead jako tablica planowania — te same daty co Gantt, przeciąganie i rozciąganie pasków robót
 
 ### architektura / API
