@@ -23,6 +23,7 @@ import ScopeDocumentModal from './ScopeDocumentModal';
 import BudgetModesPanel from './BudgetModesPanel';
 import ComparisonPanel from '../ComparisonPanel';
 import QaTreeView from './QaTreeView';
+import QaMailAutoNotice from './QaMailAutoNotice';
 import AllTasksModal from './AllTasksModal';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
 import OfferLockGuard, { guardOfferEdit, useOfferLock } from '../OfferLockGuard';
@@ -211,6 +212,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // (klucz per nodeId), więc nawigacja tam-i-z-powrotem w tej samej karcie już nie nagabuje.
     // Nie otwiera się, gdy Q&A jest puste lub wszystkie pytania mają już odpowiedzi.
     const [qaTreeOpen, setQaTreeOpen] = useState(false);
+    // @anchor qa-highlight-reply-ids — maile, których odpowiedzi wpisane przez AI QaTreeView pokazuje na zielono (z popupu QaMailAutoNotice).
+    const [qaHighlightReplyIds, setQaHighlightReplyIds] = useState(null);
     // @anchor unified-all-tasks-open — modal pełnej listy zadań (ten sam co „Pełna lista" w zakładce Zadania)
     const [allTasksOpen, setAllTasksOpen] = useState(false);
     useEffect(() => {
@@ -6966,8 +6969,10 @@ ${ganttSectionHtml}
             )}
 
             {qaTreeOpen && (
-                <QaTreeView nodeId={nodeId} versionId={versionId} onClose={() => setQaTreeOpen(false)} initialFilter={qaTreeOpen === 'unanswered' ? 'unanswered' : 'withQa'} />
+                <QaTreeView nodeId={nodeId} versionId={versionId} onClose={() => { setQaTreeOpen(false); setQaHighlightReplyIds(null); }} initialFilter={qaTreeOpen === 'unanswered' ? 'unanswered' : 'withQa'} highlightReplyIds={qaHighlightReplyIds} />
             )}
+
+            <QaMailAutoNotice processNodeId={nodeId} onOpenQa={(ids) => { setQaHighlightReplyIds(new Set(ids)); setQaTreeOpen(true); }} />
 
             {allTasksOpen && (
                 <AllTasksModal nodeId={nodeId} versionId={versionId} onChanged={onWbsUpdate} onClose={() => setAllTasksOpen(false)} />

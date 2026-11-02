@@ -3,6 +3,8 @@ import { ImapFlow } from 'imapflow';
 import { PrismaService } from '../prisma/prisma.service';
 import { VectorService } from '../ai/vector.service';
 import { decryptSecret } from '../common/secret-crypto.util';
+import { buildQaIndexFromRows, resolveStrategyTokens } from '../common/strategy-tokens.util';
+import { cleanQaPair } from '../wbs-nodes/wbs-nodes.service';
 
 // mailparser nie ma typów — tylko simpleParser.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -140,6 +142,83 @@ export class QaMailRepliesService {
       },
     });
     await this.analyze(reply.id).catch(() => {});
+    await this.autoApply(reply.id).catch((e: any) => this.logger.warn(`Auto-wpis odpowiedzi ${reply.id}: ${e?.message || e}`));
+  }
+
+  // @anchor qa-mail-replies-auto-apply
+  // Automat po analizie AI nowego maila: propozycje z odpowiedzią trafiają od razu do Q&A węzłów — tylko
+  // do pytań jeszcze bez odpowiedzi (ręcznie wpisanej nie nadpisuje). Zamyka zadania „Wyjaśnić czy…” i
+  // przelicza złożenie strategii gałęzi z `{{q:id}}`. Wpisane propozycje dostają `applied: true`, a mail
+  // status AUTO — front pokazuje popup „Dodano odpowiedzi z maila”; jego zamknięcie ustawia DONE.
+  async autoApply(replyId: string): Promise<number> {
+    const reply = await this.prisma.qaMailReply.findUnique({ where: { id: replyId } });
+    if (!reply || reply.status !== 'NEW') return 0;
+    const proposals: any[] = parseJson(reply.proposals, []);
+    const norm = (t: any) => String(t || '').trim().toLowerCase();
+    const byNode = new Map<string, any[]>();
+    proposals.filter(p => p?.wbsNodeId && String(p?.answer || '').trim())
+      .forEach(p => byNode.set(p.wbsNodeId, [...(byNode.get(p.wbsNodeId) || []), p]));
+    if (!byNode.size) return 0;
+
+    const nodes = await this.prisma.wbsNode.findMany({ where: { id: { in: [...byNode.keys()] } }, select: { id: true, qa: true, nodeId: true, versionId: true } });
+    let applied = 0;
+    const taskIds: string[] = [];
+    const touched: typeof nodes = [];
+    for (const n of nodes) {
+      const qa: any[] = parseJson(n.qa, []);
+      if (!Array.isArray(qa)) continue;
+      let changed = false;
+      for (const p of byNode.get(n.id)!) {
+        let idx = qa.findIndex(x => x?.id && x.id === p.qaId);
+        if (idx < 0) idx = qa.findIndex(x => norm(x?.question) === norm(p.question));
+        if (idx < 0 || String(qa[idx]?.answer || '').trim()) continue;
+        qa[idx] = {
+          ...qa[idx],
+          answer: String(p.answer).trim().toLocaleLowerCase('pl-PL'),
+          answerSource: 'mail', mailReplyId: reply.id, mailReplyAt: reply.receivedAt.toISOString(),
+        };
+        if (qa[idx].taskId) taskIds.push(String(qa[idx].taskId));
+        p.applied = true;
+        applied++;
+        changed = true;
+      }
+      if (!changed) continue;
+      await this.prisma.wbsNode.update({ where: { id: n.id }, data: { qa: JSON.stringify(qa.map(cleanQaPair)) } });
+      touched.push(n);
+    }
+    if (!applied) return 0;
+    if (taskIds.length) await this.prisma.userTask.updateMany({ where: { id: { in: taskIds }, status: { not: 'DONE' } }, data: { status: 'DONE' } });
+    for (const n of touched) await this.recomposeBranchFor(n.id, n.nodeId, n.versionId).catch(() => {});
+    await this.prisma.qaMailReply.update({ where: { id: reply.id }, data: { status: 'AUTO', handledAt: new Date(), proposals: JSON.stringify(proposals) } });
+    this.logger.log(`Auto-wpis odpowiedzi z maila ${reply.id}: ${applied}`);
+    return applied;
+  }
+
+  // @anchor qa-mail-replies-recompose-branch
+  // Złożenie strategii gałęzi (pole `strategy` węzła top-level) po zmianie odpowiedzi — lustro frontowego
+  // `composeBranchStrategy`: „nazwa:\nstrategia” potomków w kolejności drzewa, rozdzielone pustą linią.
+  // Tylko gdy któraś strategia w gałęzi ma znaczniki `{{q:id}}` (inaczej złożenie jest ręczne).
+  private async recomposeBranchFor(wbsNodeId: string, nodeId: string, versionId: string | null) {
+    const all = await this.prisma.wbsNode.findMany({
+      where: { nodeId, versionId }, orderBy: { sortOrder: 'asc' },
+      select: { id: true, parentId: true, name: true, strategy: true, qa: true },
+    });
+    const byId = new Map(all.map(n => [n.id, n]));
+    let root = byId.get(wbsNodeId);
+    while (root?.parentId && byId.has(root.parentId)) root = byId.get(root.parentId);
+    if (!root) return;
+    const kids = new Map<string, typeof all>();
+    all.forEach(n => { if (n.parentId) kids.set(n.parentId, [...(kids.get(n.parentId) || []), n]); });
+    const branch: typeof all = [];
+    const walk = (id: string) => (kids.get(id) || []).forEach(c => { branch.push(c); walk(c.id); });
+    walk(root.id);
+    if (!branch.some(n => /\{\{q:[\w-]+\}\}/.test(n.strategy || ''))) return;
+    const qaIndex = buildQaIndexFromRows([root, ...branch]);
+    const composed = branch
+      .filter(n => (n.strategy || '').trim())
+      .map(n => `${(n.name || 'Element WBS').trim()}:\n${resolveStrategyTokens((n.strategy || '').trim(), qaIndex)}`)
+      .join('\n\n');
+    if (composed && composed !== (root.strategy || '')) await this.prisma.wbsNode.update({ where: { id: root.id }, data: { strategy: composed } });
   }
 
   // @anchor qa-mail-replies-analyze

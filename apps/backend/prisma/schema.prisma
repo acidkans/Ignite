@@ -728,7 +728,7 @@ model QaMailReply {
   /// @anchor qa-mail-reply-ai-error
   aiError       String? // AI nie zadziałało — odpowiedzi wpisuje się ręcznie
   /// @anchor qa-mail-reply-status
-  status        String    @default("NEW") // NEW | DONE (wpisane do Q&A) | IGNORED
+  status        String    @default("NEW") // NEW | AUTO (AI wpisało do Q&A, popup niepotwierdzony) | DONE (wpisane do Q&A) | IGNORED
   handledById   String?
   handledAt     DateTime?
   createdAt     DateTime  @default(now())

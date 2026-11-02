@@ -299,6 +299,8 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stan | mailQuestions | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor qa-tree-mail-questions |
 | ui-funkcja | openMail | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor open-qa-tree-mail |
 | ui-funkcja | applyMailSent | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor apply-qa-tree-mail-sent |
+| ui-stan | mailReplies | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor qa-tree-mail-replies |
+| ui-funkcja | answerFromMail | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor answer-qa-tree-from-mail |
 | ui-input | GrowingTextarea | apps/frontend/src/components/shared/wbs/QaTreeView.jsx | @anchor growing-textarea |
 | ui-funkcja | enqueueWbsQa | apps/frontend/src/services/repos/outboxRepo.js | @anchor enqueue-wbs-qa |
 | ui-funkcja | getPendingByType | apps/frontend/src/services/repos/outboxRepo.js | @anchor get-pending-by-type |
@@ -306,6 +308,7 @@ Anchor w kodzie: `// @anchor <nazwa>` (lub `/// @anchor` w schema.prisma).
 | ui-stala | USER_TASK_STATUS | apps/frontend/src/services/sync/syncOutbox.js | @anchor outbox-user-task-status |
 | ui-stan | qaTreeOpen (SchematTab) | apps/frontend/src/components/shared/SchematTab.jsx | @anchor schemat-qa-tree-open |
 | ui-stan | qaTreeOpen (UnifiedWbsPanel) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor wbs-qa-tree-open |
+| ui-stan | qaHighlightReplyIds | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor qa-highlight-reply-ids |
 | ui-funkcja | resolveOfferTokens | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor resolve-offer-tokens |
 
 ### Moduł WBS
@@ -3434,6 +3437,8 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-funkcja | QaMailRepliesService.checkOrder | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-replies-check-order |
 | back-funkcja | QaMailRepliesService.pollMailbox | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-replies-poll-mailbox |
 | back-funkcja | QaMailRepliesService.analyze | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-replies-analyze |
+| back-funkcja | QaMailRepliesService.autoApply | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-replies-auto-apply |
+| back-funkcja | QaMailRepliesService.recomposeBranchFor | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-replies-recompose-branch |
 | back-funkcja | QaMailRepliesService.list | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-replies-list |
 | back-funkcja | QaMailRepliesService.resolve | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-replies-resolve |
 | back-serwis | QaMailRepliesCronService | apps/backend/src/qa-mail/qa-mail-replies-cron.service.ts | @anchor qa-mail-replies-cron-service |
@@ -3446,6 +3451,7 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-funkcja | answerQuestionsFromMail | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor answer-questions-from-mail |
 | ui-karta | ReplyCard | apps/frontend/src/components/shared/wbs/QaMailRepliesModal.jsx | @anchor qa-mail-reply-card |
 | ui-modal | QaMailRepliesModal | apps/frontend/src/components/shared/wbs/QaMailRepliesModal.jsx | @anchor qa-mail-replies-modal |
+| ui-modal | QaMailAutoNotice | apps/frontend/src/components/shared/wbs/QaMailAutoNotice.jsx | @anchor qa-mail-auto-notice |
 | ui-funkcja | collectMailQuestions | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-mail-questions |
 | ui-funkcja | applyQaMailSent | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor apply-qa-mail-sent |
 | ui-stan | mailDomains | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-domains |
