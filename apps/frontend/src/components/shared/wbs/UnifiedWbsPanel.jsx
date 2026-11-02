@@ -6916,7 +6916,6 @@ ${ganttSectionHtml}
                             refreshKey={reqRefreshKey}
                             projectName={projectName}
                             orderName={orderName}
-                            userRoles={userRoles}
                             onExportReady={fn => { materialsExportFn.current = fn; }}
                         />
                     ), null, (

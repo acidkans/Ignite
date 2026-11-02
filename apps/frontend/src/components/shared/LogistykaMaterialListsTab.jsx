@@ -46,7 +46,6 @@ function OrderMaterialsView({ orderId, isManagerOrAdmin, isLogistyk, userRoles }
                 readOnly={!isManagerOrAdmin && !isLogistyk}
                 accepted={accepted}
                 offerLocked={offerLocked}
-                userRoles={userRoles}
             />
             {/* Modal blokady wartości ofertowych — bez niego kliknięcie w zamrożone pole nie
                 miałoby jak pokazać komunikatu (guard żyje w module-store, nie w kontekście). */}
