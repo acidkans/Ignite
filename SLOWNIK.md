@@ -262,6 +262,55 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-hook | useWatekRealizacji | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor use-watek-realizacji |
 | ui-funkcja | wyslij | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-wyslij |
 | ui-funkcja | zamknijBloker | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-zamknij-bloker |
+| schema-model | Constraint | apps/backend/prisma/schema.prisma | @anchor constraint |
+| schema-pole | Constraint.processNodeId | apps/backend/prisma/schema.prisma | @anchor constraint-process-node-id |
+| schema-pole | Constraint.wbsRootId | apps/backend/prisma/schema.prisma | @anchor constraint-wbs-root-id |
+| schema-pole | Constraint.kind | apps/backend/prisma/schema.prisma | @anchor constraint-kind |
+| schema-pole | Constraint.title | apps/backend/prisma/schema.prisma | @anchor constraint-title |
+| schema-pole | Constraint.note | apps/backend/prisma/schema.prisma | @anchor constraint-note |
+| schema-pole | Constraint.ownerId | apps/backend/prisma/schema.prisma | @anchor constraint-owner-id |
+| schema-pole | Constraint.dueAt | apps/backend/prisma/schema.prisma | @anchor constraint-due-at |
+| schema-pole | Constraint.impactDays | apps/backend/prisma/schema.prisma | @anchor constraint-impact-days |
+| schema-pole | Constraint.status | apps/backend/prisma/schema.prisma | @anchor constraint-status |
+| schema-pole | Constraint.sourceType | apps/backend/prisma/schema.prisma | @anchor constraint-source-type |
+| schema-pole | Constraint.sourceId | apps/backend/prisma/schema.prisma | @anchor constraint-source-id |
+| schema-pole | Constraint.createdById | apps/backend/prisma/schema.prisma | @anchor constraint-created-by-id |
+| schema-pole | Constraint.closedAt | apps/backend/prisma/schema.prisma | @anchor constraint-closed-at |
+| schema-relacja | Constraint.owner | apps/backend/prisma/schema.prisma | @anchor constraint-owner |
+| schema-relacja | User.ownedConstraints | apps/backend/prisma/schema.prisma | @anchor user-owned-constraints |
+| schema-relacja | ProcessNode.constraints | apps/backend/prisma/schema.prisma | @anchor process-node-constraints |
+| back-modul | ConstraintsModule | apps/backend/src/constraints/constraints.module.ts | @anchor constraints-module |
+| back-controller | ConstraintsController | apps/backend/src/constraints/constraints.controller.ts | @anchor constraints-controller |
+| back-endpoint | GET /constraints/order/:nodeId | apps/backend/src/constraints/constraints.controller.ts | @anchor constraints-list-endpoint |
+| back-endpoint | POST /constraints/order/:nodeId | apps/backend/src/constraints/constraints.controller.ts | @anchor constraints-create-endpoint |
+| back-endpoint | PATCH /constraints/:id | apps/backend/src/constraints/constraints.controller.ts | @anchor constraints-update-endpoint |
+| back-endpoint | DELETE /constraints/:id | apps/backend/src/constraints/constraints.controller.ts | @anchor constraints-remove-endpoint |
+| back-serwis | ConstraintsService | apps/backend/src/constraints/constraints.service.ts | @anchor constraints-service |
+| back-typ | ConstraintsUser | apps/backend/src/constraints/constraints.service.ts | @anchor constraints-user |
+| back-dto | ConstraintInput | apps/backend/src/constraints/constraints.service.ts | @anchor constraint-input |
+| back-stala | CONSTRAINT_KINDS | apps/backend/src/constraints/constraints.service.ts | @anchor constraint-kinds |
+| back-funkcja | listByOrder | apps/backend/src/constraints/constraints.service.ts | @anchor constraints-list |
+| back-funkcja | create | apps/backend/src/constraints/constraints.service.ts | @anchor constraints-create |
+| back-funkcja | update | apps/backend/src/constraints/constraints.service.ts | @anchor constraints-update |
+| back-funkcja | remove | apps/backend/src/constraints/constraints.service.ts | @anchor constraints-remove |
+| ui-stala | ownerUsers (zwrot hooka) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-owner-users |
+| ui-stala | WIDOKI | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-widoki |
+| ui-funkcja | akcje (zamknij / otworz / zPytania) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-akcje-blokera |
+| ui-funkcja | gotowosc | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-gotowosc |
+| ui-sekcja | GotowoscChipy | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-gotowosc-chipy |
+| ui-formularz | BlokerForm | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-bloker-form |
+| ui-funkcja | decyzje (sortowanie blokerów) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolejnosc-blokerow |
+| ui-sekcja | Lookahead | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-lookahead |
+| ui-stala | RODZAJE_BLOKERA | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor rodzaje-blokera |
+| ui-funkcja | dniOkna | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor dni-okna |
+| ui-funkcja | indeksDnia | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor indeks-dnia |
+| ui-funkcja | gotowoscPozycji | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor gotowosc-pozycji |
+| ui-funkcja | dodajBloker | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-dodaj-bloker |
+| ui-funkcja | zmienBloker | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-zmien-bloker |
+| ui-stala | BUFOR_DOSTAWY_DNI | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor bufor-dostawy-dni |
+| ui-funkcja | wykryjKolizje | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor wykryj-kolizje |
+| ui-stala | kolizje | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolizje |
+| ui-karta | KolizjeDostaw | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolizje-dostaw |
 
 ### Moduł MarkerDetailsPanel
 

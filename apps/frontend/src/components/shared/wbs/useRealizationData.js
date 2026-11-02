@@ -323,6 +323,8 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
         fetchAll, fetchActuals, fetchCards,
         saveComment, saveOwner, saveAxis, addActual, updateActual, deleteActual, setClosed, toggleClosed,
         actualsOf, cardOf, rowOf, ownerOptions,
+        // @anchor realization-owner-users — konta zespołu zamówienia (właściciel blokera = `User`)
+        ownerUsers,
     };
 }
 

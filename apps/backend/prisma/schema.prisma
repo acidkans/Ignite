@@ -74,6 +74,8 @@ model User {
   approvedHolidayDaysOff HolidayDayOff[] @relation("HolidayDayOffApprover")
   /// @anchor user-leaf-actuals
   leafActuals            LeafActual[]    @relation("LeafActualAuthor")
+  /// @anchor user-owned-constraints
+  ownedConstraints       Constraint[]    @relation("ConstraintOwner")
   acceptanceProtocols    AcceptanceProtocolRecord[] @relation("AcceptanceProtocolAuthor")
   /// @anchor user-trainings
   trainings              UserTraining[]
@@ -312,6 +314,8 @@ model ProcessNode {
   quickQuotes               QuickQuote[]
   /// @anchor process-node-leaf-actuals
   leafActuals               LeafActual[]
+  /// @anchor process-node-constraints
+  constraints               Constraint[]
   /// @anchor process-node-acceptance-protocols
   acceptanceProtocols       AcceptanceProtocolRecord[]
 
@@ -1573,6 +1577,52 @@ model LeafActual {
   @@index([nodeId])
   @@index([wbsRootId])
   @@map("leaf_actuals")
+}
+
+/// @anchor constraint
+/// Bloker realizacji na pozycji albo gałęzi WBS: powód, właściciel, termin usunięcia, wpływ w dniach.
+/// Klucz pozycji jak w `LeafActual` — `wbsRootId` (WbsNode.sourceWbsNodeId ?? id), więc bloker
+/// przeżywa nowe wersje i NIE wchodzi do `cloneVersionData`. Pytanie z Q&A zamienione w bloker
+/// zostawia ślad w `sourceType = QA` + `sourceId = qaId` (para w `WbsNode.qa` zostaje źródłem prawdy).
+model Constraint {
+  id            String    @id @default(uuid())
+  /// @anchor constraint-process-node-id
+  processNodeId String // zamówienie
+  /// @anchor constraint-wbs-root-id
+  wbsRootId     String // pozycja albo gałąź: WbsNode.sourceWbsNodeId ?? WbsNode.id
+  /// @anchor constraint-kind
+  kind          String    @default("OTHER") // MATERIAL | PERMIT | ACCESS | CLIENT | CREW | TECH | OTHER
+  /// @anchor constraint-title
+  title         String
+  /// @anchor constraint-note
+  note          String?
+  /// @anchor constraint-owner-id
+  ownerId       String? // kto usuwa przeszkodę
+  /// @anchor constraint-due-at
+  dueAt         DateTime? // termin usunięcia
+  /// @anchor constraint-impact-days
+  impactDays    Int? // o ile dni przesuwa roboty, jeśli nie zniknie w terminie
+  /// @anchor constraint-status
+  status        String    @default("OPEN") // OPEN | CLOSED
+  /// @anchor constraint-source-type
+  sourceType    String? // QA | COMMENT | COLLISION — skąd się wziął
+  /// @anchor constraint-source-id
+  sourceId      String? // id pary Q&A, komentarza albo wpisu dostawy (LeafActual)
+  /// @anchor constraint-created-by-id
+  createdById   String? // bez relacji — zostaje po usunięciu konta
+  /// @anchor constraint-closed-at
+  closedAt      DateTime?
+  closedById    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  processNode ProcessNode @relation(fields: [processNodeId], references: [id], onDelete: Cascade)
+  /// @anchor constraint-owner
+  owner       User?       @relation("ConstraintOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([processNodeId])
+  @@index([wbsRootId])
+  @@map("wbs_constraints")
 }
 
 /// @anchor acceptance-protocol-record

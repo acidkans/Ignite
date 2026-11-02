@@ -48,6 +48,7 @@ import { AcceptanceProtocolsModule } from './acceptance-protocols/acceptance-pro
 import { LeavesModule } from './leaves/leaves.module';
 import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
 import { LeafActualsModule } from './leaf-actuals/leaf-actuals.module';
+import { ConstraintsModule } from './constraints/constraints.module';
 import { TrainingsModule } from './trainings/trainings.module';
 
 @Module({
@@ -103,6 +104,7 @@ import { TrainingsModule } from './trainings/trainings.module';
     LeavesModule,
     GoogleCalendarModule,
     LeafActualsModule,
+    ConstraintsModule,
     TrainingsModule,
   ],
   controllers: [AppController],
