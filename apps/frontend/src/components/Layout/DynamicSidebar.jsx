@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { API_URL } from '../../config';
-import SidebarBranchTree from './SidebarBranchTree';
+import SidebarBranchTree, { SidebarBranchToggles } from './SidebarBranchTree';
 
 // Rekurencyjne filtrowanie drzewa — zwraca węzeł jeśli on lub potomek pasuje do frazy
 function filterNode(node, query) {
@@ -420,6 +420,9 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                                 <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0 animate-pulse" title="Nieprzeczytane komentarze" />
                             )}
                         </span>
+                    )}
+                    {isActive && !editing && branchNav && String(branchNav.orderId) === String(node.id) && (
+                        <SidebarBranchToggles nav={branchNav} />
                     )}
                     <span
                         role="button"

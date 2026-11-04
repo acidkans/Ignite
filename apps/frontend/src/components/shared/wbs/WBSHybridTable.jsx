@@ -1708,19 +1708,25 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         } catch { /* domyślne */ }
         return defaults;
     });
-    // @anchor wbs-hidden-cols — kolumny ukryte przez użytkownika (per przeglądarka). Ukrycie przez
-    // `visibility: collapse` na <col> — komórki zostają w DOM, więc colSpan szuflad i kolejność
-    // komórek w wierszach się nie zmieniają.
-    const [hiddenCols, setHiddenCols] = useState(() => {
+    // @anchor wbs-hidden-cols — kolumny ukryte przez użytkownika, zapamiętane PER ZAMÓWIENIE
+    // (localStorage, klucz z `processNodeId`). Zamówienie bez własnego wpisu startuje z dawnym
+    // wspólnym ustawieniem przeglądarki. Ukrycie przez `visibility: collapse` na <col> — komórki
+    // zostają w DOM, więc colSpan szuflad i kolejność komórek w wierszach się nie zmieniają.
+    const hiddenColsKey = processNodeId ? `${WBS_HIDDEN_COLS_KEY}:${processNodeId}` : WBS_HIDDEN_COLS_KEY;
+    const readHiddenCols = (key) => {
         try {
-            const saved = JSON.parse(localStorage.getItem(WBS_HIDDEN_COLS_KEY) || '[]');
+            const raw = localStorage.getItem(key) ?? localStorage.getItem(WBS_HIDDEN_COLS_KEY) ?? '[]';
+            const saved = JSON.parse(raw);
             return new Set(Array.isArray(saved) ? saved : []);
         } catch { return new Set(); }
-    });
+    };
+    const [hiddenCols, setHiddenCols] = useState(() => readHiddenCols(hiddenColsKey));
+    // Przełączenie zamówienia bez przemontowania tabeli — wczytaj jego układ.
+    useEffect(() => { setHiddenCols(readHiddenCols(hiddenColsKey)); }, [hiddenColsKey]);
     const toggleHiddenCol = (key) => setHiddenCols(prev => {
         const next = new Set(prev);
         if (next.has(key)) next.delete(key); else next.add(key);
-        try { localStorage.setItem(WBS_HIDDEN_COLS_KEY, JSON.stringify([...next])); } catch { /* bez zapamiętania */ }
+        try { localStorage.setItem(hiddenColsKey, JSON.stringify([...next])); } catch { /* bez zapamiętania */ }
         return next;
     });
     const [colsMenuOpen, setColsMenuOpen] = useState(false);

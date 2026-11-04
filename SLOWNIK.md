@@ -244,6 +244,17 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stan | shortOverrides | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-short-overrides |
 | ui-funkcja | zapiszShort | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zapisz-short |
 | ui-stala | navGalezie | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-branch-nav |
+| ui-stala | navPozycje | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-nav-pozycje |
+| ui-stan | podglad | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-podglad |
+| ui-funkcja | wierszPozycji | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree-pozycja |
+| ui-input | SidebarBranchToggles | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-toggles |
+| ui-stan | tylkoSygnaly | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tylko-sygnaly |
+| ui-stala | zakupyApi | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zakupy-api |
+| ui-sekcja | szuflada zakupów pozycji | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szuflada-zakupow |
+| ui-hook | useSzerokosciKolumn | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szerokosci-kolumn |
+| ui-sekcja | TrzyKolumny | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-trzy-kolumny |
+| ui-funkcja | Kokpit — przychód i zysk | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit-wynik |
+| ui-input | PoleCzatu | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-pole-czatu |
 | ui-sekcja | DrogaPasek | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-droga-pasek |
 | ui-sekcja | SygnalyCell | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-sygnaly-cell |
 | ui-sekcja | Wpis | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis |
