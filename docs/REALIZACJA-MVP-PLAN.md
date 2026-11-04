@@ -59,7 +59,7 @@ po prawej Kokpit gałęzi albo Macierz pozycji z rozwijanym wątkiem. Bez nowych
 - `Constraint` (rejestr blokerów) z API `/constraints`; pytanie Q&A można zamienić w bloker (`sourceType = QA`).
 - NodeQuestion świadomie odłożone: `WbsNode.qa` zostaje źródłem prawdy (pary mają stałe `id`).
 - Lookahead 14 dni: daty robót tylko z Gantta, dostawy z FORECAST, gotowość MAT / PYT / BLK.
-- Kontrola kolizji dostaw: dostawa materiału < 2 dni przed robotami w gałęzi → karta w Kokpicie, „→ bloker”, czerwony romb.
+- Kontrola kolizji dostaw: dostawa materiału < 2 dni przed robotami w gałęzi → karta w Kokpicie, „Ustaw bloker”, czerwony romb.
 - Wygląd zakładki Realizacja jak w mockupie (`realizacja.css`).
 
 ## Etap 3 — w toku

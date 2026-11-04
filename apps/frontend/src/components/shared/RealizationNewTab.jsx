@@ -1333,7 +1333,7 @@ function CommentCell({ node, readOnly, onSave }) {
 // Wpisy są tu EDYTOWALNE w miejscu, a nowy dodaje się przyciskiem w nagłówku szuflady —
 // dopisywanie jest świadomą czynnością, więc formularz otwiera się na żądanie, a nie stoi
 // pustym wierszem pod każdą pozycją.
-function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms = [], onAdd, onUpdate, onDelete }) {
+export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms = [], onAdd, onUpdate, onDelete }) {
     const withCard = TYPE_META[node.type]?.hasCard;
     const [adding, setAdding] = useState(false);
     // @anchor realization-new-drawer-search — wyszukiwarka nagłówka zawęża WPISY szuflady, gdy
@@ -1370,7 +1370,7 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms = [], 
     const head = (
         <div className={DRAWER.cardHead}>
             <span className={`${DRAWER.cardTitle} ${DRAWER.accent.real.title} text-[length:var(--rn-lg)]`}>
-                {withCard ? 'Zakupy zrealizowane' : 'Wykonanie zrealizowane'}
+                Zrealizowane zakupy
             </span>
             {nadmiar.length > 0 && (
                 <span className="rounded border border-red-400/40 bg-red-500/10 px-2 py-0.5 text-[length:var(--rn-md)] text-red-300"

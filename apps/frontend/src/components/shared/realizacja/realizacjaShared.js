@@ -68,7 +68,7 @@ export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, con
     }
     const teraz = Date.now();
     const wpisy = [];
-    // Pary Q&A, z których zrobiono otwarty bloker — w wątku zamiast „→ bloker” pokazują „bloker”.
+    // Pary Q&A, z których zrobiono otwarty bloker — w wątku zamiast „Ustaw bloker” pokazują „bloker”.
     const qaZBlokerem = new Set((constraints || [])
         .filter(k => k.status === 'OPEN' && k.sourceType === 'QA' && k.sourceId).map(k => k.sourceId));
 
