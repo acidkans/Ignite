@@ -2833,7 +2833,13 @@ export default function WbsMaterialsPanel({
             const selectedProposal = (card?.proposals || []).find(p => p.isSelected);
             const chosen = selectedProposal || card || null;
             const product = [chosen?.manufacturer, chosen?.model].filter(Boolean).join(' / ');
-            const price = chosen?.priceNetto != null ? Number(chosen.priceNetto) : null;
+            // Cena jak w arkuszu szczegółów: propozycja/karta, a bez karty — koszt jedn. z WBS.
+            // Pozycja wyceniona tylko w WBS (bez wymagania materiałowego) miała tu pustą cenę.
+            // Zero z WBS = „niewycenione", nie wchodzi do średniej.
+            const wbsCost = Number(node.unitCost) || 0;
+            const price = chosen?.priceNetto != null ? Number(chosen.priceNetto)
+                : card?.priceNetto != null ? Number(card.priceNetto)
+                : (wbsCost > 0 ? wbsCost : null);
 
             if (!agg.has(key)) {
                 agg.set(key, {
@@ -2881,9 +2887,15 @@ export default function WbsMaterialsPanel({
 
         const aggRows = [...agg.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl', { numeric: true, sensitivity: 'base' }));
 
+        // @anchor materials-agg-value-formula — „Szac. wartość netto" = żywa formuła ilość × średni koszt,
+        // żeby ręczna korekta ilości/ceny w Excelu przeliczała wartość i sumę „Razem".
+        const aggL = (key) => aggregateSheet.getColumn(key).letter;
         aggRows.forEach((row, i) => {
             const avgPrice = row.priceCount > 0 ? row.priceSum / row.priceCount : null;
-            const value = avgPrice != null ? avgPrice * row.qty : null;
+            const rowNo = i + 2;
+            const value = avgPrice != null
+                ? { formula: `${aggL('qty')}${rowNo}*${aggL('price')}${rowNo}`, result: avgPrice * row.qty }
+                : null;
             const added = aggregateSheet.addRow({
                 idx: i + 1,
                 paths: row.paths.join('\n'),
@@ -2904,9 +2916,9 @@ export default function WbsMaterialsPanel({
             const totalRowNum = aggRows.length + 2;
             const totalsRow = aggregateSheet.addRow({
                 name: 'Razem',
-                qty: { formula: `=SUM(D2:D${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + r.qty, 0) },
-                positions: { formula: `=SUM(G2:G${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + r.positions, 0) },
-                value: { formula: `=SUM(J2:J${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + (r.priceCount > 0 ? (r.priceSum / r.priceCount) * r.qty : 0), 0) },
+                qty: { formula: `SUM(${aggL('qty')}2:${aggL('qty')}${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + r.qty, 0) },
+                positions: { formula: `SUM(${aggL('positions')}2:${aggL('positions')}${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + r.positions, 0) },
+                value: { formula: `SUM(${aggL('value')}2:${aggL('value')}${totalRowNum - 1})`, result: aggRows.reduce((s, r) => s + (r.priceCount > 0 ? (r.priceSum / r.priceCount) * r.qty : 0), 0) },
             });
             totalsRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             totalsRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
