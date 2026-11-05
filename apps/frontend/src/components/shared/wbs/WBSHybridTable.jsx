@@ -17,6 +17,18 @@ import { useDevice } from '../../../hooks/useDevice';
 // Pytań NIE normalizujemy (zostają tak, jak je wpisano). Wołane na blur / przy zapisie.
 const normalizeLowerText = (s) => String(s || '').trim().toLocaleLowerCase('pl-PL');
 
+// @anchor remember-focus-value — wartość pola z chwili wejścia (data-focus-val na elemencie).
+// @anchor changed-since-focus — zapis przy wyjściu z pola TYLKO gdy treść się zmieniła. Bez tego
+// samo przejście przez komórkę (klik, Tab) w karcie ze starym stanem drzewa odsyłało starą treść
+// i cofało poprawki zrobione gdzie indziej (strategia „wracała" mimo dwukrotnej poprawy).
+const rememberFocusValue = (e) => { if (e?.target) e.target.dataset.focusVal = e.target.value ?? ''; };
+const changedSinceFocus = (e) => {
+    const before = e?.target?.dataset?.focusVal;
+    if (before === undefined) return true; // brak zapamiętanej wartości — zapisuj jak dotąd
+    delete e.target.dataset.focusVal;
+    return before !== (e.target.value ?? '');
+};
+
 // ── Q&A cell — zagnieżdżona tabela Pytanie / Odpowiedź per WBS node ───────────
 function QaPairRow({ p, idx, onUpdate, onRemove, onPersist, linked = false }) {
     const qRef = useRef(null);
@@ -48,8 +60,8 @@ function QaPairRow({ p, idx, onUpdate, onRemove, onPersist, linked = false }) {
                     rows={1}
                     value={p.question || ''}
                     onChange={e => { onUpdate(idx, 'question', e.target.value); syncHeights(); }}
-                    onBlur={() => { onUpdate(idx, 'question', String(p.question || '').trim()); onPersist?.(); }}
-                    onFocus={syncHeights}
+                    onBlur={e => { if (!changedSinceFocus(e)) return; onUpdate(idx, 'question', String(p.question || '').trim()); onPersist?.(); }}
+                    onFocus={e => { rememberFocusValue(e); syncHeights(); }}
                     placeholder="Pytanie…"
                     title={linked ? 'Pytanie wstawione w strategię — odpowiedź uzupełni strategię' : undefined}
                     className={`bg-black/20 border ${linked ? 'border-amber-400/50' : 'border-white/10'} rounded px-1.5 py-0.5 text-[15px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 text-gray-200`}
@@ -67,8 +79,8 @@ function QaPairRow({ p, idx, onUpdate, onRemove, onPersist, linked = false }) {
                     rows={1}
                     value={p.answer || ''}
                     onChange={e => { onUpdate(idx, 'answer', e.target.value); syncHeights(); }}
-                    onBlur={() => { onUpdate(idx, 'answer', normalizeLowerText(p.answer)); onPersist?.(); }}
-                    onFocus={syncHeights}
+                    onBlur={e => { if (!changedSinceFocus(e)) return; onUpdate(idx, 'answer', normalizeLowerText(p.answer)); onPersist?.(); }}
+                    onFocus={e => { rememberFocusValue(e); syncHeights(); }}
                     placeholder="Odpowiedź…"
                     className="bg-black/20 border border-white/10 rounded px-1.5 py-0.5 text-[15px] w-full focus:outline-none focus:border-blue-500/50 placeholder-gray-700 text-gray-200"
                     style={{ overflow: 'hidden', minHeight: '1.4em', resize: 'none' }}
@@ -267,7 +279,8 @@ function LeafStrategyCell({ node, qaIndex, fieldClass, onChange, onSave, onAddQu
                     autoFocus={editing}
                     value={value}
                     onChange={onChange}
-                    onBlur={e => { onSave(e.target.value); setEditing(false); }}
+                    onFocus={rememberFocusValue}
+                    onBlur={e => { if (changedSinceFocus(e)) onSave(e.target.value); setEditing(false); }}
                     placeholder="Strategia elementu…"
                     className={`bg-transparent border-none resize-none focus:outline-none text-base w-full placeholder-gray-700 leading-snug ${fieldClass}`}
                     data-nav-row={node.id}
@@ -3296,7 +3309,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                             ))}
                         </select>
                     ) : (
-                        <input type="text" value={node.owner || ''} onChange={e => handleField(node.id, 'owner', e.target.value)} onBlur={e => onNodeFieldSave?.(node.id, 'owner', e.target.value)}
+                        <input type="text" value={node.owner || ''} onChange={e => handleField(node.id, 'owner', e.target.value)} onFocus={rememberFocusValue} onBlur={e => { if (changedSinceFocus(e)) onNodeFieldSave?.(node.id, 'owner', e.target.value); }}
                             onKeyDown={e => handleGridKeyDown(e, node.id, 'wlasciciel')}
                             placeholder="—" className={`bg-transparent border-none focus:outline-none text-base w-full placeholder-gray-700 ${d.fieldClass}`}
                             data-nav-row={node.id}
@@ -3326,7 +3339,8 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                     <AutoResizeTextarea
                         value={node.comment || ''}
                         onChange={e => handleField(node.id, 'comment', e.target.value)}
-                        onBlur={e => { onNodeFieldSave?.(node.id, 'comment', e.target.value); window.dispatchEvent(new CustomEvent('wbs-comment-changed', { detail: { wbsNodeIds: [node.id], comment: e.target.value } })); }}
+                        onFocus={rememberFocusValue}
+                        onBlur={e => { if (!changedSinceFocus(e)) return; onNodeFieldSave?.(node.id, 'comment', e.target.value); window.dispatchEvent(new CustomEvent('wbs-comment-changed', { detail: { wbsNodeIds: [node.id], comment: e.target.value } })); }}
                         placeholder="—"
                         className={`bg-transparent border-none resize-none focus:outline-none text-base w-full placeholder-gray-700 leading-snug ${d.fieldClass}`}
                         data-nav-row={node.id}
