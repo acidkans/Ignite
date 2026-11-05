@@ -12,7 +12,7 @@ export function SidebarBranchToggles({ nav }) {
     const stop = (e) => e.stopPropagation();
     return (
         <span className="flex shrink-0 items-center gap-2 text-[10px] font-normal text-gray-400" onClick={stop} onDoubleClick={stop}>
-            <label title="Pokaż tylko gałęzie i pozycje z blokerami, kolizjami dostaw, pytaniami albo zadaniami po terminie" className="flex cursor-pointer items-center gap-1">
+            <label title="Pokaż tylko gałęzie i pozycje z blokerami, kolizjami dostaw, zagrożonymi milestone'ami, pytaniami albo zadaniami po terminie" className="flex cursor-pointer items-center gap-1">
                 <input type="checkbox" checked={!!nav.sygnaly} onChange={e => nav.onSygnaly(e.target.checked)} className="accent-fuchsia-500" /> sygnały
             </label>
             <label title="Pełne nazwy zamiast krótkich" className="flex cursor-pointer items-center gap-1">
@@ -46,7 +46,7 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
         return out;
     }, [byId, focus]);
 
-    const maSyg = (g) => g.syg.blok > 0 || g.syg.pyt > 0 || g.syg.poTerminie > 0 || g.syg.kol > 0;
+    const maSyg = (g) => g.syg.blok > 0 || g.syg.pyt > 0 || g.syg.poTerminie > 0 || g.syg.kol > 0 || g.syg.ms > 0 || g.syg.kms > 0;
     const pad = (d) => ({ paddingLeft: `${(level + d) * 10 + 8}px` });
     const wybrany = nav.selectedId ?? nav.focusId;
 
@@ -60,6 +60,7 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
             <span className={`min-w-0 flex-1 ${nav.pelne ? 'whitespace-normal leading-tight' : 'truncate'}`}>{nazwaWyswietlana(p, nav.pelne)}</span>
             {p.syg.blok > 0 && <span title="Otwarte blokery" className="shrink-0 rounded bg-red-500/20 px-1 font-mono text-[10px] text-red-300">{p.syg.blok}</span>}
             {p.syg.kol > 0 && <span title="Kolizja dostawy" className="shrink-0 rounded bg-orange-500/20 px-1 font-mono text-[10px] text-orange-300">{p.syg.kol}K</span>}
+            {p.syg.kms > 0 && <span title="Kolizja z milestone'em: start przed końcem milestone'a" className="shrink-0 rounded bg-violet-500/20 px-1 font-mono text-[10px] text-violet-300">◆K</span>}
             {p.syg.pyt > 0 && <span title="Pytania bez odpowiedzi" className="shrink-0 rounded bg-amber-500/20 px-1 font-mono text-[10px] text-amber-300">{p.syg.pyt}?</span>}
             {p.syg.poTerminie > 0 && <span title="Zadania po terminie" className="size-1.5 shrink-0 rounded-full bg-red-400" />}
         </div>
@@ -108,6 +109,8 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
                     )}
                     {g.syg.blok > 0 && <span title="Otwarte blokery (rejestr blokerów i pilne wpisy czatu)" className="shrink-0 rounded bg-red-500/20 px-1 font-mono text-[10px] text-red-300">{g.syg.blok}</span>}
                     {g.syg.kol > 0 && <span title="Kolizje dostaw: dostawa za blisko startu robót" className="shrink-0 rounded bg-orange-500/20 px-1 font-mono text-[10px] text-orange-300">{g.syg.kol}K</span>}
+                    {/* @anchor sidebar-branch-tree-ms — zagrożone milestone'y gałęzi (poślizg, prognoza z blokerów, kolizja) */}
+                    {(g.syg.ms > 0 || g.syg.kms > 0) && <span title={`Zagrożone milestone'y: ${g.syg.ms}${g.syg.kms ? ` · pozycje w kolizji z milestone'em: ${g.syg.kms}` : ''}`} className="shrink-0 rounded bg-violet-500/20 px-1 font-mono text-[10px] text-violet-300">◆{g.syg.ms || ''}</span>}
                     {g.syg.pyt > 0 && <span title="Pytania bez odpowiedzi" className="shrink-0 rounded bg-amber-500/20 px-1 font-mono text-[10px] text-amber-300">{g.syg.pyt}?</span>}
                     {g.syg.poTerminie > 0 && <span title="Zadania po terminie" className="size-1.5 shrink-0 rounded-full bg-red-400" />}
                 </div>

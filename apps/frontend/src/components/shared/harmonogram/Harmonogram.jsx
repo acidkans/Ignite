@@ -209,7 +209,8 @@ export default function Harmonogram({
             if (stoja) komunikaty.push(<span className="hg-info-bad">{stoja} rozpoczęt{stoja === 1 ? 'a pozycja zostaje' : 'ych zostaje'} na miejscu — kolizja z milestone'em (na czerwono).</span>);
         }
         try {
-            if (zalezni.length && savePlanDatesBatch) await savePlanDatesBatch([{ id: l.id, od, ost }, ...zalezni]);
+            // Milestone zawsze zbiorczo, nawet bez zależnych — wpis AuditLog odtwarza potem baseline.
+            if ((zalezni.length || jestMs(l)) && savePlanDatesBatch) await savePlanDatesBatch([{ id: l.id, od, ost }, ...zalezni]);
             else {
                 await savePlanDates(l.id, od, ost);
                 for (const z of zalezni) await savePlanDates(z.id, z.od, z.ost);
@@ -315,7 +316,20 @@ export default function Harmonogram({
                         onPointerDown={edyt ? e => zacznij(e, l, galazId, 'move') : undefined}
                         onClick={e => { e.stopPropagation(); if (!poDragu.current && onOtworz) onOtworz(l.id); }} />
                 )}
-                {wGrupie && b < ileDni && <span className="ms-tx" style={{ left: b * dzienPx + dzienPx / 2 + 10 }}>{nazwa(l)}</span>}
+                {/* @anchor harmonogram-cien-prognozy — prognoza z blokerów (`_prognoza`, `_prognozaDni`): przerywany romb +N dni */}
+                {l._prognoza && (() => {
+                    const p = idx(l._prognoza);
+                    if (p === null || p <= b || b >= ileDni || p < 0) return null;
+                    const pk = Math.min(p, ileDni - 1);
+                    return (
+                        <>
+                            <span className={`ms-cien-l${wGrupie ? ' g' : ''}`} style={{ left: b * dzienPx + dzienPx / 2, width: (pk - b) * dzienPx }} />
+                            {p < ileDni && <span className={`ms-cien${wGrupie ? ' g' : ''}`} style={{ left: p * dzienPx + dzienPx / 2 - 7 }}
+                                title={`Prognoza ${dzienMies(l._prognoza)} (+${l._prognozaDni} dni rob. z blokerów)`} />}
+                        </>
+                    );
+                })()}
+                {wGrupie && b < ileDni && <span className="ms-tx" style={{ left: (l._prognoza && idx(l._prognoza) > b && idx(l._prognoza) < ileDni ? idx(l._prognoza) : b) * dzienPx + dzienPx / 2 + 10 }}>{nazwa(l)}{l._prognozaDni ? ` · prognoza +${l._prognozaDni} d.` : ''}</span>}
             </React.Fragment>
         );
     };
@@ -618,6 +632,7 @@ export default function Harmonogram({
                 <span><i className="ms" />milestone</span>
                 <span><i className="ms-okno" />okno milestone'a</span>
                 {msZaleznosc && <span><i className="bar b-work konflikt" />kolizja z milestone'em</span>}
+                {grupy.some(g => (g.milestony || []).some(m => m._prognoza)) && <span><i className="ms-cien" />prognoza milestone'a (blokery)</span>}
                 <span><i className="sw-wolny" />dzień wolny</span>
                 {maDostawy && <><span><i className="diam" />dostawa</span><span><i className="diam late" />dostawa za blisko robót</span></>}
                 {(projectStart || projectEnd) && <><span><i className="sw-mark ps" />start projektu</span><span><i className="sw-mark pe" />koniec</span></>}

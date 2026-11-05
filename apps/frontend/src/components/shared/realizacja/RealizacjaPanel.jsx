@@ -25,7 +25,9 @@ import {
     dniOkna, indeksDnia, gotowoscPozycji, wykryjKolizje, BUFOR_DOSTAWY_DNI,
 } from './realizacjaShared';
 import Harmonogram from '../harmonogram/Harmonogram';
-import { zaleznyOdMilestone } from '../harmonogram/harmonogramCzas';
+import {
+    zaleznyOdMilestone, pierwszyDozwolonyDzien, przesunORobocze, roznicaDniRoboczych, DAY_MS,
+} from '../harmonogram/harmonogramCzas';
 import './realizacja.css';
 
 const FOCUS_KEY = (nodeId) => `realizacja-focus-${nodeId}`;
@@ -128,6 +130,20 @@ export default function RealizacjaPanel({
         type: n.type, name: nazwaWyswietlana(n, true), planOd: n.planOd, planDo: n.planDo,
         nieruchomy: NIERUCHOME_EXEC.includes(n.execStatus),
     }])), [nodes]);
+    // @anchor realizacja-ms-baseline — daty baseline milestone'ów (`GET /wbs-nodes/milestones/baseline/:nodeId`);
+    // puste, gdy zamówienie nie ma zaakceptowanej wersji.
+    const [msBaseline, setMsBaseline] = useState({});
+    useEffect(() => {
+        let anulowane = false;
+        (async () => {
+            try {
+                const res = await fetch(`${API_URL}/wbs-nodes/milestones/baseline/${nodeId}`, { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
+                const d = res.ok ? await res.json() : null;
+                if (!anulowane) setMsBaseline(d?.items || {});
+            } catch { if (!anulowane) setMsBaseline({}); }
+        })();
+        return () => { anulowane = true; };
+    }, [nodeId]);
     // Milestone'y poddrzewa gałęzi — po `branchId`, jak pozycje.
     const milestonyPoddrzewa = useCallback((id, tylkoWprost = false) => {
         if (tylkoWprost) return idx.milestones.filter(m => m.branchId === id);
@@ -162,7 +178,43 @@ export default function RealizacjaPanel({
     // @anchor realizacja-kolizje — kolizje dostaw całego zamówienia (zoom tylko filtruje).
     const kolizje = useMemo(() => wykryjKolizje({ liscie: idx.leavesOfSubtree(SYNTHETIC_ROOT), actualsOf, constraints }),
         [idx, actualsOf, constraints]);
-    const sygnaly = useMemo(() => sygnalyWezlow(wpisy, kolizje), [wpisy, kolizje]);
+    // @anchor realizacja-ms-analiza — dla każdego milestone'a: prognoza z największego `impactDays` otwartych
+    // blokerów NA nim (dni robocze od planu), baseline i poślizg prognozy względem baseline; do tego kolizje:
+    // pozycje startujące przed pierwszym dozwolonym dniem po swoim milestonie (z blokerem MILESTONE albo bez).
+    const msAnaliza = useMemo(() => {
+        const dzien = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+        const poKorzeniu = {};
+        for (const b of Object.values(msBaseline)) if (b?.root) poKorzeniu[b.root] = b;
+        const info = {};
+        for (const m of idx.milestones) {
+            if (!m.planDo) continue;
+            const blokery = wpisy.filter(w => w.nodeId === m.id && w.rodzaj === 'block' && w.otwarte);
+            const N = Math.max(0, ...blokery.map(w => Number(w.wplywDni) || 0));
+            const prognoza = N > 0 ? przesunORobocze(m.planDo, N) : null;
+            const b = msBaseline[m.id] || poKorzeniu[m.sourceWbsNodeId || m.id];
+            const baseOst = b?.ganttEnd ? dzien(new Date(b.ganttEnd).getTime() - DAY_MS) : null;
+            info[m.id] = { N, prognoza, baseOst, posliz: baseOst ? roznicaDniRoboczych(baseOst, prognoza || m.planDo) : null, kolizje: 0 };
+        }
+        const widoczne = (id) => !!(idx.nodeById[id] || msById[id]);
+        const kolizjeMs = [];
+        for (const [id, msId] of Object.entries(msZaleznosc)) {
+            const w = msWezly[id], ms = msWezly[msId];
+            if (!w?.planOd || !ms?.planDo || !widoczne(id)) continue;
+            const minOd = pierwszyDozwolonyDzien(ms.planDo);
+            if (dzien(w.planOd) >= minOd) continue;
+            const klucz = `${msId}:${id}`;
+            const bloker = (constraints || []).find(c => c.status === 'OPEN' && c.sourceType === 'MILESTONE' && c.sourceId === klucz);
+            kolizjeMs.push({
+                id, msId, klucz, node: idx.nodeById[id] || msById[id], ms: msById[msId] || { name: ms.name },
+                start: dzien(w.planOd), minOd, dni: Math.max(1, roznicaDniRoboczych(w.planOd, minOd)),
+                rozpoczeta: !!w.nieruchomy, blokerId: bloker?.id || null,
+            });
+            if (info[msId]) info[msId].kolizje++;
+        }
+        const zagrozone = Object.entries(info).filter(([, i]) => i.N > 0 || (i.posliz || 0) > 0 || i.kolizje > 0).map(([id]) => id);
+        return { info, kolizjeMs, zagrozone };
+    }, [idx, msById, msZaleznosc, msWezly, msBaseline, wpisy, constraints]);
+    const sygnaly = useMemo(() => sygnalyWezlow(wpisy, kolizje, msAnaliza.kolizjeMs, msAnaliza.zagrozone), [wpisy, kolizje, msAnaliza]);
 
     // Węzły poddrzewa gałęzi (gałęzie + liście) — do sumowania sygnałów i filtrowania wątku.
     const idsPoddrzewa = useCallback((id) => {
@@ -206,6 +258,13 @@ export default function RealizacjaPanel({
                 wbsNodeId: k.materialId, kind: 'MATERIAL', sourceType: 'COLLISION', sourceId: k.id,
                 title: `Dostawa ${dzienMies(k.dostawa)} za późno na roboty „${nazwaWyswietlana(k.robota)}” od ${dzienMies(k.startRobot)}`,
                 dueAt: k.startRobot.toISOString(), impactDays: Math.max(1, BUFOR_DOSTAWY_DNI - k.zapasDni),
+            }), 'Nie udało się utworzyć blokera'),
+            // @anchor realizacja-bloker-kolizji-ms — kolizja z milestone'em → bloker techniczny na pozycji,
+            // termin = pierwszy dozwolony dzień, wpływ = ile dni roboczych pozycja wchodzi przed milestone.
+            zKolizjiMs: bezpiecznie((k) => dodajBloker({
+                wbsNodeId: k.id, kind: 'TECH', sourceType: 'MILESTONE', sourceId: k.klucz,
+                title: `„${nazwaWyswietlana(k.node)}” od ${dzienMies(k.start)} — przed końcem milestone'a „${nazwaWyswietlana(k.ms)}” (najwcześniej ${dzienMies(k.minOd)})`,
+                dueAt: k.minOd.toISOString(), impactDays: k.dni,
             }), 'Nie udało się utworzyć blokera'),
         };
     }, [zmienBloker, zamknijBloker, dodajBloker]);
@@ -265,21 +324,31 @@ export default function RealizacjaPanel({
     }, [idx, focusId, fraza]);
 
     // Grupy = bezpośrednie podgałęzie zoomu (+ pozycje wiszące wprost pod nim).
-    // `milestony` = milestone'y gałęzi (wprost: te, które stoją bezpośrednio w gałęzi zoomu).
+    // `milestony` = milestone'y gałęzi (wprost: te, które stoją bezpośrednio w gałęzi zoomu),
+    // z prognozą z blokerów (cień na Harmonogramie) i oznaczeniem zagrożenia.
     const grupy = useMemo(() => {
+        const zagrozone = new Set(msAnaliza.zagrozone);
+        const wzbogac = (lista) => lista.map(m => {
+            const i = msAnaliza.info[m.id];
+            if (!i) return m;
+            return {
+                ...m, _prognoza: i.prognoza, _prognozaDni: i.N, _msKonflikt: zagrozone.has(m.id),
+                _msOpis: [i.baseOst ? `baseline ${dzienMies(i.baseOst)}` : null, i.posliz > 0 ? `poślizg +${i.posliz} d.` : null, i.kolizje ? `kolizje: ${i.kolizje}` : null].filter(Boolean).join(' · '),
+            };
+        });
         const dzieci = idx.childrenOf[focusId] || [];
         const out = [];
         const wprost = liscie.filter(l => l.branchId === focusId);
-        const msWprost = milestonyPoddrzewa(focusId, true);
+        const msWprost = wzbogac(milestonyPoddrzewa(focusId, true));
         if (wprost.length || msWprost.length) out.push({ galaz: null, liscie: wprost, milestony: msWprost });
         for (const d of dzieci) {
             const ids = new Set(idx.subtreeIds(d.id));
             const ls = liscie.filter(l => ids.has(l.branchId));
-            const ms = milestonyPoddrzewa(d.id);
+            const ms = wzbogac(milestonyPoddrzewa(d.id));
             if (ls.length || ms.length) out.push({ galaz: d, liscie: ls, milestony: ms });
         }
         return out;
-    }, [idx, focusId, liscie, milestonyPoddrzewa]);
+    }, [idx, focusId, liscie, milestonyPoddrzewa, msAnaliza]);
 
     // @anchor realizacja-gotowosc — gotowość każdej pozycji: materiał (sama pozycja z osią zakupu
     // albo materiał z tej samej gałęzi), otwarte pytania i blokery pozycji oraz jej gałęzi.
@@ -417,6 +486,8 @@ export default function RealizacjaPanel({
                         nodeById={nazwyWezlow} pelne={pelne} filtr={filtr} setFiltr={setFiltr}
                         onOtworz={otworzPozycje} akcje={akcje} gotowosc={gotowosc}
                         kolizje={kolizje.filter(k => idsPoddrzewa(focusId).has(k.materialId))}
+                        milestony={milestonyPoddrzewa(focusId).map(m => ({ m, ...(msAnaliza.info[m.id] || {}) }))}
+                        kolizjeMs={msAnaliza.kolizjeMs.filter(k => idsPoddrzewa(focusId).has(k.id) || idsPoddrzewa(focusId).has(k.msId))}
                     />
                 )}
                 {!wPodgladzie && widok === 'macierz' && (
@@ -985,7 +1056,7 @@ function OsWybor({ node, axis, readOnly, saveAxis }) {
 // ─── Kokpit ──────────────────────────────────────────────────────────────────
 
 // @anchor realizacja-kokpit — KPI gałęzi, blokery i decyzje, najbliższe 14 dni z gotowością, wątek gałęzi.
-function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMoney, canEdit, nodeById, pelne, filtr, setFiltr, onOtworz, akcje, gotowosc, kolizje = [] }) {
+function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMoney, canEdit, nodeById, pelne, filtr, setFiltr, onOtworz, akcje, gotowosc, kolizje = [], milestony = [], kolizjeMs = [] }) {
     const k = useMemo(() => {
         // @anchor realizacja-kokpit-wynik — przychód z oferty (`offerPriceOf`, ta sama formuła co Budżet),
         // zysk planowany = przychód − koszt planowany; prognoza zysku liczy koszt każdej pozycji jako
@@ -1048,7 +1119,7 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
                 {canSeeMoney && <Kafel l="Poniesione" v={`${fmtZl(k.real)} zł`} s={`w tym prognoza ${fmtZl(k.prognoza)} zł`} />}
                 <Kafel l="Zaawansowanie" v={`${k.pct}%`} s="wartościowo, z osi robót" />
                 {canSeeMoney && <Kafel l="Odebrano" v={`${fmtZl(k.odebrano)} zł`} s="protokołami" />}
-                <Kafel l="Blokery" v={sygFokus.blok} s={`${sygFokus.pyt} pytań otwartych${sygFokus.kol ? ` · ${sygFokus.kol} kolizji dostaw` : ''}`} alarm={sygFokus.blok > 0} alarmS={sygFokus.kol > 0} />
+                <Kafel l="Blokery" v={sygFokus.blok} s={`${sygFokus.pyt} pytań otwartych${sygFokus.kol ? ` · ${sygFokus.kol} kolizji dostaw` : ''}${sygFokus.kms ? ` · ${sygFokus.kms} kolizji z milestone'em` : ''}`} alarm={sygFokus.blok > 0} alarmS={sygFokus.kol > 0 || sygFokus.kms > 0} />
                 <Kafel l="Zadania" v={sygFokus.zad} s={`${sygFokus.poTerminie} po terminie`} alarmS={sygFokus.poTerminie > 0} />
             </div>
             <div style={{ marginTop: 16 }}>
@@ -1064,6 +1135,8 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
                 </Karta>
                 </>}
                 srodek={<>
+                    {milestony.length > 0 && <NajblizszeMilestony milestony={milestony} pelne={pelne} onOtworz={onOtworz} />}
+                    {kolizjeMs.length > 0 && <KolizjeMilestone kolizje={kolizjeMs} pelne={pelne} onOtworz={onOtworz} akcje={canEdit ? akcje : null} />}
                     {kolizje.length > 0 && <KolizjeDostaw kolizje={kolizje} pelne={pelne} onOtworz={onOtworz} akcje={canEdit ? akcje : null} />}
                     <Karta tytul="Najbliższe 14 dni" prawa={`od ${dzienMies(dni[0])}`}>
                         <table>
@@ -1095,6 +1168,70 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
             />
             </div>
         </>
+    );
+}
+
+// @anchor realizacja-najblizsze-milestony — karta Kokpitu: milestone'y gałęzi (najbliższe pierwsze, minione
+// na końcu): plan, baseline z zaakceptowanej wersji, prognoza z blokerów i poślizg prognozy względem baseline.
+function NajblizszeMilestony({ milestony, pelne, onOtworz }) {
+    const dzis = new Date(); dzis.setHours(0, 0, 0, 0);
+    const lista = [...milestony].filter(x => x.m.planDo).sort((a, b) => {
+        const pa = new Date(a.m.planDo) < dzis, pb = new Date(b.m.planDo) < dzis;
+        if (pa !== pb) return pa ? 1 : -1;
+        return new Date(a.m.planDo) - new Date(b.m.planDo);
+    });
+    return (
+        <Karta tytul="Najbliższe milestone'y" prawa="plan · baseline · prognoza">
+            <table>
+                <thead><tr><th>Milestone</th><th>Plan</th><th>Baseline</th><th>Prognoza</th><th className="num">Poślizg</th></tr></thead>
+                <tbody>
+                    {lista.map(({ m, N, prognoza, baseOst, posliz, kolizje }) => {
+                        const minal = new Date(m.planDo) < dzis;
+                        return (
+                            <tr key={m.id} className="row" onClick={() => onOtworz(m.id)} style={minal ? { opacity: .55 } : undefined}>
+                                <td className="nm-cell"><span className="t ms-n" title={m.name}>◆ {nazwaWyswietlana(m, pelne)}</span>{kolizje > 0 && <span className="cnt c-bad" title="Pozycje startujące przed końcem milestone'a">{kolizje} kol.</span>}</td>
+                                <td className="mono" style={{ fontSize: 12 }}>{zakresMs(m)}{minal ? ' · minął' : ''}</td>
+                                <td className="mono" style={{ fontSize: 12 }} title={baseOst ? 'Data z zaakceptowanej wersji (baseline)' : 'Brak baselinu — zamówienie nie ma zaakceptowanej wersji'}>{baseOst ? dzienMies(baseOst) : '—'}</td>
+                                <td className="mono" style={{ fontSize: 12 }} title={N ? `Największy wpływ otwartego blokera na milestonie: +${N} dni rob.` : 'Brak otwartych blokerów z wpływem'}>
+                                    {prognoza ? <span className="dpos">{dzienMies(prognoza)} (+{N})</span> : <span className="muted">= plan</span>}
+                                </td>
+                                <td className="num" style={{ fontSize: 12 }}>
+                                    {posliz == null ? <span className="muted">—</span>
+                                        : posliz > 0 ? <span className="dpos">+{posliz} d.</span>
+                                            : posliz < 0 ? <span className="dneg">{posliz} d.</span> : <span className="muted">0</span>}
+                                </td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+        </Karta>
+    );
+}
+
+// @anchor realizacja-kolizje-milestone — karta Kokpitu: pozycje startujące przed pierwszym dozwolonym dniem
+// po swoim milestonie. Rozpoczęte nie przesuwają się same — „Ustaw bloker” zapisuje problem w rejestrze.
+function KolizjeMilestone({ kolizje, pelne, onOtworz, akcje }) {
+    return (
+        <Karta tytul="Kolizje z milestone'em" prawa="start przed końcem milestone'a">
+            <table>
+                <thead><tr><th>Pozycja</th><th>Start</th><th>Milestone</th><th className="num">Za wcześnie</th><th /></tr></thead>
+                <tbody>
+                    {kolizje.map(k => (
+                        <tr key={k.klucz} className="row" onClick={() => onOtworz(k.id)}>
+                            <td className="nm-cell"><span className="t" title={k.node?.name}>{nazwaWyswietlana(k.node || {}, pelne)}</span>{k.rozpoczeta && <span className="cnt c-warn" title="Roboty rozpoczęte, wykonane albo odebrane — przesunięcie milestone'a ich nie rusza">w toku</span>}</td>
+                            <td className="mono" style={{ fontSize: 12 }}>{dzienMies(k.start)}</td>
+                            <td className="nm-cell" onClick={e => { e.stopPropagation(); onOtworz(k.msId); }}><span className="t ms-n" title={k.ms?.name}>◆ {nazwaWyswietlana(k.ms || {}, pelne)} · od {dzienMies(k.minOd)}</span></td>
+                            <td className="num dpos">{k.dni} d.</td>
+                            <td onClick={e => e.stopPropagation()} style={{ textAlign: 'right' }}>
+                                {k.blokerId ? <span className="cnt c-bad">bloker</span>
+                                    : akcje && <button className="mini-btn bad" onClick={() => akcje.zKolizjiMs(k)} title="Utwórz bloker techniczny na pozycji: termin = pierwszy dozwolony dzień, wpływ = dni przed milestone'em">Ustaw bloker</button>}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </Karta>
     );
 }
 

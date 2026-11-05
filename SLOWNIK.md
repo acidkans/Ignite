@@ -248,6 +248,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stala | navPozycje | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-nav-pozycje |
 | ui-stan | podglad | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-podglad |
 | ui-funkcja | wierszPozycji | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree-pozycja |
+| ui-ikona | ◆ zagrożone milestone'y gałęzi w drzewie | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree-ms |
 | ui-input | SidebarBranchToggles | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-toggles |
 | ui-stan | tylkoSygnaly | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tylko-sygnaly |
 | ui-stala | zakupyApi | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zakupy-api |
@@ -271,6 +272,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | zbudujWatek | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor zbuduj-watek |
 | ui-funkcja | sygnalyWezlow | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor sygnaly-wezlow |
 | ui-funkcja | sumaSygnalow | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor suma-sygnalow |
+| ui-funkcja | sygnalyWezlow — sygnały `ms` (zagrożony milestone) i `kms` (kolizja z milestone'em) | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor sygnaly-wezlow-ms |
 | ui-funkcja | kiedyTekst | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor kiedy-tekst |
 | ui-hook | useWatekRealizacji | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor use-watek-realizacji |
 | ui-funkcja | wyslij | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-wyslij |
@@ -345,6 +347,12 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | wykryjKolizje | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor wykryj-kolizje |
 | ui-stala | kolizje | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolizje |
 | ui-karta | KolizjeDostaw | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolizje-dostaw |
+| ui-karta | NajblizszeMilestony (plan · baseline · prognoza · poślizg) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-najblizsze-milestony |
+| ui-karta | KolizjeMilestone (pozycje przed końcem milestone'a + „Ustaw bloker”) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolizje-milestone |
+| ui-stan | msBaseline (daty baseline milestone'ów) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-ms-baseline |
+| ui-stala | msAnaliza (prognoza z impactDays, poślizg, kolizje, zagrożone) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-ms-analiza |
+| ui-funkcja | akcje.zKolizjiMs (bloker TECH z kolizji z milestone'em, sourceType MILESTONE) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-bloker-kolizji-ms |
+| ui-funkcja | cień prognozy milestone'a na Harmonogramie (+N dni z blokerów) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-cien-prognozy |
 
 ### Moduł MarkerDetailsPanel
 
@@ -539,6 +547,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | back-endpoint | POST /wbs-nodes | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-create |
 | back-endpoint | PATCH /wbs-nodes/:id | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-update |
 | back-endpoint | PATCH /wbs-nodes/gantt-dates/batch (zbiorczy zapis dat Harmonogramu) | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-gantt-dates-batch |
+| back-endpoint | GET /wbs-nodes/milestones/baseline/:nodeId (daty baseline milestone'ów) | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-milestones-baseline |
+| back-funkcja | getMilestonesBaseline (zaakceptowana wersja + stan „przed” z AuditLog po akceptacji) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-milestones-baseline-service |
 | back-funkcja | updateGanttDatesBatch (transakcja + jeden wpis AuditLog `WbsNode.ganttDates`) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-gantt-dates-batch-service |
 | back-endpoint | PATCH /wbs-nodes/:id/budget | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-update-budget |
 | back-endpoint | DELETE /wbs-nodes/:id | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-delete |

@@ -27,7 +27,8 @@ export interface ConstraintInput {
 export const CONSTRAINT_KINDS = ['MATERIAL', 'PERMIT', 'ACCESS', 'CLIENT', 'CREW', 'TECH', 'OTHER'] as const;
 const STATUSES = ['OPEN', 'CLOSED'];
 // QA = para z WbsNode.qa, COMMENT = wpis czatu, COLLISION = wpis dostawy (LeafActual FORECAST) kolidujący z robotami
-const SOURCE_TYPES = ['QA', 'COMMENT', 'COLLISION'];
+// MILESTONE = kolizja pozycji z milestone'em (Kokpit Realizacji), `sourceId` = `${msId}:${pozycjaId}`.
+const SOURCE_TYPES = ['QA', 'COMMENT', 'COLLISION', 'MILESTONE'];
 
 const SELECT = {
     id: true, processNodeId: true, wbsRootId: true, kind: true, title: true, note: true,

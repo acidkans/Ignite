@@ -1,3 +1,22 @@
+## 2026-11-05 — feat(realizacja): Kokpit — najbliższe milestone'y z baseline, prognozą i poślizgiem, kolizje z milestone'em + „Ustaw bloker”, sygnał ◆ w drzewie (M4)
+
+### schema.prisma
+- `schema-pole` `Constraint.sourceType` — nowa wartość `MILESTONE` (bez migracji, String): bloker z kolizji pozycji z milestone'em, `sourceId` = `msId:pozycjaId`
+
+### architektura / API
+- dodano `back-endpoint` `GET /wbs-nodes/milestones/baseline/:nodeId` → `{ acceptedVersionId, acceptedAt, items: { [id]: { ganttStart, ganttEnd, root } } }` — daty milestone'ów zaakceptowanej wersji; ponieważ Realizacja pracuje NA tej wersji, daty przesunięte po akceptacji odtwarzane są z pierwszego wpisu AuditLog `WbsNode.ganttDates` (stan „przed”)
+- `back-serwis` `ConstraintsService` — `SOURCE_TYPES` + `MILESTONE`
+- `ui-sekcja` `Harmonogram` — milestone zapisuje się zawsze zbiorczo (`gantt-dates/batch`), także bez zależnych, żeby każda zmiana jego terminu trafiła do AuditLog; cień prognozy (przerywany romb +N dni z blokerów, podpis „prognoza +N d.”), zagrożony milestone na czerwono
+- `ui-sekcja` Kokpit `RealizacjaPanel` — karta „Najbliższe milestone'y” (plan, baseline, prognoza = plan + największy `impactDays` otwartych blokerów na milestonie w dniach roboczych, poślizg prognozy względem baseline), karta „Kolizje z milestone'em” (pozycje startujące przed pierwszym dozwolonym dniem, „w toku”, „Ustaw bloker” → bloker TECH na pozycji, termin = pierwszy dozwolony dzień, wpływ = dni za wcześnie); kafel Blokery liczy kolizje z milestone'em
+- `ui-funkcja` `sygnalyWezlow` — sygnały `ms` (zagrożony milestone: prognoza, poślizg albo kolizja) i `kms` (kolizja bez blokera); `ui-panel` `SidebarBranchTree` — znacznik ◆ przy gałęzi i ◆K przy pozycji, filtr „sygnały” je uwzględnia
+
+### słownik
+- dodano `wbs-nodes-milestones-baseline`, `wbs-milestones-baseline-service`, `realizacja-najblizsze-milestony`, `realizacja-kolizje-milestone`, `realizacja-ms-baseline`, `realizacja-ms-analiza`, `realizacja-bloker-kolizji-ms`, `harmonogram-cien-prognozy`, `sygnaly-wezlow-ms`, `sidebar-branch-tree-ms`
+
+### wytyczne
+- `schema-pole` `WbsNode.ganttStart/ganttEnd` milestone'a — zmieniać przez `PATCH /wbs-nodes/gantt-dates/batch`; zmiana przez `PATCH /wbs-nodes/:id` (np. kolumny od/do w tabeli WBS) nie zostawia śladu w AuditLog i po akceptacji nadpisuje baseline bez możliwości odtworzenia
+- `schema-pole` `Constraint.impactDays` na milestonie — nie zmienia planu, tylko prognozę (największy wpływ z otwartych blokerów, dni robocze)
+
 ## 2026-11-05 — feat(harmonogram): milestone ogranicza zależnych — „nie wcześniej niż”, przesuwanie z zachowaniem odstępu, zapis zbiorczy dat (M3)
 
 ### architektura / API

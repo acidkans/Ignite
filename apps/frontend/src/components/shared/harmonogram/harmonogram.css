@@ -93,3 +93,10 @@
 .rz .hg .bar.podglad, .rz .hg .ms.podglad { opacity: .75; box-shadow: 0 0 0 2px var(--ms); }
 .rz .hg-info .hg-info-bad { color: var(--bad); }
 .rz .hg-info > div + div { margin-top: 4px; }
+
+/* M4 — prognoza milestone'a z blokerów: przerywany romb +N dni i linia od planu */
+.rz .hg .ms-cien { position: absolute; top: 15px; width: 14px; height: 14px; transform: rotate(45deg); border: 2px dashed var(--bad); background: transparent; z-index: 2; pointer-events: auto; }
+.rz .hg .ms-cien.g { top: 7px; }
+.rz .hg .ms-cien-l { position: absolute; top: 22px; height: 0; border-top: 2px dashed var(--bad); z-index: 1; pointer-events: none; }
+.rz .hg .ms-cien-l.g { top: 14px; }
+.rz .hg .legend .ms-cien { position: static; display: inline-block; width: 10px; height: 10px; margin: 0 4px 0 2px; vertical-align: middle; }

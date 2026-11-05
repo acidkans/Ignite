@@ -2,6 +2,14 @@
 
 Branch: `nowy_UI_Realizacja` · plan z 2026-11-05 · kontynuacja `docs/REALIZACJA-MVP-PLAN.md` (etap 4)
 
+## Stan wdrożenia (2026-11-05)
+
+- M0 `355ba57`, M1 `62f00c5`, M2 `12ac8eb`, M3 `1356aed`, M4 — commit „feat(realizacja): Kokpit … (M4)”. Bez push, bez merge do main.
+- Baseline milestone'a: Realizacja pracuje NA zaakceptowanej wersji, więc daty po akceptacji odtwarza
+  `GET /wbs-nodes/milestones/baseline/:nodeId` z AuditLog `WbsNode.ganttDates`. Nie przetestowane na zamówieniu
+  z baseline (DURR go nie ma). Zmiana dat milestone'a w tabeli WBS (`PATCH /wbs-nodes/:id`) nie zostawia śladu.
+- Prognoza = plan + największy `impactDays` otwartych blokerów NA milestonie (dni robocze).
+
 ## Stan wyjściowy (przed startem tego planu)
 
 - Jest jeden **Harmonogram** zamiast Gantta i Lookahead (`apps/frontend/src/components/shared/harmonogram/`):

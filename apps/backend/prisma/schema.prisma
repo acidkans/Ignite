@@ -1605,7 +1605,7 @@ model Constraint {
   /// @anchor constraint-status
   status        String    @default("OPEN") // OPEN | CLOSED
   /// @anchor constraint-source-type
-  sourceType    String? // QA | COMMENT | COLLISION — skąd się wziął
+  sourceType    String? // QA | COMMENT | COLLISION | MILESTONE — skąd się wziął
   /// @anchor constraint-source-id
   sourceId      String? // id pary Q&A, komentarza albo wpisu dostawy (LeafActual)
   /// @anchor constraint-created-by-id

@@ -653,6 +653,38 @@ export class WbsNodesService {
      * Gdy quantity się zmienia, synchronizuje powiązane MaterialRequirement
      * (jedno źródło prawdy: WbsNode.quantity → WbsNodeMaterial → MaterialRequirement).
      */
+    // @anchor wbs-milestones-baseline-service — `{ acceptedVersionId, acceptedAt, items: { [id]: { ganttStart, ganttEnd, root } } }`.
+    // Realizacja pracuje NA zaakceptowanej wersji, więc jej bieżące daty mogą być już przesunięte —
+    // baseline odtwarzamy z pierwszego wpisu zbiorczego zapisu dat po akceptacji (stan „przed”).
+    async getMilestonesBaseline(nodeId: string) {
+        const pn = await this.prisma.processNode.findUnique({ where: { id: nodeId }, select: { acceptedVersionId: true, acceptedAt: true } });
+        if (!pn?.acceptedVersionId) return { acceptedVersionId: null, acceptedAt: null, items: {} };
+        const ms = await this.prisma.wbsNode.findMany({
+            where: { nodeId, versionId: pn.acceptedVersionId, type: 'milestone' },
+            select: { id: true, sourceWbsNodeId: true, ganttStart: true, ganttEnd: true },
+        });
+        const items: Record<string, { ganttStart: string | null; ganttEnd: string | null; root: string }> = {};
+        const iso = (d: Date | null) => (d ? d.toISOString() : null);
+        for (const m of ms) items[m.id] = { ganttStart: iso(m.ganttStart), ganttEnd: iso(m.ganttEnd), root: m.sourceWbsNodeId || m.id };
+        if (ms.length) {
+            const wpisy = await this.prisma.auditLog.findMany({
+                where: { entity: 'WbsNode.ganttDates', entityId: nodeId, ...(pn.acceptedAt ? { createdAt: { gte: pn.acceptedAt } } : {}) },
+                orderBy: { createdAt: 'asc' }, select: { diff: true },
+            });
+            const odtworzone = new Set<string>();
+            for (const w of wpisy) {
+                const diff: any = w.diff;
+                if (diff?.versionId !== pn.acceptedVersionId) continue;
+                for (const it of diff?.items || []) {
+                    if (!items[it.id] || odtworzone.has(it.id)) continue;
+                    odtworzone.add(it.id);
+                    items[it.id] = { ...items[it.id], ganttStart: it.przed?.ganttStart ?? null, ganttEnd: it.przed?.ganttEnd ?? null };
+                }
+            }
+        }
+        return { acceptedVersionId: pn.acceptedVersionId, acceptedAt: pn.acceptedAt, items };
+    }
+
     // @anchor wbs-gantt-dates-batch-service — `{ id, ganttStart, ganttEnd }[]` (koniec wyłączny, null = data
     // domyślna). Wszystko albo nic: transakcja, a w AuditLog jeden wpis z datami przed i po.
     async updateGanttDatesBatch(items: { id: string; ganttStart: string | null; ganttEnd: string | null }[], user?: OfferLockUser) {
