@@ -6600,7 +6600,7 @@ ${ganttSectionHtml}
                         {(key === 'wbs' || key === 'wbs-hybrid') && (
                             // @anchor strategy-tasks-qa-pdf-button
                             <button
-                                onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'PDF — strategia, zadania, Q&A', defaultFilename: `${safeFileBase()}_strategia_zadania_QA.pdf`, oneDriveFolderKey: 'reports', makeArtifact: () => buildStrategyTasksQaPdfArtifact({ wbsData, processNodeId: nodeId, orderName: orderName || projectName }) }); }}
+                                onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'PDF — strategia, zadania, Q&A', defaultFilename: `${safeFileBase()}_strategia_zadania_QA.pdf`, oneDriveFolderKey: 'reports', recipientScope: 'team', mailArchive: false, makeArtifact: () => buildStrategyTasksQaPdfArtifact({ wbsData, processNodeId: nodeId, orderName: orderName || projectName }) }); }}
                                 className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                                 title="PDF: strategia + zadania + Q&A"
                             >
@@ -7164,6 +7164,8 @@ ${ganttSectionHtml}
                                             />
                                             <div className="flex gap-2">
                                                 <button onClick={commitPreset} className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 rounded-lg text-amber-300 text-[10px] font-bold uppercase tracking-widest transition-all">Zapisz</button>
+                    recipientScope={pendingExport.recipientScope}
+                    mailArchive={pendingExport.mailArchive !== false}
                                                 <button onClick={() => { setEditingPreset(undefined); setEditingPresetDraft({ label: '', text: '' }); }} className="px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-gray-400 text-[10px] font-bold uppercase tracking-widest transition-all">Anuluj</button>
                                             </div>
                                         </>

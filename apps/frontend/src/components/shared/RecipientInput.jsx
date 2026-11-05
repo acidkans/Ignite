@@ -4,20 +4,28 @@ import { fetchRecipients } from '../../utils/exportMail';
 
 // @anchor recipient-input
 // Pole odbiorców maila (chipy) z podpowiedziami: zespół + kontakty danego zamówienia (nodeId).
-export default function RecipientInput({ value = [], onChange, nodeId }) {
+// `scope = 'team'` — tylko osoby z zespołu: podpowiedzi bez kontaktów klienta, a adresu spoza listy
+// nie da się dodać (backend i tak odrzuci wysyłkę).
+export default function RecipientInput({ value = [], onChange, nodeId, scope }) {
   const [suggestions, setSuggestions] = useState([]);
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
+  const [rejected, setRejected] = useState('');
 
   useEffect(() => {
     let alive = true;
-    fetchRecipients(nodeId).then((r) => { if (alive) setSuggestions(Array.isArray(r) ? r : []); });
+    fetchRecipients(nodeId, scope).then((r) => { if (alive) setSuggestions(Array.isArray(r) ? r : []); });
     return () => { alive = false; };
-  }, [nodeId]);
+  }, [nodeId, scope]);
 
   const add = (email) => {
     const e = String(email || '').trim().toLowerCase();
     if (!e || !e.includes('@')) return;
+    if (scope === 'team' && !suggestions.some((s) => s.email === e)) {
+      setRejected(`${e} — to nie jest osoba z zespołu.`);
+      return;
+    }
+    setRejected('');
     if (!value.includes(e)) onChange([...value, e]);
     setText('');
   };
@@ -54,10 +62,11 @@ export default function RecipientInput({ value = [], onChange, nodeId }) {
               remove(value[value.length - 1]);
             }
           }}
-          placeholder={value.length ? '' : 'wpisz e-mail lub wybierz z podpowiedzi…'}
+          placeholder={value.length ? '' : (scope === 'team' ? 'wybierz osobę z zespołu…' : 'wpisz e-mail lub wybierz z podpowiedzi…')}
           className={inputCls}
         />
       </div>
+      {rejected && <p className="mt-1 text-[11px] text-amber-300">{rejected}</p>}
 
       {focused && filtered.length > 0 && (
         <div className="absolute z-10 left-0 right-0 mt-1 max-h-56 overflow-y-auto custom-scrollbar bg-[#0b0f17] border border-white/10 rounded-xl shadow-2xl">

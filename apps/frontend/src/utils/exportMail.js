@@ -96,10 +96,11 @@ export async function uploadToOneDrive({ blob, filename, nodeId, folderKey, subf
 
 // @anchor fetch-recipients
 // Podpowiedzi adresów: zespół + kontakty zamówienia (owner, uprawnieni, klient, lokalizacja, firma).
-export async function fetchRecipients(nodeId) {
+// `scope = 'team'` — tylko użytkownicy Ignite (bez kontaktów klienta, lokalizacji i firmy).
+export async function fetchRecipients(nodeId, scope) {
   if (!nodeId) return [];
   try {
-    const res = await fetch(`${API_URL}/mail/recipients/${nodeId}`, {
+    const res = await fetch(`${API_URL}/mail/recipients/${nodeId}${scope ? `?scope=${scope}` : ''}`, {
       headers: { Authorization: `Bearer ${token()}` },
     });
     if (!res.ok) return [];
@@ -111,7 +112,7 @@ export async function fetchRecipients(nodeId) {
 
 // @anchor send-export
 // Wysyła DOKŁADNIE ten sam plik (blob) jako załącznik maila.
-export async function sendExport({ blob, filename, to, cc, subject, message, nodeId }) {
+export async function sendExport({ blob, filename, to, cc, subject, message, nodeId, scope }) {
   const fd = new FormData();
   fd.append('file', blob, filename || 'eksport');
   fd.append('to', Array.isArray(to) ? to.join(',') : to || '');
@@ -119,6 +120,7 @@ export async function sendExport({ blob, filename, to, cc, subject, message, nod
   if (subject) fd.append('subject', subject);
   if (message) fd.append('message', message);
   if (nodeId) fd.append('nodeId', nodeId);
+  if (scope) fd.append('scope', scope);
   // UWAGA: nie ustawiamy Content-Type — przeglądarka sama doda boundary multipart/form-data.
   const res = await fetch(`${API_URL}/mail/send-export`, {
     method: 'POST',

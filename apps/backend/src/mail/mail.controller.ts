@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UploadedFile,
   UseGuards,
@@ -34,7 +35,7 @@ export class MailController {
   }
 
   @Get('recipients/:nodeId')
-  recipients(@Param('nodeId') nodeId: string) {
-    return this.mailService.getRecipients(nodeId);
+  recipients(@Param('nodeId') nodeId: string, @Query('scope') scope?: string) {
+    return this.mailService.getRecipients(nodeId, scope);
   }
 }

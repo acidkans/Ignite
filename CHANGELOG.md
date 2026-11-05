@@ -1,3 +1,13 @@
+## 2026-11-05 — feat(mail): eksport strategii tylko do zespołu — odbiorcy z Ignite, bez kopii na OneDrive, podpowiedzi PM z użytkowników (v2026.11.05.2224)
+
+### architektura / API
+- zmieniono `back-endpoint` `GET /mail/recipients/:nodeId` — nowy opcjonalny query `scope=team`: zwraca wyłącznie aktywnych użytkowników Ignite (bez kontaktów klienta, lokalizacji i firmy)
+- zmieniono `back-endpoint` `POST /mail/send-export` — opcjonalne pole `scope=team`: 400, gdy którykolwiek adres Do/DW jest spoza aktywnych użytkowników
+- zmieniono `back-serwis` `UsersService` (wyszukiwanie użytkowników) — bez limitu 50 wyników
+
+### wytyczne
+- `ui-propsy` `ExportChoiceModal.recipientScope='team'` + `mailArchive={false}` — dokumenty wewnętrzne (strategia/zadania/Q&A) nie mogą wyjść do klienta i nie trafiają do teczki OneDrive przy wysyłce mailem
+
 ## 2026-11-05 — feat(realizacja): Kokpit — najbliższe milestone'y z baseline, prognozą i poślizgiem, kolizje z milestone'em + „Ustaw bloker”, sygnał ◆ w drzewie (M4)
 
 ### schema.prisma
