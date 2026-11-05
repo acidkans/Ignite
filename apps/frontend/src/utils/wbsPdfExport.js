@@ -1,4 +1,4 @@
-import { fmtPLN } from '../components/shared/wbs/wbsConstants';
+import { fmtPLN, isCostNode } from '../components/shared/wbs/wbsConstants';
 
 export const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -161,7 +161,7 @@ export function buildWbsHtmlTable(wbsData, depth, opts = {}) {
     // appendBudgetSheet: brak narzutu ⇒ cena ofertowa 0 (nie koszt); gałęzie
     // grupujące (type='group') mają cenę 0 — ich wartość to suma dzieci.
     const localPriceOf = (item) => {
-        if (item.type === 'group') return 0;
+        if (!isCostNode(item)) return 0;
         const q = Math.max(0, parseFloat(item.quantity) || 0);
         const uc = Math.max(0, parseFloat(item.unitCost) || 0);
         const tc = uc * q;

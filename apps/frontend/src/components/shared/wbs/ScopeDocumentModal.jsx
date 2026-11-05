@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { X, Sparkles, RefreshCw, FileText, Eye, Save, Check, Merge, Trash2, Upload, AlertTriangle, Download, ExternalLink, FolderOpen } from 'lucide-react';
 import MarkdownEditor from '../MarkdownEditor';
 import { API_URL } from '../../../config';
-import { fmtQty } from './wbsConstants';
+import { fmtQty, isCostNode } from './wbsConstants';
 
 const token = () => sessionStorage.getItem('token') || localStorage.getItem('token');
 
@@ -174,7 +174,7 @@ export default function ScopeDocumentModal({ nodeId, versionId, onClose, onScope
     const itemGroups = useMemo(() => {
         const map = new Map();
         for (const n of data?.tree || []) {
-            if (n.isBranch || String(n.type).toLowerCase() === 'group') continue;
+            if (n.isBranch || !isCostNode(n)) continue;
             const key = `${n.name.trim().toLowerCase()}|${(n.unit || '').trim().toLowerCase()}`;
             if (!map.has(key)) map.set(key, { key, name: n.name.trim(), unit: n.unit || '', total: 0, ids: [], checked: 0 });
             const g = map.get(key);

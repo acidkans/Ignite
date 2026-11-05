@@ -7,6 +7,7 @@ import { DocumentsService } from '../documents/documents.service';
 import { PdfService } from '../pdf/pdf.service';
 import { resolveVersionId } from '../common/version.util';
 import { groupMultiplierMap } from '../common/group-qty.util';
+import { isCostNode } from '../common/leaf-types.util';
 import { uploadPath } from '../common/uploads.util';
 import { STANDARD_TAB_CATEGORIES } from '../onedrive/order-folders';
 import { buildScopeDocumentHtml, ScopeDocumentModel } from './scope-document-pdf';
@@ -498,7 +499,7 @@ ${docsText || '(brak dokumentacji)'}`;
     // dalej użytkownik zaznacza/odznacza sam). Nie zdejmuje flag ustawionych wcześniej.
     async suggestScopeItems(nodeId: string, versionId?: string | null) {
         const tree = await this.loadTree(nodeId, versionId);
-        const leaves = tree.rows.filter(r => !(tree.children.get(r.id) || []).length && String(r.type).toLowerCase() !== 'group');
+        const leaves = tree.rows.filter(r => !(tree.children.get(r.id) || []).length && isCostNode(r.type));
         if (!leaves.length) throw new BadRequestException('Drzewo WBS nie ma pozycji');
         // Tabela zakresu sumuje po nazwie + j.m., więc AI wybiera spośród UNIKALNYCH elementów
         // (ta sama pozycja w 5 lokalizacjach = jeden wiersz), a flaga trafia na wszystkie wystąpienia.

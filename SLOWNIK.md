@@ -822,6 +822,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stala | darkTheme | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor dark-theme |
 | ui-stala | TYPE_LABELS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor type-labels |
 | ui-stala | TYPE_OPTIONS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor type-options |
+| ui-stala | NON_COST_NODE_TYPES (typy węzłów bez kosztu/ceny: group, od M1 milestone) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor non-cost-node-types |
+| ui-funkcja | isCostNode (czy węzeł/typ niesie koszt i cenę — zamiast rozsianych `=== 'group'`) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor is-cost-node |
 | ui-funkcja | wbsTypeFromAny | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor wbs-type-from-any |
 | ui-stala | BUDGET_TYPE_LABELS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor budget-type-labels |
 | ui-stala | UNIT_OPTIONS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor unit-options |
@@ -2032,6 +2034,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | back-funkcja | normalizeLeafType | apps/backend/src/common/leaf-types.util.ts | @anchor normalize-leaf-type |
 | back-stala | DEFAULT_CATALOG_TYPE | apps/backend/src/common/leaf-types.util.ts | @anchor default-catalog-type |
 | back-funkcja | isCostLeafType | apps/backend/src/common/leaf-types.util.ts | @anchor is-cost-leaf-type |
+| back-stala | NON_COST_NODE_TYPES (lustro frontu) | apps/backend/src/common/leaf-types.util.ts | @anchor non-cost-node-types-back |
+| back-funkcja | isCostNode (czy typ węzła niesie koszt i cenę) | apps/backend/src/common/leaf-types.util.ts | @anchor is-cost-node-back |
 | back-funkcja | nodeHasOwnStatus (backend) | apps/backend/src/common/leaf-types.util.ts | @anchor backend-node-has-own-status |
 | back-funkcja | guard zapisu statusu gałęzi | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-node-branch-status-guard |
 | back-stala | PURCHASE_LEAF_TYPES (backend) | apps/backend/src/common/leaf-types.util.ts | @anchor purchase-leaf-types-backend |

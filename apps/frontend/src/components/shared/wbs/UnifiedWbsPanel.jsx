@@ -8,7 +8,7 @@ import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import HarmonogramPlanowanie from '../harmonogram/HarmonogramPlanowanie';
-import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, PRICED_LEAF_TYPES, orderDefaultsFrom, leafDefaultsMissing, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes, applyGroupMultipliers, groupQtyFactor } from './wbsConstants';
+import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, PRICED_LEAF_TYPES, orderDefaultsFrom, leafDefaultsMissing, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes, applyGroupMultipliers, groupQtyFactor, isCostNode } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { buildStrategyTasksQaPdfArtifact } from '../../../utils/strategyTasksQaPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
@@ -1426,7 +1426,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // (mają dzieci) i grupujące pomijamy — ich wartość to suma dzieci. Zwraca
     // listę etykiet niepoprawnych pozycji (pusta = OK).
     const validateBudgetPricing = () => {
-        const rawRows = buildRows(VIEWS.BUDGET).filter(r => r.type !== 'group');
+        const rawRows = buildRows(VIEWS.BUDGET).filter(r => isCostNode(r));
         const parentIds = new Set(wbsData.map(n => n.parentId).filter(Boolean));
         const invalidRows = [];
         rawRows.forEach(r => {
@@ -1473,7 +1473,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         const byName = new Map();
         for (const n of wbsData) {
             const type = String(n.type || '').toLowerCase();
-            if (type === 'group' || parentIds.has(n.id)) continue;
+            if (!isCostNode(type) || parentIds.has(n.id)) continue;
             const name = String(n.name || '').trim();
             if (!name) continue;
             const key = name.toLowerCase();
@@ -2014,7 +2014,7 @@ ${ganttSectionHtml}
     // Zwraca m.in. `ref` — geometrię arkusza (litery kolumn, zakres danych), żeby
     // arkusz „Podsumowanie" mógł liczyć formułami z tego arkusza, a nie z aplikacji.
     const appendBudgetSheet = (workbook, opts = {}) => {
-        const rawRows = buildRows(VIEWS.BUDGET).filter(r => r.type !== 'group');
+        const rawRows = buildRows(VIEWS.BUDGET).filter(r => isCostNode(r));
         if (!rawRows.length) return { ok: false, empty: true, invalidRows: [] };
 
         // Walidacja pozycji liściowych — zerowy koszt jednostkowy lub narzut
@@ -2399,7 +2399,7 @@ ${ganttSectionHtml}
                 const kids = byParent[n.id];
                 const isGroup = !!(kids && kids.length);
                 // Liść budżetu = ten sam filtr co buildRows(VIEWS.BUDGET).
-                const isBudgetLeaf = n.parentId != null && n.type !== 'group';
+                const isBudgetLeaf = n.parentId != null && isCostNode(n);
                 const own = isBudgetLeaf ? canonical(n) : { cost: 0, price: 0 };
                 const entry = {
                     depth,
@@ -2575,7 +2575,7 @@ ${ganttSectionHtml}
                 const uc = Math.max(0, parseFloat(n.unitCost) || 0);
                 const m = (n.margin != null && String(n.margin) !== '') ? parseFloat(n.margin) : 0;
                 const d = Math.max(0, parseFloat(n.discount) || 0);
-                const isBudgetLeaf = n.parentId != null && n.type !== 'group';
+                const isBudgetLeaf = n.parentId != null && isCostNode(n);
                 const ownCost = isBudgetLeaf ? uc * q : 0;
                 let ownPrice = isBudgetLeaf && m ? ownCost * (1 + m / 100) : 0;
                 if (ownPrice > 0 && d > 0) ownPrice = Math.max(0, ownPrice * (1 - d / 100));
@@ -2701,7 +2701,7 @@ ${ganttSectionHtml}
                     const computeSummaryFromItems = (items) => {
                         const leaves = (items || []).filter(it => {
                             const t = String(it.type || '').toLowerCase();
-                            return it.parentId != null && t !== 'group';
+                            return it.parentId != null && isCostNode(t);
                         });
                         let totalCost = 0, totalRevenue = 0;
                         const byType = {};
@@ -2752,7 +2752,7 @@ ${ganttSectionHtml}
                         };
                         const leaves = (items || []).filter(it => {
                             const t = String(it.type || '').toLowerCase();
-                            return it.parentId != null && t !== 'group';
+                            return it.parentId != null && isCostNode(t);
                         });
                         const byPath = {};
                         for (const it of leaves) {
@@ -4164,7 +4164,7 @@ ${ganttSectionHtml}
         // Gałęzie grupujące (type='group') mają cenę 0 — ich wartość to suma dzieci,
         // spójnie z appendBudgetSheet, który filtruje r.type !== 'group'.
         const localPriceOf = (item) => {
-            if (item.type === 'group') return 0;
+            if (!isCostNode(item)) return 0;
             const q = Math.max(0, parseFloat(item.quantity) || 0);
             const uc = Math.max(0, parseFloat(item.unitCost) || 0);
             const tc = uc * q;
@@ -5270,7 +5270,7 @@ ${ganttSectionHtml}
                 // Zmiana typu na 'group' zeruje pola cenowe RÓWNIEŻ optymistycznie —
                 // backend robi to samo (updateNode), ale bez lokalnego zerowania
                 // rollup w drzewie/budżecie trzymałby starą cenę do czasu refreshu.
-                const zeroesForGroup = (field === 'type' && String(value).toLowerCase() === 'group')
+                const zeroesForGroup = (field === 'type' && !isCostNode(value))
                     ? { unitCost: 0, totalCost: 0, margin: 0, discount: 0, unitPrice: 0, totalPrice: 0 }
                     : {};
                 setWbsData(prev => prev.map(item => item.id === id ? { ...item, [field]: value, ...zeroesForGroup } : item));
@@ -6219,7 +6219,7 @@ ${ganttSectionHtml}
             traverseWbs('__root__');
 
             return [...budgetScopeData]
-                .filter(item => item.parentId != null && item.type !== 'group')
+                .filter(item => item.parentId != null && isCostNode(item))
                 .sort((a, b) => (wbsOrderMap.get(a.id) ?? 0) - (wbsOrderMap.get(b.id) ?? 0))
                 .map(item => {
                     const normalizedType = String(item.type || '').toLowerCase();
@@ -6375,7 +6375,7 @@ ${ganttSectionHtml}
         // gałąź grupująca (type='group') ⇒ 0 (wartość to suma dzieci), brak narzutu ⇒ 0
         // (nie koszt). Wcześniej fallback do totalPrice zawyżał sumy w zakładce Założenia.
         const offerPriceOf = (item) => {
-            if (item.type === 'group') return 0;
+            if (!isCostNode(item)) return 0;
             const q = Math.max(0, parseFloat(item.quantity) || 0);
             const uc = Math.max(0, parseFloat(item.unitCost) || 0);
             const tc = uc * q;
@@ -6433,7 +6433,7 @@ ${ganttSectionHtml}
             if (!item.parentId) return sum;
             // Gałęzie grupujące pomijamy — ich wartość to suma dzieci, spójnie
             // z buildRows(VIEWS.BUDGET) i eksportami oferty/budżetu.
-            if (item.type === 'group') return sum;
+            if (!isCostNode(item)) return sum;
             const q = Math.max(0, parseFloat(item.quantity) || 0);
             const uc = Math.max(0, parseFloat(item.unitCost) || 0);
             const totalCost = uc * q;

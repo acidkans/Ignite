@@ -77,6 +77,18 @@ export const DEFAULT_CATALOG_TYPE = 'equipment';
 // wiersz oferty, więc kosztowo jest liściem także wtedy, gdy ma pod sobą podpozycje.
 export const isCostLeafType = (type: unknown) => ALL_LEAF_TYPES.includes(String(type || '').toLowerCase());
 
+// @anchor non-cost-node-types-back — typy węzłów bez własnego kosztu i ceny (nie wchodzą do wyceny,
+// budżetu, oferty, eksportów, materiałów). Lustro `NON_COST_NODE_TYPES` z `wbsConstants.js`,
+// pilnowane przez `test/typy-lustro.test.mjs`. Pusty typ celowo poza listą — gałąź bez typu
+// rozpoznaje się po dzieciach / `parentId`, jak dotąd.
+export const NON_COST_NODE_TYPES = ['group'];
+
+// @anchor is-cost-node-back — czy węzeł (typ) może nieść koszt i cenę. Zastępuje rozsiane
+// `type === 'group'` tam, gdzie znaczyło „czy to pozycja kosztowa”. Różni się od `isCostLeafType`:
+// tamto zna tylko typy liści (pusty typ ⇒ false), to wyklucza wyłącznie typy niekosztowe.
+// Gdzie chodzi o pakiet (mnożnik ilości grupy), zostaje jawne sprawdzenie `group`.
+export const isCostNode = (type: unknown) => !NON_COST_NODE_TYPES.includes(String(type || '').toLowerCase().trim());
+
 // @anchor backend-node-has-own-status — czy węzeł WBS ma WŁASNY status, czy wyliczany z pozycji poddrzewa.
 // Odpowiednik `nodeHasOwnStatus` z `wbsConstants.js` — obie strony muszą mówić to samo, bo front
 // chowa dropdown, a backend odrzuca zapis. Statusu nie mają:

@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
-import { isClosedLeafType, isManagerRoles, nodeHasOwnStatus, isPurchaseLeafType } from '../common/leaf-types.util';
+import { isClosedLeafType, isManagerRoles, nodeHasOwnStatus, isPurchaseLeafType, isCostNode } from '../common/leaf-types.util';
 import { defaultLogisticianOwner } from '../common/default-logistician.util';
 import { resolveVersionId } from '../common/version.util';
 import { assertOfferEditable, pickOfferChanges, OfferLockUser } from '../common/offer-lock.util';
@@ -321,7 +321,7 @@ export class WbsNodesService {
             // @anchor wbs-flatten-insert-totals — nowy węzeł z ceną (wklejony klon, wartości domyślne
             // typu) rodzi się z policzonymi totalami, tak jak po `updateBudgetFields`. Bez tego
             // zostawały zera z @default(0): koszt jedn. i narzut były, koszt całościowy 0.
-            const isGroupItem = String(item.type || '').toLowerCase() === 'group';
+            const isGroupItem = !isCostNode(item.type);
             const totals = (!isGroupItem && unitCost !== undefined)
                 ? (() => {
                     const q = quantity ?? 1; // Prisma @default(1) dla quantity
@@ -666,7 +666,7 @@ export class WbsNodesService {
         // Przy zmianie typu na 'group' zerujemy pola cenowe, inaczej stara cena
         // (z czasu, gdy węzeł był typu work/material/…) dubluje się z sumą dzieci
         // w eksportach oferty/budżetu.
-        if (String(allowed.type || '').toLowerCase() === 'group') {
+        if (!isCostNode(allowed.type)) {
             allowed.unitCost = 0;
             allowed.totalCost = 0;
             allowed.margin = 0;
@@ -681,7 +681,7 @@ export class WbsNodesService {
                 select: { type: true, unitCost: true, unitPrice: true },
             });
             const typeAfter = String(allowed.type ?? cur?.type ?? '').toLowerCase();
-            if (cur && typeAfter !== 'group') {
+            if (cur && isCostNode(typeAfter)) {
                 const up = allowed.unitPrice !== undefined ? (parseFloat(allowed.unitPrice) || 0) : (cur.unitPrice ?? 0);
                 allowed.totalCost = (cur.unitCost ?? 0) * allowed.quantity;
                 allowed.totalPrice = up * allowed.quantity;
@@ -692,7 +692,7 @@ export class WbsNodesService {
         // idą też tędy (edycja z drzewa, drag paska Gantta), a zmiana typu na `group` po cichu
         // zeruje całą wycenę węzła — po akceptacji baseline wszystkie trzy drogi wymagają zgody.
         if (allowed.quantity !== undefined || allowed.unitPrice !== undefined
-            || String(allowed.type || '').toLowerCase() === 'group') {
+            || !isCostNode(allowed.type)) {
             const existing = await this.prisma.wbsNode.findUnique({
                 where: { id },
                 select: { nodeId: true, quantity: true, unitCost: true, margin: true, discount: true, unitPrice: true },
@@ -701,9 +701,9 @@ export class WbsNodesService {
                 const changes = pickOfferChanges(existing, allowed);
                 // Etykieta dla dziennika: sama zmiana typu na `group` nie jest polem cenowym,
                 // ale to ona zeruje wycenę węzła — bez tego wpis w AuditLog nie tłumaczyłby, skąd zera.
-                if (String(allowed.type || '').toLowerCase() === 'group'
+                if (!isCostNode(allowed.type)
                     && ((existing.unitCost ?? 0) !== 0 || (existing.unitPrice ?? 0) !== 0)) {
-                    changes.type = { old: 'leaf', new: 'group (zerowanie wyceny węzła)' } as any;
+                    changes.type = { old: 'leaf', new: `${String(allowed.type).toLowerCase()} (zerowanie wyceny węzła)` } as any;
                 }
                 await assertOfferEditable(this.prisma, {
                     processNodeId: existing.nodeId,
@@ -1002,7 +1002,7 @@ export class WbsNodesService {
             select: { id: true, type: true, quantity: true },
         });
         for (const d of desc) {
-            if (String(d.type || '').toLowerCase() === 'group') continue;
+            if (!isCostNode(d.type)) continue;
             await this.syncMaterialsFromWbsNode(d.id, d.quantity ?? 0).catch(() => {});
         }
     }
@@ -1099,7 +1099,7 @@ export class WbsNodesService {
         // Nawet jeśli caller przyśle pola cenowe, dla type='group' wymuszamy zera,
         // spójnie z updateNode i eksportami (localPriceOf zwraca 0 dla group).
         const effectiveType = String(data.type ?? existing.type ?? '').toLowerCase();
-        if (effectiveType === 'group') {
+        if (!isCostNode(effectiveType)) {
             unitCost = 0; margin = 0; discount = 0; unitPrice = 0;
         }
 
@@ -1133,7 +1133,7 @@ export class WbsNodesService {
         else await this.syncMaterialsFromWbsNode(id, quantity).catch(() => {});
 
         // Sync: WbsNode.unitCost → MaterialRequirement.budgetedPriceNetto → propozycja isOffer
-        if (sentPricing && effectiveType !== 'group') {
+        if (sentPricing && isCostNode(effectiveType)) {
             await this.syncOfferPriceFromWbsNode(id, unitCost).catch(() => {});
         }
 

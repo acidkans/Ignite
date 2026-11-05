@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, buildOwnerOptions, defaultLogisticianOwner, isRejectedPlanNode, groupQtyFactor, EXEC_STATUS_META, isTaskClosed } from './wbsConstants';
+import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, buildOwnerOptions, defaultLogisticianOwner, isRejectedPlanNode, groupQtyFactor, EXEC_STATUS_META, isTaskClosed, isCostNode } from './wbsConstants';
 import AutoResizeTextarea from './AutoResizeTextarea';
 import { newQaId, ensureQaIds, strategyHasTokens, strategyTokenIds, buildQaIndex, resolveStrategyText, pendingStrategyQuestions, splitStrategyTokens } from './strategyQuestions';
 import TaskModal from './TaskModal';
@@ -3075,7 +3075,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 {/* @anchor wbs-unit-price-input */}
                 {isManager && (
                     <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                        {(depth === 0 || node.type === 'group') ? (
+                        {(depth === 0 || !isCostNode(node)) ? (
                             // Suma gałęzi jest w kolumnie „Koszt całk.” — tu tylko koszt jednostkowy pozycji
                             <div className={`text-base w-full text-right text-gray-600 ${d.fieldClass}`}>—</div>
                         ) : (
@@ -3138,7 +3138,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 {/* @anchor wbs-margin-input */}
                 {isManager && (
                     <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                        {(depth === 0 || node.type === 'group') ? (
+                        {(depth === 0 || !isCostNode(node)) ? (
                             <div className={`text-base w-full text-right text-gray-600 ${d.fieldClass}`}>—</div>
                         ) : (
                             <div className="relative">

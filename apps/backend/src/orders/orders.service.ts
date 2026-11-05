@@ -3,7 +3,7 @@ import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditAction } from '../audit/audit.types';
 import { resolveVersionId } from '../common/version.util';
-import { isManagerRoles, isOpenLeafType } from '../common/leaf-types.util';
+import { isManagerRoles, isOpenLeafType, isCostNode } from '../common/leaf-types.util';
 import { isRejectedPlan, planStatusFromAny, rejectedNodeIds } from '../common/plan-status.util';
 import { VersioningService } from '../ai/versioning.service';
 import { groupMultiplierMap } from '../common/group-qty.util';
@@ -59,7 +59,7 @@ export class OrdersService {
             select: { id: true, parentId: true, type: true, status: true, unitCost: true, quantity: true },
         });
         const rejectedIds = rejectedNodeIds(allNodes);
-        const wbsLeaves = allNodes.filter((n) => String(n.type || '').toLowerCase() !== 'group');
+        const wbsLeaves = allNodes.filter((n) => isCostNode(n.type));
         // Pakiety (gałęzie grupujące z ilością) mnożą wartość swojego poddrzewa.
         const groupMult = groupMultiplierMap(allNodes);
         const value = (n: { id: string; unitCost: number | null; quantity: number | null }) =>
@@ -170,7 +170,7 @@ export class OrdersService {
 
             // 3. Wszystko, co w kopii zostało, jest z definicji zaakceptowane.
             const snapshotPositionIds = snapshotRows
-                .filter((r) => !removedIds.has(r.id) && r.parentId != null && String(r.type || '').toLowerCase() !== 'group')
+                .filter((r) => !removedIds.has(r.id) && r.parentId != null && isCostNode(r.type))
                 .map((r) => r.id);
             if (snapshotPositionIds.length) {
                 await tx.wbsNode.updateMany({
@@ -202,7 +202,7 @@ export class OrdersService {
             const positionsOf = <T extends { id: string; parentId: string | null; type: string | null; status: string | null }>(rows: T[]) => {
                 const rejected = rejectedNodeIds(rows);
                 return rows.filter((r) => r.parentId != null
-                    && String(r.type || '').toLowerCase() !== 'group'
+                    && isCostNode(r.type)
                     && !rejected.has(r.id));
             };
             const needsConfirm = (row: { status: string | null }) => planStatusFromAny(row.status) !== 'CONFIRMED';
@@ -363,7 +363,7 @@ export class OrdersService {
             // ta sama reguła co suma w `acceptPreview` i w Budżecie.
             const groupMult = groupMultiplierMap(rows);
             return rows.filter((r) => r.parentId != null
-                && String(r.type || '').toLowerCase() !== 'group'
+                && isCostNode(r.type)
                 && !rejected.has(r.id))
                 .map((r) => ({ ...r, quantity: (r.quantity ?? 0) * (groupMult.get(r.id) ?? 1) }));
         };
