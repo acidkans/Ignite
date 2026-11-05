@@ -81,7 +81,14 @@ export const isCostLeafType = (type: unknown) => ALL_LEAF_TYPES.includes(String(
 // budżetu, oferty, eksportów, materiałów). Lustro `NON_COST_NODE_TYPES` z `wbsConstants.js`,
 // pilnowane przez `test/typy-lustro.test.mjs`. Pusty typ celowo poza listą — gałąź bez typu
 // rozpoznaje się po dzieciach / `parentId`, jak dotąd.
-export const NON_COST_NODE_TYPES = ['group'];
+// @anchor milestone-type-back — typ węzła „kamień milowy”: niekosztowy, zawsze bez dzieci,
+// zawsze pod gałęzią (nigdy przedmiot projektu). Lustro `MILESTONE_TYPE` z `wbsConstants.js`.
+export const MILESTONE_TYPE = 'milestone';
+
+// @anchor is-milestone-type-back
+export const isMilestoneType = (type: unknown) => String(type || '').toLowerCase().trim() === MILESTONE_TYPE;
+
+export const NON_COST_NODE_TYPES = ['group', MILESTONE_TYPE];
 
 // @anchor is-cost-node-back — czy węzeł (typ) może nieść koszt i cenę. Zastępuje rozsiane
 // `type === 'group'` tam, gdzie znaczyło „czy to pozycja kosztowa”. Różni się od `isCostLeafType`:

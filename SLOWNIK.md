@@ -629,6 +629,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stan | leafDefaultsDraftMissing | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor leaf-defaults-draft-missing |
 | ui-input | leaf-defaults-distance-row | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor leaf-defaults-distance-row |
 | ui-input | wbs-unit-cost-input | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-unit-price-input |
+| ui-funkcja | zmiana typu na milestone (czyści jednostkę i cenę) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-type-milestone |
+| ui-input | daty milestone'a od/do (kolumny Ilość/Jednostka → ganttStart/ganttEnd) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-milestone-dates |
 | ui-stan | matReqByWbsId | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-req-by-wbs-id |
 | ui-stan | matReqByName | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-req-by-name |
 | ui-stan | matReqsLoaded | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-reqs-loaded |
@@ -799,6 +801,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | handleExportGanttExcel | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-gantt-excel |
 | ui-funkcja | appendGanttSheet | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor append-gantt-sheet |
 | ui-funkcja | buildExcelTimeline | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor build-excel-timeline |
+| ui-funkcja | dataLokalnaIso (RRRR-MM-DD w czasie lokalnym) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor data-lokalna-iso |
+| ui-funkcja | zakresDniDoGantt (od..ost → ganttStart/ganttEnd, koniec wyłączny) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor zakres-dni-do-gantt |
 | ui-funkcja | handleGanttDateChange | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-gantt-date-change |
 | ui-funkcja | handleMaterialNodeCreated | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-material-node-created |
 | ui-funkcja | handleHybridNodesDeleted | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-hybrid-nodes-deleted |
@@ -824,6 +828,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stala | TYPE_OPTIONS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor type-options |
 | ui-stala | NON_COST_NODE_TYPES (typy węzłów bez kosztu/ceny: group, od M1 milestone) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor non-cost-node-types |
 | ui-funkcja | isCostNode (czy węzeł/typ niesie koszt i cenę — zamiast rozsianych `=== 'group'`) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor is-cost-node |
+| ui-stala | MILESTONE_TYPE (typ węzła „kamień milowy”: niekosztowy, bez dzieci, pod gałęzią) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor milestone-type |
+| ui-funkcja | isMilestoneNode (czy węzeł/typ jest milestone'em) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor is-milestone-node |
 | ui-funkcja | wbsTypeFromAny | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor wbs-type-from-any |
 | ui-stala | BUDGET_TYPE_LABELS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor budget-type-labels |
 | ui-stala | UNIT_OPTIONS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor unit-options |
@@ -2036,6 +2042,12 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | back-funkcja | isCostLeafType | apps/backend/src/common/leaf-types.util.ts | @anchor is-cost-leaf-type |
 | back-stala | NON_COST_NODE_TYPES (lustro frontu) | apps/backend/src/common/leaf-types.util.ts | @anchor non-cost-node-types-back |
 | back-funkcja | isCostNode (czy typ węzła niesie koszt i cenę) | apps/backend/src/common/leaf-types.util.ts | @anchor is-cost-node-back |
+| back-stala | MILESTONE_TYPE (lustro frontu) | apps/backend/src/common/leaf-types.util.ts | @anchor milestone-type-back |
+| back-funkcja | isMilestoneType | apps/backend/src/common/leaf-types.util.ts | @anchor is-milestone-type-back |
+| back-stala | MILESTONE_ERR_CHILD / _HAS_KIDS / _ROOT (komunikaty 400 kształtu milestone'a) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor milestone-shape-errors |
+| back-funkcja | assertMilestoneTree (zapis drzewa: milestone bez dzieci i nie na najwyższym poziomie) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor assert-milestone-tree |
+| back-funkcja | createNode — blokada dziecka pod milestone'em i milestone'a bez rodzica | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-create-milestone-guard |
+| back-funkcja | updateNode — typ milestone tylko bez dzieci i z rodzicem; parentId nie pod milestone | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-update-milestone-guard |
 | back-funkcja | nodeHasOwnStatus (backend) | apps/backend/src/common/leaf-types.util.ts | @anchor backend-node-has-own-status |
 | back-funkcja | guard zapisu statusu gałęzi | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-node-branch-status-guard |
 | back-stala | PURCHASE_LEAF_TYPES (backend) | apps/backend/src/common/leaf-types.util.ts | @anchor purchase-leaf-types-backend |
@@ -2247,6 +2259,7 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-funkcja | markOutOfBaseline (pozycja dodana po akceptacji) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-out-of-baseline |
 | ui-stala | POZA_BASELINE_META (plakietka „Poza ofertą” w Statusie oferty) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-out-of-baseline-meta |
 | ui-funkcja | buildBranchIndex (branchId — najbliższa gałąź w górę) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-branch-index |
+| ui-funkcja | milestones w buildBranchIndex (milestone'y z branchId, nie gałęzie) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-branch-milestones |
 | ui-funkcja | axisStageOf (stan pozycji na osi) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-axis-stage |
 | ui-stala | rozkład osi w kwotach wyceny (pustyRozklad / zaokraglijRozklad) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-stage-dist |
 | ui-funkcja | axisDisplay (etykieta osi: bramka albo status) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-axis-display |

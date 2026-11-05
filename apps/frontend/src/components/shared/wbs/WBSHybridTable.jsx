@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, buildOwnerOptions, defaultLogisticianOwner, isRejectedPlanNode, groupQtyFactor, EXEC_STATUS_META, isTaskClosed, isCostNode } from './wbsConstants';
+import { TYPE_OPTIONS, TYPE_LABELS, fmtPLN, wbsTypeFromAny, parseLocaleNumber, usesWorkStatuses, WORK_STATUS_META, resolveStatusCode, defaultStatusForType, nodeHasOwnStatus, aggregateBranchStatus, PLAN_STATUS_META, planStatusFromAny, nodeCanHaveOwner, buildOwnerOptions, defaultLogisticianOwner, isRejectedPlanNode, groupQtyFactor, EXEC_STATUS_META, isTaskClosed, isCostNode, isMilestoneNode } from './wbsConstants';
+import { dataLokalnaIso, zakresDniDoGantt, inclusiveEnd } from '../harmonogram/harmonogramCzas';
 import AutoResizeTextarea from './AutoResizeTextarea';
 import { newQaId, ensureQaIds, strategyHasTokens, strategyTokenIds, buildQaIndex, resolveStrategyText, pendingStrategyQuestions, splitStrategyTokens } from './strategyQuestions';
 import TaskModal from './TaskModal';
@@ -2816,7 +2817,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         >
                             <Copy size={19} />
                         </button>
-                        {copyBuffer && !subtreeContains(copyBuffer.node, node.id) && copyBuffer.node.id !== node.id && (
+                        {copyBuffer && !isMilestoneNode(node) && !subtreeContains(copyBuffer.node, node.id) && copyBuffer.node.id !== node.id && (
                             <button
                                 onClick={e => {
                                     e.stopPropagation();
@@ -2832,7 +2833,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 <Clipboard size={19} />
                             </button>
                         )}
-                        {depth < MAX_DEPTH && (
+                        {depth < MAX_DEPTH && !isMilestoneNode(node) && (
                             <button
                                 onClick={e => handleAddChild(node.id, e)}
                                 className="p-1 hover:bg-white/10 rounded text-gray-500 hover:text-blue-400 transition-all"
@@ -2947,7 +2948,14 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 const isMaterial = newType === 'equipment' || newType === 'material';
                                 handleField(node.id, 'type', newType);
                                 onNodeFieldSave?.(node.id, 'type', newType);
-                                if (newType === 'group') {
+                                if (isMilestoneNode(newType)) {
+                                    // @anchor wbs-type-milestone — milestone nie ma ilości, jednostki ani ceny;
+                                    // backend zeruje wycenę (typ niekosztowy), tu czyścimy lokalnie.
+                                    handleField(node.id, 'unit', '');
+                                    onNodeFieldSave?.(node.id, 'unit', '');
+                                    handleField(node.id, 'unitCost', 0);
+                                    handleField(node.id, 'margin', 0);
+                                } else if (newType === 'group') {
                                     handleField(node.id, 'unit', 'pakiet');
                                     onNodeFieldSave?.(node.id, 'unit', 'pakiet');
                                     // Gałąź grupująca nie ma własnej ceny (wartość = suma dzieci) —
@@ -3010,15 +3018,33 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                         >
                             <option value="" className="bg-gray-900">— wybierz typ —</option>
                             {TYPE_OPTIONS.filter(o => o !== '').map(o => (
-                                <option key={o} value={o} className="bg-gray-900">{TYPE_LABELS[o] || o}</option>
+                                isMilestoneNode(o)
+                                    // Milestone to węzeł bez dzieci — gałęzi z pozycjami nie da się nim zrobić.
+                                    ? <option key={o} value={o} disabled={hasChildren} className="bg-gray-900">◆ {TYPE_LABELS[o]}{hasChildren ? ' (tylko bez pozycji pod spodem)' : ''}</option>
+                                    : <option key={o} value={o} className="bg-gray-900">{TYPE_LABELS[o] || o}</option>
                             ))}
                         </select>
                     )}
                 </td>
 
-                {/* Ilość */}
+                {/* Ilość — milestone zamiast ilości ma datę (od) */}
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                    {depth >= 1 && (
+                    {depth >= 1 && isMilestoneNode(node) && (
+                        // @anchor wbs-milestone-dates — daty milestone'a w `ganttStart/ganttEnd` (koniec wyłączny);
+                        // „od” w kolumnie Ilość, „do” (ostatni dzień, opcjonalnie) w kolumnie Jednostka.
+                        <input type="date" title="Milestone — dzień (początek okna)"
+                            value={dataLokalnaIso(node.ganttStart)}
+                            onChange={e => {
+                                if (!e.target.value) return;
+                                const ost = node.ganttEnd ? dataLokalnaIso(inclusiveEnd(node.ganttEnd)) : '';
+                                const z = zakresDniDoGantt(e.target.value, ost && ost >= e.target.value ? ost : '');
+                                handleField(node.id, 'ganttStart', z.ganttStart); handleField(node.id, 'ganttEnd', z.ganttEnd);
+                                onNodeFieldSave?.(node.id, 'ganttStart', z.ganttStart); onNodeFieldSave?.(node.id, 'ganttEnd', z.ganttEnd);
+                            }}
+                            className={`bg-black/40 border border-amber-500/30 rounded-lg px-1.5 py-0.5 text-sm w-full text-amber-200 focus:outline-none focus:border-amber-400 [color-scheme:dark] ${d.fieldClass}`}
+                            data-nav-row={node.id} data-nav-col="ilosc" />
+                    )}
+                    {depth >= 1 && !isMilestoneNode(node) && (
                         <div className="relative">
                             <input type="text" inputMode="decimal"
                                 value={qtyFocusId === node.id
@@ -3055,7 +3081,21 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                 {/* Jednostka */}
                 <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                     {depth >= 1 && (
-                        node.type === 'group' ? (
+                        isMilestoneNode(node) ? (
+                            <input type="date" title="Milestone — ostatni dzień okna (puste = jeden dzień)"
+                                disabled={!node.ganttStart}
+                                value={node.ganttStart && node.ganttEnd ? dataLokalnaIso(inclusiveEnd(node.ganttEnd)) : ''}
+                                min={dataLokalnaIso(node.ganttStart) || undefined}
+                                onChange={e => {
+                                    const od = dataLokalnaIso(node.ganttStart);
+                                    if (!od) return;
+                                    const z = zakresDniDoGantt(od, e.target.value);
+                                    handleField(node.id, 'ganttEnd', z.ganttEnd);
+                                    onNodeFieldSave?.(node.id, 'ganttEnd', z.ganttEnd);
+                                }}
+                                className={`bg-black/40 border border-amber-500/30 rounded-lg px-1.5 py-0.5 text-sm w-full text-amber-200 focus:outline-none focus:border-amber-400 disabled:opacity-40 [color-scheme:dark] ${d.fieldClass}`}
+                                data-nav-row={node.id} data-nav-col="jednostka" />
+                        ) : node.type === 'group' ? (
                             <div className={`text-base w-full ${d.fieldClass}`}>pakiet</div>
                         ) : (
                             <select value={node.unit || ''}

@@ -1,3 +1,21 @@
+## 2026-11-05 — feat(wbs): typ węzła milestone — niekosztowy, bez dzieci, daty od/do w tabeli WBS
+
+### architektura / API
+- `schema-pole` `WbsNode.type` — nowa wartość `milestone` (bez migracji: kolumna String). Milestone jest niekosztowy (`NON_COST_NODE_TYPES` = group, milestone): zero w wycenie, budżecie, ofercie, eksportach i materiałach; daty w `ganttStart/ganttEnd` (koniec wyłączny)
+- `back-endpoint` `POST /wbs-nodes`, `PATCH /wbs-nodes/:id`, `POST /wbs-nodes/unified/:nodeId` — 400, gdy pod milestone'em powstaje/trafia węzeł, gdy milestone ma dzieci albo stoi na najwyższym poziomie (`assertMilestoneTree`, `wbs-create-milestone-guard`, `wbs-update-milestone-guard`)
+- `ui-tabela` `WBSHybridTable` — typ „◆ Milestone” (wyłączony dla węzła z dziećmi); wiersz milestone'a zamiast ilości i jednostki ma daty od/do, bez „+ dziecko” i wklejania
+- `ui-funkcja` `axisStatusCodeOf` — milestone nie wchodzi do sumy statusów gałęzi
+- `ui-funkcja` `buildBranchIndex` — milestone nie jest gałęzią; osobna lista `milestones` z `branchId`
+- typ milestone ukryty w selekcie typu tabeli Budżet i w katalogu materiałów
+
+### słownik
+- dodano `milestone-type`, `is-milestone-node`, `milestone-type-back`, `is-milestone-type-back`, `milestone-shape-errors`, `assert-milestone-tree`, `wbs-create-milestone-guard`, `wbs-update-milestone-guard`, `wbs-type-milestone`, `wbs-milestone-dates`, `realization-branch-milestones`, `data-lokalna-iso`, `zakres-dni-do-gantt`
+- dodano (M0, refaktor) `non-cost-node-types`, `is-cost-node`, `non-cost-node-types-back`, `is-cost-node-back`
+
+### wytyczne
+- `ui-funkcja` `isCostNode` / `back-funkcja` `isCostNode` — „czy to pozycja kosztowa” sprawdzamy wyłącznie tym helperem, nie `type === 'group'`; jawne `group` tylko tam, gdzie chodzi o pakiet (mnożnik ilości). Listy front/backend pilnuje `test/typy-lustro.test.mjs`
+- `schema-pole` `WbsNode.type` = `milestone` — zawsze węzeł bez dzieci, dziecko gałęzi; milestone pod przedmiotem projektu = milestone całego przedmiotu
+
 ## 2026-11-05 — feat(harmonogram): jeden Harmonogram zamiast Gantta i Lookahead — wygląd Lookahead, zakresy 14 dni / miesiąc / całość, dni wolne, edycja dat, eksporty
 
 ### architektura / API

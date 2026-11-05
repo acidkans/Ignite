@@ -269,6 +269,25 @@ export const buildTasksFromTree = (items, projectStart, projectName, overrides, 
 // wykluczające (dzień po ostatnim), więc do wyświetlenia odejmujemy 1 dzień.
 export const inclusiveEnd = (d) => new Date(new Date(d).getTime() - DAY_MS);
 
+// @anchor data-lokalna-iso — 'RRRR-MM-DD' w czasie lokalnym (pole <input type="date">); '' dla braku daty.
+export const dataLokalnaIso = (d) => {
+    if (!d || !isValidGanttDate(d)) return '';
+    const x = new Date(d);
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+};
+
+// @anchor zakres-dni-do-gantt — dni od..ost (włącznie, 'RRRR-MM-DD') → `{ ganttStart, ganttEnd }`
+// w konwencji Harmonogramu: lokalna północ, koniec wyłączny. Pusty/wcześniejszy `ost` = jeden dzień.
+export const zakresDniDoGantt = (od, ost) => {
+    const [y, m, d] = String(od).split('-').map(Number);
+    const s = new Date(y, m - 1, d);
+    let e = s;
+    if (ost) { const [y2, m2, d2] = String(ost).split('-').map(Number); e = new Date(y2, m2 - 1, d2); }
+    if (e < s) e = s;
+    const koniec = new Date(e); koniec.setDate(koniec.getDate() + 1);
+    return { ganttStart: s.toISOString(), ganttEnd: koniec.toISOString() };
+};
+
 // @anchor gantt-daty-wezlow — daty pasków tak, jak je rysuje Gantt: zapisane `ganttStart/End`
 // albo domyślne (start projektu + czas trwania), których Gantt NIE zapisuje do bazy, dopóki
 // ktoś nie ruszy paska. Bez tego Realizacja widziała tylko ręcznie poprawione paski.

@@ -2,12 +2,28 @@ import { randomBytes } from 'crypto';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
-import { isClosedLeafType, isManagerRoles, nodeHasOwnStatus, isPurchaseLeafType, isCostNode } from '../common/leaf-types.util';
+import { isClosedLeafType, isManagerRoles, nodeHasOwnStatus, isPurchaseLeafType, isCostNode, isMilestoneType } from '../common/leaf-types.util';
 import { defaultLogisticianOwner } from '../common/default-logistician.util';
 import { resolveVersionId } from '../common/version.util';
 import { assertOfferEditable, pickOfferChanges, OfferLockUser } from '../common/offer-lock.util';
 import { ExtraOrderNotifierService, EXTRA_ORDER_STATUS } from '../notifications/extra-order-notifier.service';
 import { groupMultiplierMap } from '../common/group-qty.util';
+
+// @anchor milestone-shape-errors — komunikaty walidacji kształtu milestone'a (wspólne dla
+// tworzenia węzła, PATCH i zapisu całego drzewa).
+const MILESTONE_ERR_CHILD = "Milestone nie może mieć pozycji pod sobą — dodaj ją do gałęzi obok milestone'a.";
+const MILESTONE_ERR_HAS_KIDS = "Węzeł z pozycjami pod sobą nie może być milestone'em — milestone to osobny węzeł bez dzieci.";
+const MILESTONE_ERR_ROOT = "Przedmiot projektu nie może być milestone'em — dodaj milestone pod nim.";
+
+// @anchor assert-milestone-tree — milestone zawsze bez dzieci i nigdy na najwyższym poziomie.
+// Sprawdza płaską listę wierszy drzewa (zapis całego drzewa: `saveTree`).
+function assertMilestoneTree(rows: { id: string; parentId: string | null; type?: string | null }[]) {
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    for (const r of rows) {
+        if (isMilestoneType(r.type) && !r.parentId) throw new BadRequestException(MILESTONE_ERR_ROOT);
+        if (r.parentId && isMilestoneType(byId.get(r.parentId)?.type)) throw new BadRequestException(MILESTONE_ERR_CHILD);
+    }
+}
 
 // @anchor qa-pair
 export interface QaPair {
@@ -158,6 +174,7 @@ export class WbsNodesService {
 
             // Zbierz IDs z nowego drzewa
             const newRows = this.flattenForInsert(items, nodeId, vId, null);
+            assertMilestoneTree(newRows);
             const newIds = new Set(newRows.map(r => r.id));
 
             // Usuń węzły które nie istnieją w nowym drzewie.
@@ -593,6 +610,14 @@ export class WbsNodesService {
     async createNode(data: { nodeId: string; parentId?: string; versionId?: string; name: string; type?: string; tags?: string[] }) {
         const vId = await resolveVersionId(this.prisma, data.nodeId, data.versionId);
 
+        // @anchor wbs-create-milestone-guard — pod milestone'em nic nie wisi, a sam milestone
+        // nie bywa przedmiotem projektu.
+        if (isMilestoneType(data.type) && !data.parentId) throw new BadRequestException(MILESTONE_ERR_ROOT);
+        if (data.parentId) {
+            const parent = await this.prisma.wbsNode.findUnique({ where: { id: data.parentId }, select: { type: true } });
+            if (isMilestoneType(parent?.type)) throw new BadRequestException(MILESTONE_ERR_CHILD);
+        }
+
         // Oblicz sortOrder — ostatni wśród rodzeństwa
         const siblings = await this.prisma.wbsNode.findMany({
             where: { nodeId: data.nodeId, versionId: vId, parentId: data.parentId || null },
@@ -657,6 +682,24 @@ export class WbsNodesService {
             allowed.tags = Array.isArray(data.tags) && data.tags.length > 0
                 ? JSON.stringify(data.tags)
                 : null;
+        }
+        // @anchor wbs-update-milestone-guard — zmiana typu na milestone tylko dla węzła bez dzieci
+        // i nie na najwyższym poziomie; przeniesienie (parentId) pod milestone zabronione.
+        if (isMilestoneType(allowed.type) || allowed.parentId !== undefined) {
+            const cur = await this.prisma.wbsNode.findUnique({
+                where: { id },
+                select: { parentId: true, type: true, _count: { select: { children: true } } },
+            });
+            const typeAfter = allowed.type !== undefined ? allowed.type : cur?.type;
+            const parentAfter = allowed.parentId !== undefined ? allowed.parentId : cur?.parentId;
+            if (isMilestoneType(typeAfter)) {
+                if (!parentAfter) throw new BadRequestException(MILESTONE_ERR_ROOT);
+                if ((cur?._count.children ?? 0) > 0) throw new BadRequestException(MILESTONE_ERR_HAS_KIDS);
+            }
+            if (allowed.parentId) {
+                const parent = await this.prisma.wbsNode.findUnique({ where: { id: allowed.parentId }, select: { type: true } });
+                if (isMilestoneType(parent?.type)) throw new BadRequestException(MILESTONE_ERR_CHILD);
+            }
         }
         if (data.qa !== undefined) {
             const cleaned = Array.isArray(data.qa) ? data.qa.map(cleanQaPair) : [];

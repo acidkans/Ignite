@@ -134,7 +134,8 @@ function MaterialUsagePanel({ manufacturer, model }) {
     );
 }
 
-const TYPE_OPTIONS = WBS_TYPE_OPTIONS.filter(Boolean).map(value => ({ value, label: TYPE_LABELS[value] || value }));
+// Katalog to produkty — milestone (typ węzła WBS) nie ma tu sensu.
+const TYPE_OPTIONS = WBS_TYPE_OPTIONS.filter(t => t && t !== 'milestone').map(value => ({ value, label: TYPE_LABELS[value] || value }));
 
 // @anchor material-database-inline-cell
 function InlineCell({ value, type = 'text', options, onSave, onCancel, className = '' }) {

@@ -38,7 +38,8 @@ eq('lista typów liści front = backend', [...LEAF_TYPE_OPTIONS].sort(), [...bac
 // Typy niekosztowe (`isCostNode`) — ta sama lista po obu stronach; front nie liczy ceny tam,
 // gdzie backend jej nie zeruje, i odwrotnie.
 const backendNonCost = util.match(/NON_COST_NODE_TYPES = \[([^\]]*)\]/)[1]
-    .split(',').map(s => s.trim().replace(/'/g, '')).filter(Boolean);
+    .split(',').map(s => s.trim().replace(/'/g, '')).filter(Boolean)
+    .map(s => s === 'MILESTONE_TYPE' ? util.match(/MILESTONE_TYPE = '([^']+)'/)[1] : s);
 eq('typy niekosztowe front = backend', [...NON_COST_NODE_TYPES].sort(), [...backendNonCost].sort());
 eq('typ niekosztowy nie jest typem liścia', NON_COST_NODE_TYPES.some(t => LEAF_TYPE_OPTIONS.includes(t)), false);
 eq('isCostNode: group = niekosztowy', isCostNode('group'), false);
@@ -63,6 +64,10 @@ for (const w of WEJSCIA) {
 // nie ma sensu — katalog nie sprzedaje „grupujących".
 eq('group jest typem węzła WBS (front)', wbsTypeFromAny('group'), 'group');
 eq('group NIE jest typem pozycji kosztowej (backend)', backendNormalize('group'), '');
+// Milestone — ten sam celowy wyjątek co group: typ WĘZŁA, nie pozycji kosztowej.
+eq('milestone jest typem węzła WBS (front)', wbsTypeFromAny('milestone'), 'milestone');
+eq('milestone NIE jest typem pozycji kosztowej (backend)', backendNormalize('milestone'), '');
+eq('isCostNode: milestone = niekosztowy', isCostNode('milestone'), false);
 
 // Mapowania, na których stoi migracja katalogu (test/migracja-typy-katalogu.sql)
 eq('DEVICE → equipment', backendNormalize('DEVICE'), 'equipment');
