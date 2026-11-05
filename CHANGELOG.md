@@ -1,3 +1,17 @@
+## 2026-11-05 — feat(harmonogram): milestone jako romb na Harmonogramie, w wierszu gałęzi Realizacji i w eksportach (M2)
+
+### architektura / API
+- `ui-funkcja` `buildTasksFromTree` — milestone jest zadaniem typu `milestone`: zapisane okno `ganttStart..ganttEnd` albo 1 dzień od domyślnego startu; nie zmienia ilości pozycji (`_canUpdateDuration` = false). `ganttDatesByNode` daje więc milestone'om `planOd/planDo` także w Realizacji
+- `ui-sekcja` `Harmonogram` — fioletowy romb na terminie (ostatni dzień okna) + przerywane okno, gdy milestone trwa kilka dni; przeciąganie rombu przesuwa całość, krawędzie okna je zmieniają (1-dniowy romb bez rozciągania); legenda; klik po przeciągnięciu nie przenosi już startu (`poDragu`)
+- `ui-sekcja` `RealizacjaPanel` — milestone'y gałęzi w wierszu gałęzi Harmonogramu (romb + nazwa) i Macierzy (chip); klik → szczegóły milestone'a (wątek z @wzmiankami, termin, status, Q&A, blokery); sygnały i wątek gałęzi obejmują jej milestone'y
+- eksport Harmonogramu: Excel — wiersz `◆ nazwa`, dni „—”, okno na osi fioletowe (`FILL_MILESTONE`), cash flow pomija milestone'y jak dotąd; PDF — romb z oknem zamiast paska, dni „—”
+
+### słownik
+- dodano `is-milestone-type`, `harmonogram-przesun-milestone`, `harmonogram-rysuj-milestone`, `harmonogram-milestony-galezi`, `realizacja-milestony`, `realizacja-milestony-chipy`, `realizacja-szczegoly-milestone`
+
+### wytyczne
+- `ui-funkcja` `przesunMilestone` — termin milestone'a jest kalendarzowy: okno jedzie o tyle dni kalendarzowych, ile przeciągnięto; tylko 1-dniowy romb dociąga do dnia roboczego
+
 ## 2026-11-05 — feat(wbs): typ węzła milestone — niekosztowy, bez dzieci, daty od/do w tabeli WBS
 
 ### architektura / API

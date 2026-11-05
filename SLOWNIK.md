@@ -803,6 +803,13 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | buildExcelTimeline | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor build-excel-timeline |
 | ui-funkcja | dataLokalnaIso (RRRR-MM-DD w czasie lokalnym) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor data-lokalna-iso |
 | ui-funkcja | zakresDniDoGantt (od..ost → ganttStart/ganttEnd, koniec wyłączny) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor zakres-dni-do-gantt |
+| ui-funkcja | isMilestoneType (milestone bez importu z wbsConstants — moduł czysty, testowalny w Node) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor is-milestone-type |
+| ui-funkcja | przesunMilestone (przesunięcie rombu/okna: okno kalendarzowo, 1-dniowy romb na dzień roboczy) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-przesun-milestone |
+| ui-funkcja | rysujMs (romb milestone'a na terminie + okno planOd..planDo, przeciąganie) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-rysuj-milestone |
+| ui-propsy | grupy[].milestony (milestone'y gałęzi rysowane w wierszu gałęzi) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-milestony-galezi |
+| ui-stala | msById / nazwyWezlow / milestonyPoddrzewa (milestone'y zamówienia w Realizacji) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-milestony |
+| ui-sekcja | MilestonyChipy (milestone'y w wierszu gałęzi Macierzy) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-milestony-chipy |
+| ui-sekcja | SzczegolyMilestone (wątek · termin, status, Q&A · blokery) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szczegoly-milestone |
 | ui-funkcja | handleGanttDateChange | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-gantt-date-change |
 | ui-funkcja | handleMaterialNodeCreated | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-material-node-created |
 | ui-funkcja | handleHybridNodesDeleted | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-hybrid-nodes-deleted |

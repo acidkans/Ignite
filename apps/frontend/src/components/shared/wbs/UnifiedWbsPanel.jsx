@@ -2488,6 +2488,7 @@ ${ganttSectionHtml}
         const FILL_WEEKEND = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E5E9' } };
         const FILL_START = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF22C55E' } };
         const FILL_END = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEF4444' } };
+        const FILL_MILESTONE = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7C3AED' } };
 
         const hdr = sheet.getRow(1);
         hdr.height = tl.mode === 'Day' ? 56 : 20;
@@ -2529,7 +2530,7 @@ ${ganttSectionHtml}
             const cells = tl.rowCells[ri] || [];
             tl.columns.forEach((c, i) => {
                 const cell = row.getCell(TL_OFFSET + 1 + i);
-                if (cells[i]) cell.fill = FILL_TASK;
+                if (cells[i]) cell.fill = r.milestone ? FILL_MILESTONE : FILL_TASK;
                 else if (c.nonWorking) cell.fill = FILL_WEEKEND;
             });
         });

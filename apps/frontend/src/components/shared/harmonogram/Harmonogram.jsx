@@ -9,7 +9,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
     DAY_MS, isNonWorkingDay, isPolishHoliday, advanceToWorkingDay, retreatToWorkingDay, addWorkingDays,
-    buildExcelTimeline, toExcelUtcDate,
+    buildExcelTimeline, toExcelUtcDate, isMilestoneType,
 } from './harmonogramCzas';
 import './harmonogram.css';
 
@@ -65,6 +65,24 @@ export function przesunPasek(l, tryb, delta, wow) {
     }
     return { od, ost };
 }
+
+// @anchor harmonogram-przesun-milestone — przesunięcie milestone'a (romb albo okno): okno jedzie
+// w dniach kalendarzowych (termin to termin), 1-dniowy romb ląduje na dniu roboczym w stronę ruchu.
+// Rozciąganie (l/r) tylko dla okna — 1-dniowy romb nie ma krawędzi.
+export function przesunMilestone(l, tryb, delta, wow) {
+    let od = dzien0(l.planOd), ost = dzien0(l.planDo);
+    const dl = Math.max(0, roznicaDni(ost, od));
+    if (tryb === 'move') {
+        od = dodajDni(od, delta);
+        if (!wow && dl === 0) od = delta < 0 ? retreatToWorkingDay(od) : advanceToWorkingDay(od);
+        return { od, ost: dodajDni(od, dl) };
+    }
+    if (tryb === 'l') { od = dodajDni(od, delta); if (od > ost) od = ost; }
+    else { ost = dodajDni(ost, delta); if (ost < od) ost = od; }
+    return { od, ost };
+}
+const jestMs = (l) => isMilestoneType(l?.type);
+const przesunWg = (l, tryb, delta, wow) => (jestMs(l) ? przesunMilestone(l, tryb, delta, wow) : przesunPasek(l, tryb, delta, wow));
 
 const ZAKRESY = [['14', '14 dni'], ['miesiac', 'Miesiąc'], ['calosc', 'Całość']];
 const czytaj = (k, d) => { try { return (k && sessionStorage.getItem(k)) || d; } catch { return d; } };
@@ -130,6 +148,7 @@ export default function Harmonogram({
                 if (maPasek(l)) { wez(l.planOd); wez(l.planDo); }
                 for (const e of dostawyOf(l)) wez(e.entryDate);
             }
+            for (const g of grupy) for (const m of g.milestony || []) { wez(m.planOd); wez(m.planDo); }
             wez(projectStart); wez(projectEnd);
             if (!lo) { lo = dzis; hi = dodajDni(dzis, 30); }
             const s = dodajDni(lo, -2);
@@ -137,7 +156,7 @@ export default function Harmonogram({
             return { start: s, ileDni: n, dzienPx: Math.max(1.2, Math.min(28, szerOsi / n)) };
         }
         return { start: dodajDni(dzis, przesun), ileDni: 14, dzienPx: Math.max(44, szerOsi / 14) };
-    }, [zakres, przesun, dzis, wszystkiePozycje, maPasek, dostawyOf, projectStart, projectEnd, szerOsi]);
+    }, [zakres, przesun, dzis, wszystkiePozycje, grupy, maPasek, dostawyOf, projectStart, projectEnd, szerOsi]);
 
     const dni = useMemo(() => Array.from({ length: ileDni }, (_, i) => dodajDni(start, i)), [start, ileDni]);
     const szer = ileDni * dzienPx;
@@ -150,6 +169,8 @@ export default function Harmonogram({
     const [drag, setDrag] = useState(null);
     const dragRef = useRef(null);
     dragRef.current = drag;
+    // Klik po puszczeniu przeciągniętego rombu nie otwiera szczegółów.
+    const poDragu = useRef(false);
 
     const zapisz = useCallback(async (l, galazId, od, ost, tryb) => {
         if (!savePlanDates) return;
@@ -184,7 +205,8 @@ export default function Harmonogram({
             const d = dragRef.current;
             setDrag(null);
             if (!d?.delta) return;
-            const { od, ost } = przesunPasek(d.l, d.tryb, d.delta, wowOf(d.galazId));
+            poDragu.current = true; setTimeout(() => { poDragu.current = false; }, 0);
+            const { od, ost } = przesunWg(d.l, d.tryb, d.delta, wowOf(d.galazId));
             zapisz(d.l, d.galazId, od, ost, d.tryb);
         };
         window.addEventListener('pointermove', ruch);
@@ -199,13 +221,13 @@ export default function Harmonogram({
     };
     // Klik w pusty dzień toru = start robót tego dnia, dni robocze bez zmian.
     const klikToru = (e, l, galazId) => {
-        if (drag) return;
+        if (drag || poDragu.current) return;
         const r = e.currentTarget.getBoundingClientRect();
         const i = Math.floor((e.clientX - r.left) / dzienPx);
         const dzien = dodajDni(start, i);
         const delta = roznicaDni(dzien, l.planOd);
         if (!delta) return;
-        const { od, ost } = przesunPasek(l, 'move', delta, wowOf(galazId));
+        const { od, ost } = przesunWg(l, 'move', delta, wowOf(galazId));
         zapisz(l, galazId, od, ost, 'move');
     };
     const zapiszZPola = (l, galazId, pole, v) => {
@@ -218,10 +240,41 @@ export default function Harmonogram({
         zapisz(l, galazId, od, ost, pole === 'od' ? 'l' : 'r');
     };
 
+    // @anchor harmonogram-rysuj-milestone — romb (termin = ostatni dzień okna) i ewentualne okno
+    // `planOd..planDo`; przeciąganie rombu przesuwa całość, krawędzie okna je zmieniają.
+    const rysujMs = (l, galazId, edyt, wGrupie = false) => {
+        const w = wowOf(galazId);
+        const dd = drag?.l.id === l.id ? drag : null;
+        let a = idx(l.planOd), b = idx(l.planDo);
+        if (dd && dd.delta) { const p = przesunMilestone(l, dd.tryb, dd.delta, w); a = idx(p.od); b = idx(p.ost); }
+        if (a === null || b === null || b < 0 || a >= ileDni) return null;
+        const okno = b > a;
+        const tytul = `◆ ${l.name}\nMilestone ${dzienMies(l.planOd)}${okno ? `–${dzienMies(l.planDo)}` : ''}${l._msOpis ? ` · ${l._msOpis}` : ''}${edyt ? '\nPrzeciągnij romb, by przesunąć' : ''}${onOtworz ? '\nKlik otwiera szczegóły' : ''}`;
+        const a0 = Math.max(a, 0), b0 = Math.min(b, ileDni - 1);
+        return (
+            <React.Fragment key={l.id}>
+                {okno && (
+                    <div className={`ms-okno${wGrupie ? ' g' : ''}${dd ? ' ciagniety' : ''}`} style={{ left: a0 * dzienPx + 1, width: Math.max(4, (b0 - a0 + 1) * dzienPx - 2) }} title={tytul}
+                        onClick={e => e.stopPropagation()}>
+                        {edyt && a >= 0 && <span className="uchwyt l" onPointerDown={e => zacznij(e, l, galazId, 'l')} />}
+                        {edyt && b < ileDni && <span className="uchwyt r" onPointerDown={e => zacznij(e, l, galazId, 'r')} />}
+                    </div>
+                )}
+                {b < ileDni && (
+                    <span className={`ms${wGrupie ? ' g' : ''}${edyt ? ' drag' : ''}${dd ? ' ciagniety' : ''}${l._msKonflikt ? ' late' : ''}`}
+                        style={{ left: b * dzienPx + dzienPx / 2 - 7 }} title={tytul}
+                        onPointerDown={edyt ? e => zacznij(e, l, galazId, 'move') : undefined}
+                        onClick={e => { e.stopPropagation(); if (!poDragu.current && onOtworz) onOtworz(l.id); }} />
+                )}
+                {wGrupie && b < ileDni && <span className="ms-tx" style={{ left: b * dzienPx + dzienPx / 2 + 10 }}>{nazwa(l)}</span>}
+            </React.Fragment>
+        );
+    };
+
     // ─── wiersze ────────────────────────────────────────────────────────────
     const wiersze = useMemo(() => {
         const kolidujace = new Set((kolizje || []).map(k => k.id));
-        return grupy.map(({ galaz, liscie }) => {
+        return grupy.map(({ galaz, liscie, milestony: ms = [] }) => {
             const pozycje = liscie.map(l => {
                 const pasek = maPasek(l) && !!l.planOd && !!l.planDo;
                 const d0 = pasek ? idx(l.planOd) : null;
@@ -236,8 +289,10 @@ export default function Harmonogram({
                 }
                 return { l, pasek, d0, d1, dostawy: [...dostawy.entries()] };
             }).filter(p => (p.pasek && p.d1 >= 0 && p.d0 < ileDni) || p.dostawy.length || (wszystkie && p.pasek));
-            return { galaz, pozycje };
-        }).filter(g => g.pozycje.length);
+            // @anchor harmonogram-milestony-galezi — milestone'y gałęzi (Realizacja) w wierszu gałęzi.
+            const milestony = ms.filter(m => m.planOd && m.planDo);
+            return { galaz, pozycje, milestony };
+        }).filter(g => g.pozycje.length || g.milestony.length);
     }, [grupy, maPasek, idx, ileDni, kolizje, wszystkie, pokazDostawy, dostawyOf]);
 
     // Dni wolne i miesiące osi (nagłówek + tło).
@@ -260,13 +315,13 @@ export default function Harmonogram({
     // @anchor harmonogram-excel-data — ten sam kształt co dawne `getExcelData` Gantta (arkusz „Harmonogram").
     const getExcelData = useCallback(() => {
         const zadania = wszystkiePozycje.filter(({ l }) => maPasek(l) && l.planOd && l.planDo)
-            .map(({ l, galazId }) => ({ id: l.id, type: 'task', name: nazwa(l), start: dzien0(l.planOd), end: dodajDni(l.planDo, 1), galazId }));
+            .map(({ l, galazId }) => ({ id: l.id, type: jestMs(l) ? 'milestone' : 'task', name: `${jestMs(l) ? '◆ ' : ''}${nazwa(l)}`, start: dzien0(l.planOd), end: dodajDni(l.planDo, 1), galazId }));
         const mapaGalezi = Object.fromEntries(zadania.map(t => [t.id, t.galazId]));
         const rows = zadania.map(t => {
             const w = wowOf(t.galazId);
             return {
                 id: t.id, name: t.name, start: toExcelUtcDate(t.start), end: toExcelUtcDate(dodajDni(t.end, -1)),
-                days: dniRobocze(t.start, dodajDni(t.end, -1), w), milestone: false, wow: w,
+                days: t.type === 'milestone' ? 0 : dniRobocze(t.start, dodajDni(t.end, -1), w), milestone: t.type === 'milestone', wow: w,
             };
         });
         let span = 0;
@@ -312,6 +367,13 @@ export default function Harmonogram({
             const w = wowOf(g.galaz?.id);
             for (const l of poz) {
                 const a = roznicaDni(l.planOd, s), b = roznicaDni(l.planDo, s);
+                if (jestMs(l)) {
+                    // Romb na ostatnim dniu okna + jasne okno, gdy milestone trwa kilka dni.
+                    const okno = b > a ? `<div style="position:absolute;top:8px;height:8px;left:${a * px}px;width:${(b - a + 1) * px}px;background:#ede9fe;border:1px dashed #7c3aed;border-radius:2px"></div>` : '';
+                    const romb = `<div style="position:absolute;top:7px;width:10px;height:10px;left:${b * px + px / 2 - 5}px;background:#7c3aed;transform:rotate(45deg)"></div>`;
+                    body += wiersz(`&#9670; ${esc(nazwa(l))}`, dzienMies(l.planOd), dzienMies(l.planDo), '—', okno + romb, false);
+                    continue;
+                }
                 const bar = `<div style="position:absolute;top:6px;height:12px;left:${a * px}px;width:${Math.max(px, (b - a + 1) * px)}px;background:#1d4ed8;border-radius:2px"></div>`;
                 body += wiersz(esc(nazwa(l)), dzienMies(l.planOd), dzienMies(l.planDo), dniRobocze(l.planOd, l.planDo, w), bar, false);
             }
@@ -357,12 +419,19 @@ export default function Harmonogram({
                         {/* lewa kolumna: nazwy */}
                         <div className="hg-lewa">
                             <div className="hg-head-l" style={{ height: HEAD_H }}>Pozycja{gotowosc ? ' · gotowość' : ''}</div>
-                            {wiersze.map(({ galaz, pozycje }) => (
+                            {wiersze.map(({ galaz, pozycje, milestony }) => (
                                 <React.Fragment key={galaz?.id || '_wprost'}>
+                                    {!galaz && milestony.length > 0 && (
+                                        <div className="hg-grp" style={{ height: GRP_H }}>
+                                            <span className="n">Ta gałąź</span>
+                                            <span className="mono ms-l"> · ◆ {milestony.length}</span>
+                                        </div>
+                                    )}
                                     {galaz && (
                                         <div className="hg-grp" style={{ height: GRP_H }} title={galaz.name}>
                                             {onZoom ? <button className="n" onClick={() => onZoom(galaz.id)}>{nazwa(galaz)}</button> : <span className="n">{nazwa(galaz)}</span>}
                                             <span className="mono"> · {pozycje.length}</span>
+                                            {milestony.length > 0 && <span className="mono ms-l" title={milestony.map(m => `◆ ${m.name} ${dzienMies(m.planOd)}`).join('\n')}> · ◆ {milestony.length}</span>}
                                             {canEdit && savePlanDates && (
                                                 <button className={`wow${wow[galaz.id] ? ' on' : ''}`} onClick={() => setWow(p => ({ ...p, [galaz.id]: !p[galaz.id] }))}
                                                     title="Czy ta gałąź pracuje w weekendy i święta (wpływa na przesuwanie pasków i liczbę dni roboczych)">
@@ -377,11 +446,13 @@ export default function Harmonogram({
                                         const ed = edycjaDat === l.id;
                                         return (
                                             <div key={l.id} className="hg-lbl" style={{ height: ROW_H, paddingLeft: 8 + (pokazWciecia ? Math.max(0, (l.depth || 0) - 1) * 10 : 0) }}>
-                                                <span className={`t${onOtworz ? ' klik' : ''}`} title={l.name} onClick={onOtworz ? () => onOtworz(l.id) : undefined}>{nazwa(l)}</span>
+                                                <span className={`t${onOtworz ? ' klik' : ''}${jestMs(l) ? ' ms-n' : ''}`} title={l.name} onClick={onOtworz ? () => onOtworz(l.id) : undefined}>{jestMs(l) ? '◆ ' : ''}{nazwa(l)}</span>
                                                 <span className="m">
                                                     {pasek && !ed && (
                                                         <span className={`daty${edyt ? ' ed' : ''}`} onClick={edyt ? () => setEdycjaDat(l.id) : undefined} title={edyt ? 'Zmień daty' : undefined}>
-                                                            {dzienMies(l.planOd)}–{dzienMies(l.planDo)} · {dniRobocze(l.planOd, l.planDo, w)} d.
+                                                            {jestMs(l)
+                                                                ? `milestone ${dzienMies(l.planOd)}${+dzien0(l.planDo) !== +dzien0(l.planOd) ? `–${dzienMies(l.planDo)}` : ''}`
+                                                                : `${dzienMies(l.planOd)}–${dzienMies(l.planDo)} · ${dniRobocze(l.planOd, l.planDo, w)} d.`}
                                                         </span>
                                                     )}
                                                     {pasek && ed && (
@@ -426,9 +497,13 @@ export default function Harmonogram({
                                     {psIdx !== null && psIdx >= 0 && psIdx < ileDni && <div className="mark ps" style={{ left: psIdx * dzienPx + dzienPx / 2 }} title={`Start projektu ${dzienMies(projectStart)}`} />}
                                     {peIdx !== null && peIdx >= 0 && peIdx < ileDni && <div className="mark pe" style={{ left: peIdx * dzienPx + dzienPx / 2 }} title={`Koniec projektu ${dzienMies(projectEnd)}`} />}
                                 </div>
-                                {wiersze.map(({ galaz, pozycje }) => (
+                                {wiersze.map(({ galaz, pozycje, milestony }) => (
                                     <React.Fragment key={galaz?.id || '_wprost'}>
-                                        {galaz && <div className="hg-grp-t" style={{ height: GRP_H }} />}
+                                        {(galaz || milestony.length > 0) && (
+                                            <div className="hg-grp-t" style={{ height: GRP_H }}>
+                                                {milestony.map(m => rysujMs(m, galaz?.id || null, canEdit && !!savePlanDates && !opisPaska(m).zablokowany, true))}
+                                            </div>
+                                        )}
                                         {pozycje.map(({ l, pasek, d0: r0, d1: r1, dostawy }) => {
                                             const galazId = galaz?.id || null;
                                             const w = wowOf(galazId);
@@ -451,7 +526,8 @@ export default function Harmonogram({
                                             return (
                                                 <div key={l.id} className={`hg-tor${edyt ? ' plan' : ''}`} style={{ height: ROW_H }}
                                                     onClick={edyt ? (e) => klikToru(e, l, galazId) : undefined}>
-                                                    {widoczny && (
+                                                    {jestMs(l) && pasek && rysujMs(l, galazId, edyt)}
+                                                    {widoczny && !jestMs(l) && (
                                                         <div className={`bar ${opis.klasa}${d0 < 0 ? ' cut-l' : ''}${d1 >= ileDni ? ' cut-r' : ''}${edyt ? ' drag' : ''}${dd ? ' ciagniety' : ''}`}
                                                             style={{ left: od * dzienPx + 2, width: Math.max(6, dl * dzienPx - 4) }}
                                                             onPointerDown={edyt ? e => zacznij(e, l, galazId, 'move') : undefined}
@@ -463,7 +539,7 @@ export default function Harmonogram({
                                                             {edyt && d1 < ileDni && <span className="uchwyt r" onPointerDown={e => zacznij(e, l, galazId, 'r')} />}
                                                         </div>
                                                     )}
-                                                    {poza && (
+                                                    {poza && (!jestMs(l) || !widoczny) && (
                                                         <span className={`poza ${poza}`} title={`Roboty ${dzienMies(l.planOd)}–${dzienMies(l.planDo)} — poza oknem`}>
                                                             {poza === 'l' ? `‹ ${dzienMies(l.planDo)}` : `${dzienMies(l.planOd)} ›`}
                                                         </span>
@@ -486,6 +562,8 @@ export default function Harmonogram({
             <div className="legend">
                 <span><i className="bar b-work" />roboty</span>
                 {opisPaska !== domyslnyOpis && <><span><i className="bar b-done" />wykonane</span><span><i className="bar b-hold" />wstrzymane</span></>}
+                <span><i className="ms" />milestone</span>
+                <span><i className="ms-okno" />okno milestone'a</span>
                 <span><i className="sw-wolny" />dzień wolny</span>
                 {maDostawy && <><span><i className="diam" />dostawa</span><span><i className="diam late" />dostawa za blisko robót</span></>}
                 {(projectStart || projectEnd) && <><span><i className="sw-mark ps" />start projektu</span><span><i className="sw-mark pe" />koniec</span></>}

@@ -68,6 +68,9 @@ export const isPacketType = (t) => {
     const s = String(t || '').toLowerCase();
     return s === 'pakiet' || s === 'komplet';
 };
+// @anchor is-milestone-type — milestone (typ węzła WBS) bez importu z `wbsConstants`, żeby ten moduł
+// został czysty i dał się testować w Node (`test/`). Lustro `isMilestoneNode` z `wbsConstants.js`.
+export const isMilestoneType = (t) => String((t && typeof t === 'object') ? t.type : t || '').toLowerCase() === 'milestone';
 export const isDayUnit = (u) => { const s = String(u || '').toLowerCase().trim(); return s === 'dni' || s === 'dzień' || s === 'dzien' || s === 'd' || s === ''; };
 const isPacketUnit = (u) => { const s = String(u || '').toLowerCase().trim(); return s === 'pakiet' || s === 'komplet'; };
 
@@ -157,7 +160,7 @@ export const buildTasksFromTree = (items, projectStart, projectName, overrides, 
     let rootMaxEnd = new Date(cursor);
 
     const hasWorkOrServiceLeaf = (node) => {
-        if (isWorkType(node.type) || isServiceType(node.type)) return true;
+        if (isWorkType(node.type) || isServiceType(node.type) || isMilestoneType(node.type)) return true;
         if (Array.isArray(node.children) && node.children.length > 0) {
             return node.children.some(hasWorkOrServiceLeaf);
         }
@@ -172,7 +175,9 @@ export const buildTasksFromTree = (items, projectStart, projectName, overrides, 
             const hasChildren = Array.isArray(node.children) && node.children.length > 0;
             // Węzeł typu praca/usługa jest zadaniem (pasek) — niezależnie od tego czy ma dzieci.
             // Tylko węzeł innego typu z dziećmi jest czysto grupującą gałęzią (bez paska).
-            const isTaskNode = isWorkType(node.type) || isServiceType(node.type);
+            // Milestone też jest zadaniem — rombem (1 dzień) albo rombem z okienkiem `ganttStart..ganttEnd`.
+            const isMs = isMilestoneType(node.type);
+            const isTaskNode = isWorkType(node.type) || isServiceType(node.type) || isMs;
             if (!hasChildren && !isTaskNode) continue;
             if (hasChildren && !isTaskNode && !hasWorkOrServiceLeaf(node)) continue;
 
@@ -204,7 +209,14 @@ export const buildTasksFromTree = (items, projectStart, projectName, overrides, 
                 // tylko praca z jednostką dni może aktualizować ilość przez timeline
                 const canUpdateDuration = isWorkType(node.type) && isDayUnit(node.unit);
                 const defaultStart = effectiveWow ? new Date(projectStart) : advanceToWorkingDay(new Date(projectStart));
-                if (ovr?.start && ovr?.end && isValidGanttDate(ovr.start) && isValidGanttDate(ovr.end)) {
+                if (isMs) {
+                    // Milestone: zapisane okno albo jeden dzień od domyślnego startu; nie przesuwa kursora.
+                    const zapisane = ovr?.start && ovr?.end && isValidGanttDate(ovr.start) && isValidGanttDate(ovr.end);
+                    start = zapisane ? new Date(ovr.start) : defaultStart;
+                    end = zapisane ? new Date(ovr.end) : new Date(start.getTime() + DAY_MS);
+                    if (end <= start) end = new Date(start.getTime() + DAY_MS);
+                    type = 'milestone';
+                } else if (ovr?.start && ovr?.end && isValidGanttDate(ovr.start) && isValidGanttDate(ovr.end)) {
                     start = new Date(ovr.start);
                     end = new Date(ovr.end);
                     type = 'task';
@@ -243,7 +255,7 @@ export const buildTasksFromTree = (items, projectStart, projectName, overrides, 
                     end,
                     progress: 0,
                     project: parentId || undefined,
-                    _canUpdateDuration: canUpdateDuration,
+                    _canUpdateDuration: canUpdateDuration && !isMs,
                     depth,
                     node,
                 });
@@ -371,7 +383,8 @@ export const buildExcelTimeline = (tasks, viewMode, branchWorkOnHolidays, taskBr
             ? branchWorkOnHolidays[t.id]
             : (branchWorkOnHolidays[branchId] ?? false);
         return days.map(d => {
-            if (t.type === 'milestone') return d.getTime() === ts.getTime();
+            // Milestone: romb jednego dnia albo całe okno (dni kalendarzowe, termin to termin).
+            if (t.type === 'milestone') return te > ts ? (d >= ts && d < te) : d.getTime() === ts.getTime();
             if (d < ts || d >= te) return false;
             return wow || !isNonWorkingDay(d);
         });

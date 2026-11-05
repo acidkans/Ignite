@@ -235,3 +235,10 @@
 .rz .mention-menu button.on, .rz .mention-menu button:hover { background: var(--sunk); }
 .rz .podglad-head .wroc { background: var(--sunk); border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; font-size: 12px; color: var(--muted); cursor: pointer; }
 .rz .podglad-head .wroc:hover { border-color: var(--accent); color: var(--accent); }
+/* milestone'y — fiolet jak romb na Harmonogramie */
+.rz .ms-n { color: #A879F0; }
+.rz .ms-chipy { display: inline-flex; gap: 6px; margin-left: 10px; flex-wrap: wrap; vertical-align: middle; }
+.rz .ms-chip { background: color-mix(in srgb, #A879F0 14%, transparent); border: 1px solid color-mix(in srgb, #A879F0 50%, transparent); color: #A879F0; border-radius: 10px; padding: 0 8px; font-size: 11px; font-weight: 500; cursor: pointer; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rz .ms-chip:hover { border-color: #A879F0; }
+.rz .ms-chip.late { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+.rz tr.grp .ms-chip { color: #A879F0; }

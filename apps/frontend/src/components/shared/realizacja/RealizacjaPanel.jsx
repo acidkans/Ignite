@@ -17,7 +17,7 @@ import {
 } from '../wbs/realizationShared';
 import {
     PURCHASE_STATUS_META, EXEC_STATUS_META, execStatusLabel, hasPurchaseAxis, hasExecAxis, axisGateOf,
-    DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS,
+    DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS, PLAN_STATUS_META, planStatusFromAny,
 } from '../wbs/wbsConstants';
 import { useWatekRealizacji } from './useWatekRealizacji';
 import {
@@ -114,6 +114,16 @@ export default function RealizacjaPanel({
         : wbsNodes), [wbsNodes, shortOverrides]);
 
     const idx = useMemo(() => buildBranchIndex(nodes, orderName, visibleTypes), [nodes, orderName, visibleTypes]);
+    // @anchor realizacja-milestony — milestone'y po id (nie są ani gałęzią, ani pozycją `idx.nodeById`)
+    // i nazwy wszystkiego, do czego może się odnosić wpis wątku.
+    const msById = useMemo(() => Object.fromEntries(idx.milestones.map(m => [m.id, m])), [idx]);
+    const nazwyWezlow = useMemo(() => ({ ...idx.nodeById, ...msById }), [idx, msById]);
+    // Milestone'y poddrzewa gałęzi — po `branchId`, jak pozycje.
+    const milestonyPoddrzewa = useCallback((id, tylkoWprost = false) => {
+        if (tylkoWprost) return idx.milestones.filter(m => m.branchId === id);
+        const set = new Set(idx.subtreeIds(id));
+        return idx.milestones.filter(m => set.has(m.branchId));
+    }, [idx]);
 
     const [focus, setFocusState] = useState(() => czytaj(FOCUS_KEY(nodeId), SYNTHETIC_ROOT));
     const setFocus = useCallback((id) => { setFocusState(id); zapisz(FOCUS_KEY(nodeId), id); }, [nodeId]);
@@ -147,8 +157,8 @@ export default function RealizacjaPanel({
     // Węzły poddrzewa gałęzi (gałęzie + liście) — do sumowania sygnałów i filtrowania wątku.
     const idsPoddrzewa = useCallback((id) => {
         const galezie = idx.subtreeIds(id);
-        return new Set([...galezie, ...idx.leavesOfSubtree(id).map(l => l.id)]);
-    }, [idx]);
+        return new Set([...galezie, ...idx.leavesOfSubtree(id).map(l => l.id), ...milestonyPoddrzewa(id).map(m => m.id)]);
+    }, [idx, milestonyPoddrzewa]);
 
     // @anchor realizacja-zapisz-short — `WbsNode.shortName`; pusty tekst = powrót do skracania.
     const zapiszShort = useCallback(async (id, wartosc) => {
@@ -245,18 +255,21 @@ export default function RealizacjaPanel({
     }, [idx, focusId, fraza]);
 
     // Grupy = bezpośrednie podgałęzie zoomu (+ pozycje wiszące wprost pod nim).
+    // `milestony` = milestone'y gałęzi (wprost: te, które stoją bezpośrednio w gałęzi zoomu).
     const grupy = useMemo(() => {
         const dzieci = idx.childrenOf[focusId] || [];
         const out = [];
         const wprost = liscie.filter(l => l.branchId === focusId);
-        if (wprost.length) out.push({ galaz: null, liscie: wprost });
+        const msWprost = milestonyPoddrzewa(focusId, true);
+        if (wprost.length || msWprost.length) out.push({ galaz: null, liscie: wprost, milestony: msWprost });
         for (const d of dzieci) {
             const ids = new Set(idx.subtreeIds(d.id));
             const ls = liscie.filter(l => ids.has(l.branchId));
-            if (ls.length) out.push({ galaz: d, liscie: ls });
+            const ms = milestonyPoddrzewa(d.id);
+            if (ls.length || ms.length) out.push({ galaz: d, liscie: ls, milestony: ms });
         }
         return out;
-    }, [idx, focusId, liscie]);
+    }, [idx, focusId, liscie, milestonyPoddrzewa]);
 
     // @anchor realizacja-gotowosc — gotowość każdej pozycji: materiał (sama pozycja z osią zakupu
     // albo materiał z tej samej gałęzi), otwarte pytania i blokery pozycji oraz jej gałęzi.
@@ -292,10 +305,13 @@ export default function RealizacjaPanel({
 
     const fokus = idx.nodeById[focusId];
     const pozPodgladu = podglad && LEAF_TYPES.includes(idx.nodeById[podglad]?.type) ? idx.nodeById[podglad] : null;
+    const msPodgladu = podglad && !pozPodgladu ? msById[podglad] || null : null;
+    const wPodgladzie = pozPodgladu || msPodgladu;
     const sygFokus = sumaSygnalow(idsPoddrzewa(focusId), sygnaly);
     const otworzPozycje = (id) => {
         // Wpis gałęzi (czat gałęzi) = zoom na nią; pozycja = jej szczegóły w środku (`realizacja-podglad`).
         const n = idx.nodeById[id];
+        if (msById[id]) { setPodglad(id); return; }
         if (LEAF_TYPES.includes(n?.type)) { setPodglad(id); setFocus(n.branchId || SYNTHETIC_ROOT); }
         else if (n) { setPodglad(null); setFocus(id); }
     };
@@ -312,13 +328,13 @@ export default function RealizacjaPanel({
                             </button>
                             <span className="sep">›</span>
                         </React.Fragment>
-                    )) : !pozPodgladu && <span>Całe zamówienie</span>}
-                    {pozPodgladu && <><button onClick={() => setPodglad(null)} title="Wróć do widoku gałęzi">{focusId === SYNTHETIC_ROOT ? (orderName || 'Zamówienie') : nazwaWyswietlana(fokus, pelne)}</button><span className="sep">›</span></>}
+                    )) : !wPodgladzie && <span>Całe zamówienie</span>}
+                    {wPodgladzie && <><button onClick={() => setPodglad(null)} title="Wróć do widoku gałęzi">{focusId === SYNTHETIC_ROOT ? (orderName || 'Zamówienie') : nazwaWyswietlana(fokus, pelne)}</button><span className="sep">›</span></>}
                     {sciezka.length > 1 && <span>tu jesteś</span>}
                 </div>
                 <div className="mrow">
-                    <span className="ttl" title={(pozPodgladu || fokus)?.name}>
-                        {pozPodgladu ? nazwaWyswietlana(pozPodgladu, pelne) : focusId === SYNTHETIC_ROOT ? (orderName || 'Zamówienie') : nazwaWyswietlana(fokus, pelne)}
+                    <span className="ttl" title={(wPodgladzie || fokus)?.name}>
+                        {msPodgladu ? `◆ ${nazwaWyswietlana(msPodgladu, pelne)}` : pozPodgladu ? nazwaWyswietlana(pozPodgladu, pelne) : focusId === SYNTHETIC_ROOT ? (orderName || 'Zamówienie') : nazwaWyswietlana(fokus, pelne)}
                     </span>
                     {stage === 'REALIZACJA'
                         ? <span className="pill p-acc">REALIZACJA{planLabel ? ` · ${planLabel}` : ''}</span>
@@ -333,10 +349,11 @@ export default function RealizacjaPanel({
                             {/* @anchor realizacja-segment-pozycja — gdy otwarte są szczegóły pozycji, przełącznik pokazuje
                                 aktywny segment „Pozycja”; klik w widok (np. Harmonogram) wraca do niego. */}
                             {WIDOKI.map(([k, l]) => (
-                                <button key={k} onClick={() => setWidok(k)} className={!pozPodgladu && widok === k ? 'on' : ''}
-                                    title={pozPodgladu && widok === k ? `Wróć do: ${l}` : undefined}>{l}</button>
+                                <button key={k} onClick={() => setWidok(k)} className={!wPodgladzie && widok === k ? 'on' : ''}
+                                    title={wPodgladzie && widok === k ? `Wróć do: ${l}` : undefined}>{l}</button>
                             ))}
                             {pozPodgladu && <button className="on" title="Szczegóły pozycji">Pozycja</button>}
+                            {msPodgladu && <button className="on" title="Szczegóły milestone'a">Milestone</button>}
                         </span>
                     </div>
                 </div>
@@ -366,30 +383,46 @@ export default function RealizacjaPanel({
                         </div>
                     );
                 })()}
-                {!pozPodgladu && widok === 'kokpit' && (
+                {msPodgladu && (
+                    <div className="podglad">
+                        <div className="podglad-head">
+                            <button className="wroc" onClick={() => setPodglad(null)} title="Wróć do poprzedniego widoku">
+                                ‹ {WIDOKI.find(([k]) => k === widok)?.[1] || 'Wróć'}
+                            </button>
+                            <span className="t ms-n" title={msPodgladu.name}>◆ {nazwaWyswietlana(msPodgladu, pelne)}</span>
+                            <span className="typ">Milestone · {msPodgladu.branchId === SYNTHETIC_ROOT ? (orderName || 'zamówienie') : nazwaWyswietlana(idx.nodeById[msPodgladu.branchId] || {}, pelne)}</span>
+                        </div>
+                        <SzczegolyMilestone
+                            key={msPodgladu.id} node={msPodgladu} canEdit={canEdit}
+                            wpisy={wpisy.filter(w => w.nodeId === msPodgladu.id)}
+                            wyslij={wyslij} dodajBloker={dodajBloker} akcje={canEdit ? akcje : null} ownerUsers={ownerUsers}
+                        />
+                    </div>
+                )}
+                {!wPodgladzie && widok === 'kokpit' && (
                     <Kokpit
                         liscie={idx.leavesOfSubtree(focusId)} rowOf={rowOf} actualsOf={actualsOf}
                         wpisy={wpisy.filter(w => idsPoddrzewa(focusId).has(w.nodeId))}
                         protocols={protocols} sygFokus={sygFokus} canSeeMoney={canSeeMoney} canEdit={canEdit}
-                        nodeById={idx.nodeById} pelne={pelne} filtr={filtr} setFiltr={setFiltr}
+                        nodeById={nazwyWezlow} pelne={pelne} filtr={filtr} setFiltr={setFiltr}
                         onOtworz={otworzPozycje} akcje={akcje} gotowosc={gotowosc}
                         kolizje={kolizje.filter(k => idsPoddrzewa(focusId).has(k.materialId))}
                     />
                 )}
-                {!pozPodgladu && widok === 'macierz' && (
+                {!wPodgladzie && widok === 'macierz' && (
                     <Macierz
                         grupy={grupy} rowOf={rowOf} actualsOf={actualsOf} sygnaly={sygnaly}
                         pelne={pelne} canSeeMoney={canSeeMoney}
                         onOtworz={otworzPozycje} onZoom={setFocus}
                     />
                 )}
-                {!pozPodgladu && widok === 'tablica' && (
+                {!wPodgladzie && widok === 'tablica' && (
                     <Tablica
                         grupy={grupy} actualsOf={actualsOf} sygnaly={sygnaly} pelne={pelne} canEdit={canEdit}
                         saveAxis={saveAxis} onZoom={setFocus} onOtworz={otworzPozycje}
                     />
                 )}
-                {!pozPodgladu && widok === 'harmonogram' && (
+                {!wPodgladzie && widok === 'harmonogram' && (
                     <Harmonogram
                         grupy={grupy} nazwa={nazwaPel} maPasek={maPasekRobot} opisPaska={opisPaskaRobot}
                         actualsOf={actualsOf} czyDostawa={czyDostawa} gotowosc={gotowosc} GotowoscChipy={GotowoscChipy}
@@ -694,6 +727,74 @@ function BlokerForm({ wbsNodeId, dodajBloker, ownerUsers = [] }) {
     );
 }
 
+// ─── Milestone'y ─────────────────────────────────────────────────────────────
+
+const zakresMs = (m) => {
+    if (!m?.planOd) return 'bez daty';
+    const od = new Date(m.planOd), ost = new Date(m.planDo || m.planOd);
+    return od.toDateString() === ost.toDateString() ? dzienMies(od) : `${dzienMies(od)}–${dzienMies(ost)}`;
+};
+
+// @anchor realizacja-milestony-chipy — milestone'y gałęzi w jej wierszu (Macierz); klik = szczegóły.
+function MilestonyChipy({ milestony = [], pelne, onOtworz }) {
+    if (!milestony.length) return null;
+    return (
+        <span className="ms-chipy">
+            {milestony.map(m => (
+                <button key={m.id} className="ms-chip" onClick={e => { e.stopPropagation(); onOtworz(m.id); }} title={`${m.name} — szczegóły milestone'a`}>
+                    ◆ {nazwaWyswietlana(m, pelne)} <span className="mono">{zakresMs(m)}</span>
+                </button>
+            ))}
+        </span>
+    );
+}
+
+// @anchor realizacja-szczegoly-milestone — szczegóły milestone'a: wątek (czat z @wzmiankami) · termin,
+// status i pytania Q&A · blokery z formularzem. Daty zmienia się na Harmonogramie.
+function SzczegolyMilestone({ node, canEdit, wpisy, wyslij, dodajBloker, akcje, ownerUsers }) {
+    const pytania = wpisy.filter(w => w.rodzaj === 'qa');
+    const blokery = wpisy.filter(w => w.rodzaj === 'block' && w.otwarte);
+    const watek = wpisy.filter(w => !(w.rodzaj === 'block' && w.constraintId) && w.rodzaj !== 'qa');
+    const zadania = wpisy.filter(w => w.rodzaj === 'task');
+    const status = PLAN_STATUS_META[planStatusFromAny(node.status)]?.label || '—';
+    return (
+        <TrzyKolumny
+            lewa={
+                <Karta tytul="Wątek milestone'a" prawa={`${watek.length} wpisów`}>
+                    <div className="feed scroll" style={{ maxHeight: 320 }}>
+                        {watek.length ? watek.map(w => <Wpis key={w.id} w={w} akcje={akcje} />)
+                            : <Pusto>Brak wpisów — pierwszy dodasz poniżej.</Pusto>}
+                    </div>
+                    <PoleCzatu uzytkownicy={ownerUsers} placeholder="Napisz do czatu milestone'a… (@ oznacza osobę)"
+                        onWyslij={(t, ids) => wyslij(node.id, t, false, ids)} />
+                </Karta>
+            }
+            srodek={
+                <Karta tytul="Milestone" prawa={zakresMs(node)}>
+                    <div className="mini">
+                        <Wiersz l="Termin" v={zakresMs(node)} />
+                        <Wiersz l="Status" v={status} />
+                        <Wiersz l="Zadania otwarte" v={zadania.filter(z => z.otwarte).length + (zadania.some(z => z.poTerminie) ? ' · po terminie' : '')} />
+                        <Wiersz l="Odpowiedzialny" v={node.owner || '—'} />
+                        <div className="muted" style={{ fontSize: 12 }}>Termin zmieniasz na Harmonogramie (przeciągnij romb) albo w strukturze WBS.</div>
+                    </div>
+                    <div className="feed" style={{ borderTop: '1px solid var(--line)' }}>
+                        {pytania.length ? pytania.map(w => <Wpis key={w.id} w={w} akcje={akcje} />) : <Pusto>Brak pytań Q&A przy tym milestonie.</Pusto>}
+                    </div>
+                </Karta>
+            }
+            prawa={
+                <Karta tytul="Blokery" prawa={blokery.length ? `${blokery.length} otwarte` : null}>
+                    <div className="feed">
+                        {blokery.length ? blokery.map(w => <Wpis key={w.id} w={w} akcje={akcje} />) : <Pusto>Nic nie blokuje tego milestone'a.</Pusto>}
+                    </div>
+                    {canEdit && <BlokerForm wbsNodeId={node.id} dodajBloker={dodajBloker} ownerUsers={ownerUsers} />}
+                </Karta>
+            }
+        />
+    );
+}
+
 // ─── Macierz ─────────────────────────────────────────────────────────────────
 
 // @anchor realizacja-macierz — wiersz = pozycja; klik rozwija wątek, osie i powiązania.
@@ -716,13 +817,22 @@ function Macierz({ grupy, rowOf, actualsOf, sygnaly, pelne, canSeeMoney, onOtwor
                 </tr>
             </thead>
             <tbody>
-                {grupy.map(({ galaz, liscie }) => (
+                {grupy.map(({ galaz, liscie, milestony = [] }) => (
                     <React.Fragment key={galaz?.id || '_wprost'}>
+                        {!galaz && milestony.length > 0 && (
+                            <tr className="grp">
+                                <td colSpan={kolumn}>
+                                    <span>Ta gałąź</span>
+                                    <MilestonyChipy milestony={milestony} pelne={pelne} onOtworz={onOtworz} />
+                                </td>
+                            </tr>
+                        )}
                         {galaz && (
                             <tr className="grp">
                                 <td colSpan={kolumn} title={galaz.name}>
                                     <button onClick={() => onZoom(galaz.id)} title={`${galaz.name} — pokaż tylko tę gałąź`}>{nazwaWyswietlana(galaz, pelne)}</button>
                                     <span className="mono" style={{ fontWeight: 400 }}> · {liscie.length} poz.{canSeeMoney ? ` · ${fmtZl(liscie.reduce((s, l) => s + rowOf(l).planValue, 0))} zł` : ''}</span>
+                                    <MilestonyChipy milestony={milestony} pelne={pelne} onOtworz={onOtworz} />
                                 </td>
                             </tr>
                         )}

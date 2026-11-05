@@ -65,3 +65,24 @@
 .rz .hg .legend .sw-mark.pe { border-color: #ef4444; }
 .rz .hg-info { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 1000; background: var(--surface); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 14px; font-size: 12.5px; max-width: 420px; box-shadow: 0 10px 30px rgba(0,0,0,.4); cursor: pointer; }
 .rz .hg-data { background: var(--sunk); border: 1px solid var(--line); border-radius: 4px; color: var(--ink); font: 500 11px var(--f-mono); padding: 2px 4px; color-scheme: dark; }
+
+/* milestone — fioletowy romb (termin = ostatni dzień okna) i przerywane okno start–koniec */
+.rz .hg { --ms: #A879F0; }
+.rz .hg .ms { position: absolute; top: 15px; width: 14px; height: 14px; transform: rotate(45deg); background: var(--ms); border: 2px solid var(--surface); z-index: 3; cursor: pointer; }
+.rz .hg .ms.g { top: 7px; }
+.rz .hg .ms.drag { cursor: grab; touch-action: none; user-select: none; }
+.rz .hg .ms.ciagniety { cursor: grabbing; box-shadow: 0 0 0 2px var(--accent); }
+.rz .hg .ms.late { background: var(--bad); }
+.rz .hg .ms-okno { position: absolute; top: 16px; height: 12px; border: 1px dashed var(--ms); background: color-mix(in srgb, var(--ms) 18%, transparent); border-radius: 3px; z-index: 2; }
+.rz .hg .ms-okno.g { top: 8px; }
+.rz .hg .ms-okno.ciagniety { box-shadow: 0 0 0 1px var(--accent); }
+.rz .hg .ms-okno .uchwyt { position: absolute; top: -2px; bottom: -2px; width: 7px; cursor: ew-resize; touch-action: none; }
+.rz .hg .ms-okno .uchwyt.l { left: -2px; }
+.rz .hg .ms-okno .uchwyt.r { right: -2px; }
+.rz .hg .ms-okno .uchwyt:hover { background: color-mix(in srgb, var(--ms) 45%, transparent); }
+.rz .hg .ms-tx { position: absolute; top: 7px; font: 500 10px var(--f-mono); color: var(--ms); white-space: nowrap; pointer-events: none; z-index: 2; }
+.rz .hg-lbl .t.ms-n { color: var(--ms); }
+.rz .hg-grp .ms-l { color: var(--ms); font-weight: 400; }
+.rz .hg .legend .ms, .rz .hg .legend .ms-okno { position: static; display: inline-block; vertical-align: middle; cursor: default; }
+.rz .hg .legend .ms { width: 10px; height: 10px; margin: 0 4px 0 2px; }
+.rz .hg .legend .ms-okno { width: 22px; height: 10px; }
