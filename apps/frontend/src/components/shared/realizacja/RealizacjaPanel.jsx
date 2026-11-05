@@ -22,9 +22,10 @@ import {
 import { useWatekRealizacji } from './useWatekRealizacji';
 import {
     nazwaWyswietlana, WATEK_RODZAJE, RODZAJE_BLOKERA, zbudujWatek, sygnalyWezlow, sumaSygnalow, kiedyTekst,
-    dniOkna, indeksDnia, gotowoscPozycji, wykryjKolizje, BUFOR_DOSTAWY_DNI,
+    dniOkna, indeksDnia, gotowoscPozycji, wykryjKolizje, BUFOR_DOSTAWY_DNI, parseQa,
 } from './realizacjaShared';
 import Harmonogram from '../harmonogram/Harmonogram';
+import AutoResizeTextarea from '../wbs/AutoResizeTextarea';
 import {
     zaleznyOdMilestone, pierwszyDozwolonyDzien, przesunORobocze, roznicaDniRoboczych, DAY_MS,
 } from '../harmonogram/harmonogramCzas';
@@ -105,7 +106,7 @@ export default function RealizacjaPanel({
     // Ta sama reguła co w „Realizacji (tabela)" (`realization-new-visible-types`).
     const visibleTypes = isManagerOrAdmin ? LEAF_TYPES : OPEN_LEAF_TYPES;
 
-    const { loading, wbsNodes, actuals, saveAxis, savePlanDates, savePlanDatesBatch, actualsOf, rowOf, ownerUsers, addActual, updateActual, deleteActual } =
+    const { loading, wbsNodes, actuals, saveAxis, savePlanDates, savePlanDatesBatch, zapiszKolejnosc, actualsOf, rowOf, ownerUsers, addActual, updateActual, deleteActual } =
         useRealizationData({ nodeId, versionId, acceptedAt, isManagerOrAdmin });
     // @anchor realizacja-zakupy-api — dodawanie/edycja/usuwanie wpisów zakupu (`LeafActual`), te same
     // funkcje co szuflada w „Realizacja (tabela)" (`realization-new-purchase-drawer`).
@@ -114,9 +115,16 @@ export default function RealizacjaPanel({
 
     // @anchor realizacja-short-overrides — krótkie nazwy zapisane w tej sesji (bez przeładowania drzewa).
     const [shortOverrides, setShortOverrides] = useState({});
-    const nodes = useMemo(() => (Object.keys(shortOverrides).length
-        ? wbsNodes.map(n => (n.id in shortOverrides ? { ...n, shortName: shortOverrides[n.id] } : n))
-        : wbsNodes), [wbsNodes, shortOverrides]);
+    // @anchor realizacja-qa-overrides — pary Q&A zapisane z Kokpitu w tej sesji (bez przeładowania drzewa).
+    const [qaOverrides, setQaOverrides] = useState({});
+    useEffect(() => { setQaOverrides({}); }, [wbsNodes]); // świeże drzewo z serwera ma już zapisane Q&A
+    const nodes = useMemo(() => (Object.keys(shortOverrides).length || Object.keys(qaOverrides).length
+        ? wbsNodes.map(n => (n.id in shortOverrides || n.id in qaOverrides ? {
+            ...n,
+            ...(n.id in shortOverrides ? { shortName: shortOverrides[n.id] } : {}),
+            ...(n.id in qaOverrides ? { qa: qaOverrides[n.id] } : {}),
+        } : n))
+        : wbsNodes), [wbsNodes, shortOverrides, qaOverrides]);
 
     const idx = useMemo(() => buildBranchIndex(nodes, orderName, visibleTypes), [nodes, orderName, visibleTypes]);
     // @anchor realizacja-milestony — milestone'y po id (nie są ani gałęzią, ani pozycją `idx.nodeById`)
@@ -239,6 +247,27 @@ export default function RealizacjaPanel({
         }
     }, []);
 
+    // @anchor realizacja-zapisz-qa — edycja pary Q&A z wątku Kokpitu: podmienia pytanie/odpowiedź po `id`,
+    // resztę pól pary (mail, zadanie, czat) zostawia — `PATCH /wbs-nodes/:id { qa }` jak w QaTreeView.
+    const nodesRef = useRef(nodes);
+    nodesRef.current = nodes;
+    const zapiszQa = useCallback(async (wbsNodeId, qaId, { question, answer }) => {
+        const n = nodesRef.current.find(x => x.id === wbsNodeId);
+        if (!n) throw new Error('brak węzła');
+        const qa = parseQa(n.qa).map(p => (p.id === qaId ? { ...p, question: String(question || '').trim(), answer: String(answer || '').trim() } : p));
+        const res = await fetch(`${API_URL}/wbs-nodes/${wbsNodeId}`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ qa }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setQaOverrides(prev => ({ ...prev, [wbsNodeId]: qa }));
+        window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
+    }, []);
+    // @anchor realizacja-edycja-watku — czym wątek Kokpitu edytuje wpis w miejscu (bez wejścia w pozycję).
+    const edycjaWatku = useMemo(() => ({ wyslij, zapiszQa, zmienBloker, ownerUsers, canEdit }),
+        [wyslij, zapiszQa, zmienBloker, ownerUsers, canEdit]);
+
     // @anchor realizacja-akcje-blokera — zamknięcie blokera (Constraint albo dawny pilny wpis czatu)
     // i zamiana otwartego pytania Q&A w bloker „decyzja klienta".
     const akcje = useMemo(() => {
@@ -353,6 +382,15 @@ export default function RealizacjaPanel({
     // @anchor realizacja-grupy-harmonogramu — w Harmonogramie milestone ma WŁASNY wiersz („◆ nazwa ·
     // milestone data”, jak w Planowaniu), wstawiony w kolejności drzewa WBS; sam romb w nagłówku gałęzi
     // był łatwy do przeoczenia (poza oknem albo przy prawej krawędzi).
+    // @anchor realizacja-duzy-ekran — szerokość ≥ 1600 px: Kokpit dokleja pod spodem harmonogram.
+    const [duzyEkran, setDuzyEkran] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1600px)').matches);
+    useEffect(() => {
+        const mq = window.matchMedia('(min-width: 1600px)');
+        const fn = (e) => setDuzyEkran(e.matches);
+        mq.addEventListener('change', fn);
+        return () => mq.removeEventListener('change', fn);
+    }, []);
+
     const grupyHarmonogramu = useMemo(() => {
         const kolejnosc = new Map(nodes.map((n, i) => [n.id, i]));
         return grupy.map(g => ({
@@ -497,11 +535,25 @@ export default function RealizacjaPanel({
                         wpisy={wpisy.filter(w => idsPoddrzewa(focusId).has(w.nodeId))}
                         protocols={protocols} sygFokus={sygFokus} canSeeMoney={canSeeMoney} canEdit={canEdit}
                         nodeById={nazwyWezlow} pelne={pelne} filtr={filtr} setFiltr={setFiltr}
-                        onOtworz={otworzPozycje} akcje={akcje} gotowosc={gotowosc}
+                        onOtworz={otworzPozycje} akcje={akcje} gotowosc={gotowosc} edycja={edycjaWatku}
                         kolizje={kolizje.filter(k => idsPoddrzewa(focusId).has(k.materialId))}
                         milestony={milestonyPoddrzewa(focusId).map(m => ({ m, ...(msAnaliza.info[m.id] || {}) }))}
                         kolizjeMs={msAnaliza.kolizjeMs.filter(k => idsPoddrzewa(focusId).has(k.id) || idsPoddrzewa(focusId).has(k.msId))}
                     />
+                )}
+                {/* @anchor realizacja-kokpit-harmonogram — na dużych ekranach pod Kokpitem harmonogram
+                    zaznaczonego węzła (te same dane co widok Harmonogram, własny zapamiętany zakres). */}
+                {!wPodgladzie && widok === 'kokpit' && duzyEkran && (
+                    <div className="kokpit-harm">
+                        <Harmonogram
+                            grupy={grupyHarmonogramu} nazwa={nazwaPel} maPasek={maPasekRobot} opisPaska={opisPaskaRobot}
+                            actualsOf={actualsOf} czyDostawa={czyDostawa} gotowosc={gotowosc} GotowoscChipy={GotowoscChipy}
+                            kolizje={kolizje} canEdit={canEdit} savePlanDates={savePlanDates}
+                            msZaleznosc={msZaleznosc} msWezly={msWezly} savePlanDatesBatch={savePlanDatesBatch}
+                            onZoom={setFocus} onOtworz={otworzPozycje} onPrzestaw={canEdit ? zapiszKolejnosc : null}
+                            domyslnyZakres="14" zakresKey="realizacja-kokpit-harmonogram-zakres"
+                        />
+                    </div>
                 )}
                 {!wPodgladzie && widok === 'macierz' && (
                     <Macierz
@@ -522,7 +574,7 @@ export default function RealizacjaPanel({
                         actualsOf={actualsOf} czyDostawa={czyDostawa} gotowosc={gotowosc} GotowoscChipy={GotowoscChipy}
                         kolizje={kolizje} canEdit={canEdit} savePlanDates={savePlanDates}
                         msZaleznosc={msZaleznosc} msWezly={msWezly} savePlanDatesBatch={savePlanDatesBatch}
-                        onZoom={setFocus} onOtworz={otworzPozycje}
+                        onZoom={setFocus} onOtworz={otworzPozycje} onPrzestaw={canEdit ? zapiszKolejnosc : null}
                         domyslnyZakres="14" zakresKey="realizacja-harmonogram-zakres"
                     />
                 )}
@@ -578,11 +630,14 @@ function GotowoscChipy({ g }) {
 }
 
 // @anchor realizacja-wpis — jeden wpis wątku (czat, bloker, pytanie, zakup, zadanie, odbiór).
-function Wpis({ w, nazwaPozycji, onPozycja, akcje }) {
+// `edycja` (Kokpit) = klik w treść rozwija wpis: odpowiedź do czatu pozycji, edycja pary Q&A, edycja blokera.
+function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
     const r = WATEK_RODZAJE[w.rodzaj];
     const blokerKonstr = w.rodzaj === 'block' && w.constraintId;
+    const [rozwiniety, setRozwiniety] = useState(false);
+    const rozwijalny = !!edycja && !!w.nodeId;
     return (
-        <div className="ev">
+        <div className={`ev${rozwijalny ? ' ev-rozw' : ''}${rozwiniety ? ' on' : ''}`}>
             <span className={`ik ${r.cls}`}>{r.znak}</span>
             <div style={{ minWidth: 0 }}>
                 <div className="who">
@@ -610,11 +665,77 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje }) {
                             )}
                         </span>
                     )}
+                    {rozwijalny && (
+                        <button className="mini-btn" style={akcje ? undefined : { marginLeft: 'auto' }} onClick={() => setRozwiniety(v => !v)}
+                            title={rozwiniety ? 'Zwiń' : 'Rozwiń — odpowiedz albo edytuj bez wchodzenia w pozycję'}>{rozwiniety ? 'zwiń' : 'rozwiń'}</button>
+                    )}
                 </div>
-                <div className="txt">{w.tekst}</div>
+                <div className="txt" onClick={rozwijalny && !rozwiniety ? () => setRozwiniety(true) : undefined}>{w.tekst}</div>
                 {w.notatka && <div className="muted" style={{ fontSize: 12 }}>{w.notatka}</div>}
-                {w.odpowiedz && <div className="ans">{w.odpowiedz}</div>}
+                {w.odpowiedz && !(rozwiniety && w.rodzaj === 'qa') && <div className="ans">{w.odpowiedz}</div>}
+                {rozwiniety && <WpisEdycja w={w} edycja={edycja} onZamknij={() => setRozwiniety(false)} />}
             </div>
+        </div>
+    );
+}
+
+// @anchor realizacja-wpis-edycja — rozwinięty wpis wątku w Kokpicie: Q&A (pytanie + odpowiedź), bloker
+// (opis, termin, wpływ) — tylko z prawem edycji; odpowiedź do czatu pozycji — każdy.
+function WpisEdycja({ w, edycja, onZamknij }) {
+    const { wyslij, zapiszQa, zmienBloker, ownerUsers, canEdit } = edycja;
+    const qa = w.rodzaj === 'qa' && w.qaId && canEdit;
+    const bloker = w.rodzaj === 'block' && w.constraintId && canEdit;
+    const [f, setF] = useState(() => ({
+        question: w.tekst || '', answer: w.odpowiedz || '',
+        title: w.tekst || '', dueAt: w.termin ? String(w.termin).slice(0, 10) : '', impactDays: w.wplywDni ?? '',
+    }));
+    const [zapis, setZapis] = useState(false);
+    const ustaw = (k) => (e) => setF(prev => ({ ...prev, [k]: e.target.value }));
+    const zapisz = async () => {
+        if (zapis) return;
+        setZapis(true);
+        try {
+            if (qa) await zapiszQa(w.nodeId, w.qaId, { question: f.question, answer: f.answer });
+            else if (bloker) await zmienBloker(w.constraintId, {
+                title: f.title.trim(), dueAt: f.dueAt || null, impactDays: f.impactDays === '' ? null : Number(f.impactDays),
+            });
+            onZamknij();
+        } catch (e) {
+            console.error('[RealizacjaPanel] edycja wpisu:', e);
+            alert('Nie udało się zapisać zmian');
+        } finally { setZapis(false); }
+    };
+    const zmienione = qa ? (f.question.trim() !== (w.tekst || '').trim() || f.answer.trim() !== (w.odpowiedz || '').trim())
+        : bloker ? (f.title.trim() !== (w.tekst || '').trim() || f.dueAt !== (w.termin ? String(w.termin).slice(0, 10) : '') || String(f.impactDays) !== String(w.wplywDni ?? ''))
+        : false;
+    return (
+        <div className="ev-edit">
+            {qa && (
+                <>
+                    <div className="lab">Pytanie</div>
+                    <AutoResizeTextarea className="in" value={f.question} onChange={ustaw('question')} />
+                    <div className="lab">Odpowiedź</div>
+                    <AutoResizeTextarea className="in" value={f.answer} onChange={ustaw('answer')} placeholder="Wpisz odpowiedź — pytanie przestanie być otwarte" />
+                </>
+            )}
+            {bloker && (
+                <>
+                    <div className="lab">Opis blokera</div>
+                    <AutoResizeTextarea className="in" value={f.title} onChange={ustaw('title')} />
+                    <div className="row2">
+                        <input className="in" type="date" value={f.dueAt} onChange={ustaw('dueAt')} title="Termin usunięcia" />
+                        <input className="in" type="number" min="0" value={f.impactDays} onChange={ustaw('impactDays')} placeholder="wpływ, dni" title="O ile dni przesunie roboty" style={{ width: 96 }} />
+                    </div>
+                </>
+            )}
+            {(qa || bloker) && (
+                <div className="row2">
+                    <button className="btn acc" onClick={zapisz} disabled={!zmienione || zapis || (qa ? !f.question.trim() : !f.title.trim())}>Zapisz</button>
+                    <button className="btn" onClick={onZamknij}>Anuluj</button>
+                </div>
+            )}
+            <PoleCzatu uzytkownicy={ownerUsers} placeholder="Odpowiedz w czacie pozycji… (@ oznacza osobę)"
+                onWyslij={(t, ids) => wyslij(w.nodeId, t, false, ids)} />
         </div>
     );
 }
@@ -1069,7 +1190,7 @@ function OsWybor({ node, axis, readOnly, saveAxis }) {
 // ─── Kokpit ──────────────────────────────────────────────────────────────────
 
 // @anchor realizacja-kokpit — KPI gałęzi, blokery i decyzje, najbliższe 14 dni z gotowością, wątek gałęzi.
-function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMoney, canEdit, nodeById, pelne, filtr, setFiltr, onOtworz, akcje, gotowosc, kolizje = [], milestony = [], kolizjeMs = [] }) {
+function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMoney, canEdit, nodeById, pelne, filtr, setFiltr, onOtworz, akcje, gotowosc, edycja, kolizje = [], milestony = [], kolizjeMs = [] }) {
     const k = useMemo(() => {
         // @anchor realizacja-kokpit-wynik — przychód z oferty (`offerPriceOf`, ta sama formuła co Budżet),
         // zysk planowany = przychód − koszt planowany; prognoza zysku liczy koszt każdej pozycji jako
@@ -1142,7 +1263,7 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
                     <FiltryWatku wpisy={wpisy} filtr={filtr} setFiltr={setFiltr} />
                     <div className="feed scroll" style={{ maxHeight: 560 }}>
                         {widoczne.length ? widoczne.map(w => (
-                            <Wpis key={w.id} w={w} nazwaPozycji={nazwa(w.nodeId)} onPozycja={() => onOtworz(w.nodeId)} akcje={canEdit ? akcje : null} />
+                            <Wpis key={w.id} w={w} nazwaPozycji={nazwa(w.nodeId)} onPozycja={() => onOtworz(w.nodeId)} akcje={canEdit ? akcje : null} edycja={edycja} />
                         )) : <Pusto>Brak wpisów tego rodzaju.</Pusto>}
                     </div>
                 </Karta>
@@ -1173,7 +1294,7 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
                     <Karta tytul="Blokery i decyzje" prawa="po terminie i wpływie na roboty">
                         <div className="feed">
                             {decyzje.length ? decyzje.map(w => (
-                                <Wpis key={w.id} w={w} nazwaPozycji={nazwa(w.nodeId)} onPozycja={() => onOtworz(w.nodeId)} akcje={canEdit ? akcje : null} />
+                                <Wpis key={w.id} w={w} nazwaPozycji={nazwa(w.nodeId)} onPozycja={() => onOtworz(w.nodeId)} akcje={canEdit ? akcje : null} edycja={edycja} />
                             )) : <Pusto>Nic nie blokuje tej gałęzi.</Pusto>}
                         </div>
                     </Karta>

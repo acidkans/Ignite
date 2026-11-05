@@ -18,6 +18,7 @@ const nazwaPelna = (n) => String(n?.name || '').trim() || '(bez nazwy)';
 export default function HarmonogramPlanowanie({
     wbsTree, projectName, projectStartDate, projectEndDate,
     onNodeDurationChange, onGanttDateChange, onGanttDatesBatch, onGetHtmlReady, onExcelDataReady, canEdit = true,
+    onPrzestaw = null,
 }) {
     const items = useMemo(() => wbsTree?.items || [], [wbsTree]);
 
@@ -159,7 +160,7 @@ export default function HarmonogramPlanowanie({
                 onDurationChange={onNodeDurationChange} pokazWciecia
                 domyslnyZakres="calosc" zakresKey="planowanie-harmonogram-zakres"
                 projectStart={projectStart} projectEnd={projectEnd || null}
-                nazwaProjektu={projectName} onApi={onApi}
+                nazwaProjektu={projectName} onApi={onApi} onPrzestaw={canEdit ? onPrzestaw : null}
             />
         </div>
     );
