@@ -100,3 +100,20 @@
 .rz .hg .ms-cien-l { position: absolute; top: 22px; height: 0; border-top: 2px dashed var(--bad); z-index: 1; pointer-events: none; }
 .rz .hg .ms-cien-l.g { top: 14px; }
 .rz .hg .legend .ms-cien { position: static; display: inline-block; width: 10px; height: 10px; margin: 0 4px 0 2px; vertical-align: middle; }
+
+/* milestone'y gałęzi spoza okna — znacznik przy krawędzi wiersza gałęzi (klik = szczegóły) */
+.rz .hg .ms-poza { position: absolute; top: 6px; font: 500 10px var(--f-mono); color: var(--ms); white-space: nowrap; cursor: pointer; z-index: 3; background: var(--sunk); border: 1px solid color-mix(in srgb, var(--ms) 45%, transparent); border-radius: 8px; padding: 0 6px; }
+.rz .hg .ms-poza.l { left: 3px; }
+.rz .hg .ms-poza.r { right: 3px; }
+.rz .hg .ms-poza:hover { border-color: var(--ms); }
+.rz .hg .ms-poza.late { color: var(--bad); border-color: var(--bad); }
+.rz .hg .ms-tx { pointer-events: auto; cursor: default; }
+
+/* nazwa i daty w etykiecie wiersza nie kurczą się (flex ściskał nazwę milestone'a do 12 px) */
+.rz .hg-lbl .t, .rz .hg-lbl .m { flex: none; line-height: 16px; }
+/* wiersz milestone'a (52 px) — romb i okno na środku wysokości */
+.rz .hg-tor.ms-row .ms { top: 19px; }
+.rz .hg-tor.ms-row .ms-okno { top: 20px; }
+.rz .hg-tor.ms-row .ms-cien { top: 19px; }
+.rz .hg-tor.ms-row .ms-cien-l { top: 26px; }
+.rz .hg-tor.ms-row .poza { top: 18px; }

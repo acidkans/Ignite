@@ -819,10 +819,13 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | isMilestoneType (milestone bez importu z wbsConstants — moduł czysty, testowalny w Node) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor is-milestone-type |
 | ui-funkcja | przesunMilestone (przesunięcie rombu/okna: okno kalendarzowo, 1-dniowy romb na dzień roboczy) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-przesun-milestone |
 | ui-funkcja | rysujMs (romb milestone'a na terminie + okno planOd..planDo, przeciąganie) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-rysuj-milestone |
+| ui-funkcja | podpisyMs (podpisy rombów w wierszu gałęzi: łączenie bliskich „nazwa +N”, znaczniki ‹ ◆ / ◆ › spoza okna) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-podpisy-milestonow |
+| ui-stala | ROW_H_MS (wysokość wiersza milestone'a, 52 px) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-wys-ms |
 | ui-propsy | grupy[].milestony (milestone'y gałęzi rysowane w wierszu gałęzi) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-milestony-galezi |
 | ui-stala | msById / nazwyWezlow / milestonyPoddrzewa (milestone'y zamówienia w Realizacji) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-milestony |
 | ui-sekcja | MilestonyChipy (milestone'y w wierszu gałęzi Macierzy) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-milestony-chipy |
 | ui-sekcja | SzczegolyMilestone (wątek · termin, status, Q&A · blokery) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szczegoly-milestone |
+| ui-stala | grupyHarmonogramu (milestone'y jako własne wiersze Harmonogramu w Realizacji) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-grupy-harmonogramu |
 | ui-funkcja | splaszczDrzewo (drzewo → płaska lista z parentId) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor splaszcz-drzewo |
 | ui-funkcja | zaleznyOdMilestone ({ id: msId } — rodzeństwo za milestone'em z poddrzewami, łańcuch) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor zalezny-od-milestone |
 | ui-funkcja | zalezniMilestone (zależni przechodnio) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor zalezni-milestone |

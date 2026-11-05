@@ -19,6 +19,8 @@ const MIESIACE = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 
 const MIES_KR = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
 const LABEL_W = 280;
 const ROW_H = 44;
+// @anchor harmonogram-wys-ms — wiersz milestone'a wyższy: nazwa + „milestone data” nie mieszczą się w 44 px.
+const ROW_H_MS = 52;
 const GRP_H = 28;
 const HEAD_H = 42;
 
@@ -329,8 +331,56 @@ export default function Harmonogram({
                         </>
                     );
                 })()}
-                {wGrupie && b < ileDni && <span className="ms-tx" style={{ left: (l._prognoza && idx(l._prognoza) > b && idx(l._prognoza) < ileDni ? idx(l._prognoza) : b) * dzienPx + dzienPx / 2 + 10 }}>{nazwa(l)}{l._prognozaDni ? ` · prognoza +${l._prognozaDni} d.` : ''}</span>}
             </React.Fragment>
+        );
+    };
+
+    // @anchor harmonogram-podpisy-milestonow — podpisy rombów w wierszu gałęzi: bliskie romby (podpis by
+    // się nałożył) łączą się w jeden „nazwa +N”, a milestone'y spoza okna dostają znacznik „‹ data ◆” / „◆ data ›”
+    // przy krawędzi (klik = szczegóły). Bez tego milestone poza oknem albo tuż obok innego znikał z widoku.
+    const podpisyMs = (milestony) => {
+        const lewe = [], prawe = [], w = [];
+        for (const m of milestony) {
+            const b = idx(m.planDo), a = idx(m.planOd);
+            if (b === null) continue;
+            if (b < 0) lewe.push(m); else if (a >= ileDni || b >= ileDni) { if (a >= ileDni) prawe.push(m); else w.push({ m, b: ileDni - 1 }); }
+            else {
+                const p = m._prognoza ? idx(m._prognoza) : null;
+                w.push({ m, b: p !== null && p > b && p < ileDni ? p : b });
+            }
+        }
+        w.sort((x, y) => x.b - y.b);
+        const grupyP = [];
+        let koniec = -Infinity;
+        for (const x of w) {
+            const left = x.b * dzienPx + dzienPx / 2 + 10;
+            if (grupyP.length && left - 18 < koniec) { grupyP[grupyP.length - 1].reszta.push(x.m); continue; }
+            const tekst = `${nazwa(x.m)}${x.m._prognozaDni ? ` · prognoza +${x.m._prognozaDni} d.` : ''}`;
+            grupyP.push({ left, m: x.m, tekst, reszta: [] });
+            koniec = left + tekst.length * 6.2 + 24;
+        }
+        const otworz = (id) => (e) => { e.stopPropagation(); onOtworz?.(id); };
+        const opis = (lista) => lista.map(m => `◆ ${m.name} ${dzienMies(m.planOd)}${+dzien0(m.planDo) !== +dzien0(m.planOd) ? `–${dzienMies(m.planDo)}` : ''}`).join('\n');
+        lewe.sort((x, y) => dzien0(y.planDo) - dzien0(x.planDo));
+        prawe.sort((x, y) => dzien0(x.planOd) - dzien0(y.planOd));
+        return (
+            <>
+                {grupyP.map(g => (
+                    <span key={`tx-${g.m.id}`} className="ms-tx" style={{ left: g.left }} title={opis([g.m, ...g.reszta])}>
+                        {g.tekst}{g.reszta.length ? <b> +{g.reszta.length}</b> : null}
+                    </span>
+                ))}
+                {lewe.length > 0 && (
+                    <span className={`ms-poza l${lewe.some(m => m._msKonflikt) ? ' late' : ''}`} title={`Poza oknem (wcześniej):\n${opis(lewe)}`} onClick={otworz(lewe[0].id)}>
+                        ‹ {dzienMies(lewe[0].planDo)} ◆ {nazwa(lewe[0])}{lewe.length > 1 ? ` +${lewe.length - 1}` : ''}
+                    </span>
+                )}
+                {prawe.length > 0 && (
+                    <span className={`ms-poza r${prawe.some(m => m._msKonflikt) ? ' late' : ''}`} title={`Poza oknem (później):\n${opis(prawe)}`} onClick={otworz(prawe[0].id)}>
+                        ◆ {nazwa(prawe[0])} {dzienMies(prawe[0].planOd)}{prawe.length > 1 ? ` +${prawe.length - 1}` : ''} ›
+                    </span>
+                )}
+            </>
         );
     };
 
@@ -508,7 +558,7 @@ export default function Harmonogram({
                                         const edyt = canEdit && !!savePlanDates && pasek && !opisPaska(l).zablokowany;
                                         const ed = edycjaDat === l.id;
                                         return (
-                                            <div key={l.id} className="hg-lbl" style={{ height: ROW_H, paddingLeft: 8 + (pokazWciecia ? Math.max(0, (l.depth || 0) - 1) * 10 : 0) }}>
+                                            <div key={l.id} className="hg-lbl" style={{ height: jestMs(l) ? ROW_H_MS : ROW_H, paddingLeft: 8 + (pokazWciecia ? Math.max(0, (l.depth || 0) - 1) * 10 : 0) }}>
                                                 <span className={`t${onOtworz ? ' klik' : ''}${jestMs(l) ? ' ms-n' : ''}`} title={l.name} onClick={onOtworz ? () => onOtworz(l.id) : undefined}>{jestMs(l) ? '◆ ' : ''}{nazwa(l)}</span>
                                                 <span className="m">
                                                     {pasek && !ed && (
@@ -565,6 +615,7 @@ export default function Harmonogram({
                                         {(galaz || milestony.length > 0) && (
                                             <div className="hg-grp-t" style={{ height: GRP_H }}>
                                                 {milestony.map(m => rysujMs(m, galaz?.id || null, canEdit && !!savePlanDates && !opisPaska(m).zablokowany, true))}
+                                                {podpisyMs(milestony)}
                                             </div>
                                         )}
                                         {pozycje.map(({ l, pasek, d0: r0, d1: r1, dostawy }) => {
@@ -591,7 +642,7 @@ export default function Harmonogram({
                                                 ? wolne.filter(i => i >= od && i <= od + dl - 1).map(i => i - od) : [];
                                             const poza = pasek && !widoczny ? (d1 < 0 ? 'l' : 'r') : null;
                                             return (
-                                                <div key={l.id} className={`hg-tor${edyt ? ' plan' : ''}`} style={{ height: ROW_H }}
+                                                <div key={l.id} className={`hg-tor${edyt ? ' plan' : ''}${jestMs(l) ? ' ms-row' : ''}`} style={{ height: jestMs(l) ? ROW_H_MS : ROW_H }}
                                                     onClick={edyt ? (e) => klikToru(e, l, galazId) : undefined}>
                                                     {jestMs(l) && pasek && rysujMs(l, galazId, edyt)}
                                                     {widoczny && !jestMs(l) && (

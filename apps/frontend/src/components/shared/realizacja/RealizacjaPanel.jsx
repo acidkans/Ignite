@@ -17,7 +17,7 @@ import {
 } from '../wbs/realizationShared';
 import {
     PURCHASE_STATUS_META, EXEC_STATUS_META, execStatusLabel, hasPurchaseAxis, hasExecAxis, axisGateOf,
-    DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS, PLAN_STATUS_META, planStatusFromAny,
+    DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS, PLAN_STATUS_META, planStatusFromAny, isMilestoneNode,
 } from '../wbs/wbsConstants';
 import { useWatekRealizacji } from './useWatekRealizacji';
 import {
@@ -50,7 +50,7 @@ const opisPaskaRobot = (l) => {
     const status = execStatusLabel(l.type, l.execStatus || DEFAULT_EXEC_STATUS);
     return { klasa: wstrzymane ? 'b-hold' : zrobione ? 'b-done' : 'b-work', tekst: wstrzymane ? 'wstrzymane' : String(status || '').toLowerCase(), zablokowany: zrobione };
 };
-const maPasekRobot = (l) => hasExecAxis(l.type);
+const maPasekRobot = (l) => hasExecAxis(l.type) || isMilestoneNode(l);
 // @anchor realizacja-nieruchome-exec — pozycje, których przesunięcie milestone'a nie rusza (kolizja na czerwono).
 const NIERUCHOME_EXEC = ['IN_PROGRESS', 'DONE', 'HANDED_OVER', 'INVOICED'];
 // Dostawa = prognozowany wpis zakupu (FORECAST) pozycji z osią zakupu.
@@ -350,9 +350,22 @@ export default function RealizacjaPanel({
         return out;
     }, [idx, focusId, liscie, milestonyPoddrzewa, msAnaliza]);
 
+    // @anchor realizacja-grupy-harmonogramu — w Harmonogramie milestone ma WŁASNY wiersz („◆ nazwa ·
+    // milestone data”, jak w Planowaniu), wstawiony w kolejności drzewa WBS; sam romb w nagłówku gałęzi
+    // był łatwy do przeoczenia (poza oknem albo przy prawej krawędzi).
+    const grupyHarmonogramu = useMemo(() => {
+        const kolejnosc = new Map(nodes.map((n, i) => [n.id, i]));
+        return grupy.map(g => ({
+            ...g,
+            liscie: [...g.liscie, ...(g.milestony || [])].sort((a, b) => (kolejnosc.get(a.id) ?? 0) - (kolejnosc.get(b.id) ?? 0)),
+            milestony: [],
+        }));
+    }, [grupy, nodes]);
+
     // @anchor realizacja-gotowosc — gotowość każdej pozycji: materiał (sama pozycja z osią zakupu
     // albo materiał z tej samej gałęzi), otwarte pytania i blokery pozycji oraz jej gałęzi.
     const gotowosc = useCallback((l) => {
+        if (isMilestoneNode(l)) return null; // milestone nie ma materiału — chipy gotowości nie dotyczą
         const rodzenstwo = idx.leavesOfSubtree(l.branchId || SYNTHETIC_ROOT).filter(x => x.branchId === l.branchId);
         const material = hasPurchaseAxis(l.type) ? [l] : rodzenstwo.filter(x => hasPurchaseAxis(x.type));
         const sL = sygnaly[l.id] || {};
@@ -505,7 +518,7 @@ export default function RealizacjaPanel({
                 )}
                 {!wPodgladzie && widok === 'harmonogram' && (
                     <Harmonogram
-                        grupy={grupy} nazwa={nazwaPel} maPasek={maPasekRobot} opisPaska={opisPaskaRobot}
+                        grupy={grupyHarmonogramu} nazwa={nazwaPel} maPasek={maPasekRobot} opisPaska={opisPaskaRobot}
                         actualsOf={actualsOf} czyDostawa={czyDostawa} gotowosc={gotowosc} GotowoscChipy={GotowoscChipy}
                         kolizje={kolizje} canEdit={canEdit} savePlanDates={savePlanDates}
                         msZaleznosc={msZaleznosc} msWezly={msWezly} savePlanDatesBatch={savePlanDatesBatch}
