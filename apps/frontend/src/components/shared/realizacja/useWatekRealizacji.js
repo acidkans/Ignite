@@ -31,12 +31,13 @@ export function useWatekRealizacji(nodeId) {
     useEffect(() => { pobierz(); }, [pobierz]);
 
     // @anchor watek-wyslij — odpowiedź z wątku idzie do czatu pozycji (`Comment.wbsNodeId`).
-    // `pilne` = wpis typu URGENT, czyli bloker w MVP.
-    const wyslij = useCallback(async (wbsNodeId, text, pilne = false) => {
+    // `pilne` = wpis typu URGENT, czyli bloker w MVP. `mentionedUserIds` = osoby oznaczone „@" —
+    // backend wysyła im powiadomienie NEW_MENTION (`comments.controller.ts`).
+    const wyslij = useCallback(async (wbsNodeId, text, pilne = false, mentionedUserIds = []) => {
         const res = await fetch(`${API_URL}/comments/order/${nodeId}`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, wbsNodeId, type: pilne ? 'URGENT' : 'NOTE' }),
+            body: JSON.stringify({ text, wbsNodeId, type: pilne ? 'URGENT' : 'NOTE', mentionedUserIds }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         await pobierz();

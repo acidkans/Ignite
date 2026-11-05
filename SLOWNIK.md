@@ -52,7 +52,7 @@ Używaj nazwy z kolumny **Skrót** — Claude będzie wiedział dokładnie co zm
 | PANEL_WYMAGANIA | Zakładka "Informacje o zamówieniu" z terminami i kontaktami | `RequirementsTab` | `components/shared/RequirementsTab.jsx` | 71 |
 | PANEL_INFO_WEZLA | Informacje o wybranym węźle drzewa | `NodeInfoTab` | `components/shared/NodeInfoTab.jsx` | 5 |
 | PANEL_OFERTY | Zakładka z listą ofert | `OffersTab` | `components/shared/OffersTab.jsx` | 148 |
-| GANTT | Wykres harmonogramu projektu | `GanttSection` | `components/shared/wbs/GanttSection.jsx` | 358 |
+| HARMONOGRAM | Harmonogram robót (Planowanie + Realizacja) | `Harmonogram` | `components/shared/harmonogram/Harmonogram.jsx` | — |
 | DRZEWO | Lewy panel z hierarchią węzłów projektu | `DynamicSidebar` | `components/Layout/DynamicSidebar.jsx` | 17 |
 | LOGOWANIE | Strona logowania i rejestracji | `LoginPage` | `LoginPage.jsx` | 5 |
 
@@ -234,6 +234,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-przycisk | Uruchom realizację (nagłówek) | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-start-realization-button |
 | ui-przycisk | chip REALIZACJA + cofnięcie | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-realization-chip |
 | ui-zakladka | realizacja (TAB_META) | apps/frontend/src/DashboardPage.jsx | @anchor tab-realizacja |
+| ui-stan | tabsPinned / tabsOpen (pasek zakładek chowany do listwy, wysuwany po najechaniu; pinezka przypina) | apps/frontend/src/DashboardPage.jsx | @anchor tabs-bar-autohide |
 | ui-modal | krok „Baseline zapisany” w modalu akceptacji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-accept-done-step |
 | ui-modal | Cofnąć uruchomienie realizacji? | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-stop-realization-modal |
 | ui-stan | branchNav | apps/frontend/src/components/Layout/MainLayout.jsx | @anchor main-layout-branch-nav |
@@ -244,6 +245,19 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stan | shortOverrides | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-short-overrides |
 | ui-funkcja | zapiszShort | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zapisz-short |
 | ui-stala | navGalezie | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-branch-nav |
+| ui-stala | navPozycje | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-nav-pozycje |
+| ui-stan | podglad | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-podglad |
+| ui-funkcja | wierszPozycji | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree-pozycja |
+| ui-ikona | ◆ zagrożone milestone'y gałęzi w drzewie | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree-ms |
+| ui-input | SidebarBranchToggles | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-toggles |
+| ui-stan | tylkoSygnaly | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tylko-sygnaly |
+| ui-stala | zakupyApi | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zakupy-api |
+| ui-sekcja | szuflada zakupów pozycji | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szuflada-zakupow |
+| ui-hook | useSzerokosciKolumn | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szerokosci-kolumn |
+| ui-stala | boczne karty Kokpitu do krawędzi (margines -24px wątku i blokerów, środek bez zmian) | apps/frontend/src/components/shared/realizacja/realizacja.css | @anchor realizacja-kolumny-do-krawedzi |
+| ui-sekcja | TrzyKolumny | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-trzy-kolumny |
+| ui-funkcja | Kokpit — przychód i zysk | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit-wynik |
+| ui-input | PoleCzatu | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-pole-czatu |
 | ui-sekcja | DrogaPasek | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-droga-pasek |
 | ui-sekcja | SygnalyCell | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-sygnaly-cell |
 | ui-sekcja | Wpis | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis |
@@ -258,6 +272,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | zbudujWatek | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor zbuduj-watek |
 | ui-funkcja | sygnalyWezlow | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor sygnaly-wezlow |
 | ui-funkcja | sumaSygnalow | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor suma-sygnalow |
+| ui-funkcja | sygnalyWezlow — sygnały `ms` (zagrożony milestone) i `kms` (kolizja z milestone'em) | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor sygnaly-wezlow-ms |
 | ui-funkcja | kiedyTekst | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor kiedy-tekst |
 | ui-hook | useWatekRealizacji | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor use-watek-realizacji |
 | ui-funkcja | wyslij | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-wyslij |
@@ -295,17 +310,31 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | back-funkcja | remove | apps/backend/src/constraints/constraints.service.ts | @anchor constraints-remove |
 | ui-stala | ownerUsers (zwrot hooka) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-owner-users |
 | ui-stala | WIDOKI | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-widoki |
+| ui-przycisk | segment „Pozycja” + „‹ widok” (szczegóły pozycji widoczne w przełączniku widoków, powrót do widoku) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-segment-pozycja |
 | ui-funkcja | akcje (zamknij / otworz / zPytania) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-akcje-blokera |
 | ui-funkcja | gotowosc | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-gotowosc |
 | ui-sekcja | GotowoscChipy | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-gotowosc-chipy |
 | ui-formularz | BlokerForm | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-bloker-form |
 | ui-funkcja | decyzje (sortowanie blokerów) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolejnosc-blokerow |
-| ui-sekcja | Lookahead | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-lookahead |
-| ui-stan | przesun / ileDni (okno Lookahead: przesunięcie od dziś i długość 14/28 dni) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-lookahead-okno |
-| ui-stan | drag (ciągnięty pasek robót w Lookahead: tryb move/l/r, delta dni) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-lookahead-drag |
-| ui-funkcja | ganttDatesByNode (daty pasków jak w Gantcie: zapisane albo domyślne; do = ostatni dzień) | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor gantt-daty-wezlow |
+| ui-sekcja | Harmonogram (wspólny widok robót Planowanie + Realizacja, wygląd Lookahead; zakres 14 dni / miesiąc / całość) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram |
+| ui-funkcja | dniRobocze (dni robocze od..ost włącznie, opcjonalnie z dniami wolnymi) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-dni-robocze |
+| ui-funkcja | przesunPasek (nowe daty paska po przeciągnięciu: move zachowuje dni robocze, l/r zmienia krawędź) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-przesun |
+| ui-stan | przesun (przesunięcie okna: tygodnie w 14 dniach, miesiące w zakresie Miesiąc) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-przesun-okna |
+| ui-stan | wow (gałęzie pracujące w weekendy i święta, stan sesji) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-praca-w-wolne |
+| ui-stan | szerOsi (dostępna szerokość osi — dzień rozciąga się do pełnej szerokości) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-szerokosc |
+| ui-funkcja | okno osi (start, ileDni, dzienPx dla zakresu) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-okno |
+| ui-stan | drag (ciągnięty pasek: tryb move/l/r, delta dni) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-drag |
+| ui-funkcja | getExcelData (dane arkusza „Harmonogram” — kształt jak dawny Gantt) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-excel-data |
+| ui-funkcja | getHtml (statyczny HTML harmonogramu do PDF) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-html |
+| ui-sekcja | HarmonogramPlanowanie (sekcja Harmonogram w Planowaniu, zastępuje GanttSection) | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie |
+| ui-stan | projectStart / projectEnd + pola (start/koniec projektu, markery na osi) | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-start |
+| ui-stan | overrides (zapisane daty pasków: baza + zmiany sesji) | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-overrides |
+| ui-funkcja | zmienStart (zmiana Startu przesuwa zapisane paski, zapis z opóźnieniem) | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-przesun-start |
+| ui-funkcja | opisPaskaRobot / czyDostawa (kolor i podpis paska wg osi wykonania, dostawy FORECAST) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-opis-paska |
+| ui-funkcja | ganttDatesByNode (daty pasków harmonogramu: zapisane albo domyślne; do = ostatni dzień) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor gantt-daty-wezlow |
 | ui-funkcja | planOd / planDo (daty robót pozycji w danych realizacji, z `ganttDatesByNode`) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-plan-od-do |
-| ui-funkcja | savePlanDates (zapis `ganttStart/ganttEnd` z Lookahead) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-save-plan-dates |
+| ui-funkcja | savePlanDates (zapis `ganttStart/ganttEnd` z Harmonogramu w Realizacji) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-save-plan-dates |
+| ui-funkcja | savePlanDatesBatch (zbiorczy zapis dat w Realizacji, cofa przy błędzie) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-save-plan-dates-batch |
 | ui-sekcja | Tablica | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tablica |
 | ui-stala | TABLICA_KOLUMNY | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tablica-kolumny |
 | ui-stala | RODZAJE_BLOKERA | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor rodzaje-blokera |
@@ -318,6 +347,12 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | wykryjKolizje | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor wykryj-kolizje |
 | ui-stala | kolizje | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolizje |
 | ui-karta | KolizjeDostaw | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolizje-dostaw |
+| ui-karta | NajblizszeMilestony (plan · baseline · prognoza · poślizg) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-najblizsze-milestony |
+| ui-karta | KolizjeMilestone (pozycje przed końcem milestone'a + „Ustaw bloker”) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolizje-milestone |
+| ui-stan | msBaseline (daty baseline milestone'ów) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-ms-baseline |
+| ui-stala | msAnaliza (prognoza z impactDays, poślizg, kolizje, zagrożone) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-ms-analiza |
+| ui-funkcja | akcje.zKolizjiMs (bloker TECH z kolizji z milestone'em, sourceType MILESTONE) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-bloker-kolizji-ms |
+| ui-funkcja | cień prognozy milestone'a na Harmonogramie (+N dni z blokerów) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-cien-prognozy |
 
 ### Moduł MarkerDetailsPanel
 
@@ -511,6 +546,10 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-hook | DocumentationSidebar — nasłuch `documents-changed` | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor docs-sidebar-documents-changed |
 | back-endpoint | POST /wbs-nodes | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-create |
 | back-endpoint | PATCH /wbs-nodes/:id | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-update |
+| back-endpoint | PATCH /wbs-nodes/gantt-dates/batch (zbiorczy zapis dat Harmonogramu) | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-gantt-dates-batch |
+| back-endpoint | GET /wbs-nodes/milestones/baseline/:nodeId (daty baseline milestone'ów) | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-milestones-baseline |
+| back-funkcja | getMilestonesBaseline (zaakceptowana wersja + stan „przed” z AuditLog po akceptacji) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-milestones-baseline-service |
+| back-funkcja | updateGanttDatesBatch (transakcja + jeden wpis AuditLog `WbsNode.ganttDates`) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-gantt-dates-batch-service |
 | back-endpoint | PATCH /wbs-nodes/:id/budget | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-update-budget |
 | back-endpoint | DELETE /wbs-nodes/:id | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-delete |
 
@@ -537,13 +576,9 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-sekcja | nagłówek sekcji (rozwinięta = stonowana zieleń) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor section-head |
 | ui-sekcja | WbsMaterialsPanel | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-panel |
 | ui-sekcja | MaterialRequirementsPanel | apps/frontend/src/components/shared/wbs/MaterialRequirementsPanel.jsx | @anchor material-requirements-panel |
-| ui-sekcja | GanttSection | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor gantt-section |
-| ui-stala | COL_BRANCH | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor gantt-col-branch |
-| ui-funkcja | shiftProjectStart | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor shift-project-start |
-| ui-funkcja | nodeDurationMonths | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor node-duration-months |
-| ui-funkcja | addCalendarMonths | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor add-calendar-months |
-| ui-funkcja | isValidGanttDate | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor is-valid-gantt-date |
-| ui-stan | projectStartInput / projectEndInput | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor project-date-inputs |
+| ui-funkcja | nodeDurationMonths | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor node-duration-months |
+| ui-funkcja | addCalendarMonths | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor add-calendar-months |
+| ui-funkcja | isValidGanttDate | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor is-valid-gantt-date |
 | ui-sekcja | TasksCalendarSection | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-section |
 | ui-sekcja | ProjectItemsPanel | apps/frontend/src/components/shared/wbs/ProjectItemsPanel.jsx | @anchor project-items-panel |
 | ui-tabela | BudgetTable | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table |
@@ -607,6 +642,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stan | leafDefaultsDraftMissing | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor leaf-defaults-draft-missing |
 | ui-input | leaf-defaults-distance-row | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor leaf-defaults-distance-row |
 | ui-input | wbs-unit-cost-input | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-unit-price-input |
+| ui-funkcja | zmiana typu na milestone (czyści jednostkę i cenę) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-type-milestone |
+| ui-input | daty milestone'a od/do (kolumny Ilość/Jednostka → ganttStart/ganttEnd) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-milestone-dates |
 | ui-stan | matReqByWbsId | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-req-by-wbs-id |
 | ui-stan | matReqByName | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-req-by-name |
 | ui-stan | matReqsLoaded | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor mat-reqs-loaded |
@@ -776,7 +813,36 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | kwotaSlownie | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor kwota-slownie |
 | ui-funkcja | handleExportGanttExcel | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-gantt-excel |
 | ui-funkcja | appendGanttSheet | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor append-gantt-sheet |
-| ui-funkcja | buildExcelTimeline | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor build-excel-timeline |
+| ui-funkcja | buildExcelTimeline | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor build-excel-timeline |
+| ui-funkcja | dataLokalnaIso (RRRR-MM-DD w czasie lokalnym) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor data-lokalna-iso |
+| ui-funkcja | zakresDniDoGantt (od..ost → ganttStart/ganttEnd, koniec wyłączny) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor zakres-dni-do-gantt |
+| ui-funkcja | isMilestoneType (milestone bez importu z wbsConstants — moduł czysty, testowalny w Node) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor is-milestone-type |
+| ui-funkcja | przesunMilestone (przesunięcie rombu/okna: okno kalendarzowo, 1-dniowy romb na dzień roboczy) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-przesun-milestone |
+| ui-funkcja | rysujMs (romb milestone'a na terminie + okno planOd..planDo, przeciąganie) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-rysuj-milestone |
+| ui-funkcja | podpisyMs (podpisy rombów w wierszu gałęzi: łączenie bliskich „nazwa +N”, znaczniki ‹ ◆ / ◆ › spoza okna) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-podpisy-milestonow |
+| ui-stala | ROW_H_MS (wysokość wiersza milestone'a, 52 px) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-wys-ms |
+| ui-propsy | grupy[].milestony (milestone'y gałęzi rysowane w wierszu gałęzi) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-milestony-galezi |
+| ui-stala | msById / nazwyWezlow / milestonyPoddrzewa (milestone'y zamówienia w Realizacji) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-milestony |
+| ui-sekcja | MilestonyChipy (milestone'y w wierszu gałęzi Macierzy) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-milestony-chipy |
+| ui-sekcja | SzczegolyMilestone (wątek · termin, status, Q&A · blokery) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szczegoly-milestone |
+| ui-stala | grupyHarmonogramu (milestone'y jako własne wiersze Harmonogramu w Realizacji) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-grupy-harmonogramu |
+| ui-funkcja | splaszczDrzewo (drzewo → płaska lista z parentId) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor splaszcz-drzewo |
+| ui-funkcja | zaleznyOdMilestone ({ id: msId } — rodzeństwo za milestone'em z poddrzewami, łańcuch) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor zalezny-od-milestone |
+| ui-funkcja | zalezniMilestone (zależni przechodnio) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor zalezni-milestone |
+| ui-funkcja | pierwszyDozwolonyDzien (dzień roboczy po końcu milestone'a) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor pierwszy-dozwolony-dzien |
+| ui-funkcja | roznicaDniRoboczych (przesunięcie w dniach roboczych ze znakiem) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor roznica-dni-roboczych |
+| ui-funkcja | przesunORobocze (dzień ± n dni roboczych) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor przesun-o-robocze |
+| ui-funkcja | przesunZaleznych (wariant „zachowaj odstęp”) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor przesun-zaleznych |
+| ui-funkcja | buildTasksFromTree — reguła „nie wcześniej niż” w domyślnych datach | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor build-tasks-ms-regula |
+| ui-propsy | msZaleznosc / msWezly / savePlanDatesBatch (reguły milestone'ów) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-ms-propsy |
+| ui-funkcja | minOdOf (pierwszy dozwolony start pozycji) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-min-od |
+| ui-funkcja | zapisz (dociąganie do milestone'a, przesuwanie zależnych, komunikat hg-info) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-zapisz |
+| ui-stan | podgladZal (podgląd na żywo przesuwanych zależnych) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-podglad-zaleznych |
+| ui-stala | msZaleznosc / msWezly w Planowaniu | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-ms |
+| ui-funkcja | savePlanDatesBatch w Planowaniu (cofa podgląd przy błędzie) | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-batch |
+| ui-funkcja | handleGanttDatesBatch (PATCH gantt-dates/batch z guardem snapshotu) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-gantt-dates-batch |
+| ui-stala | msZaleznosc / msWezly w Realizacji (całe zamówienie) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-ms-reguly |
+| ui-stala | NIERUCHOME_EXEC (IN_PROGRESS, DONE, HANDED_OVER, INVOICED) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-nieruchome-exec |
 | ui-funkcja | handleGanttDateChange | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-gantt-date-change |
 | ui-funkcja | handleMaterialNodeCreated | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-material-node-created |
 | ui-funkcja | handleHybridNodesDeleted | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-hybrid-nodes-deleted |
@@ -800,6 +866,10 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stala | darkTheme | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor dark-theme |
 | ui-stala | TYPE_LABELS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor type-labels |
 | ui-stala | TYPE_OPTIONS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor type-options |
+| ui-stala | NON_COST_NODE_TYPES (typy węzłów bez kosztu/ceny: group, od M1 milestone) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor non-cost-node-types |
+| ui-funkcja | isCostNode (czy węzeł/typ niesie koszt i cenę — zamiast rozsianych `=== 'group'`) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor is-cost-node |
+| ui-stala | MILESTONE_TYPE (typ węzła „kamień milowy”: niekosztowy, bez dzieci, pod gałęzią) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor milestone-type |
+| ui-funkcja | isMilestoneNode (czy węzeł/typ jest milestone'em) | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor is-milestone-node |
 | ui-funkcja | wbsTypeFromAny | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor wbs-type-from-any |
 | ui-stala | BUDGET_TYPE_LABELS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor budget-type-labels |
 | ui-stala | UNIT_OPTIONS | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor unit-options |
@@ -2010,6 +2080,14 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | back-funkcja | normalizeLeafType | apps/backend/src/common/leaf-types.util.ts | @anchor normalize-leaf-type |
 | back-stala | DEFAULT_CATALOG_TYPE | apps/backend/src/common/leaf-types.util.ts | @anchor default-catalog-type |
 | back-funkcja | isCostLeafType | apps/backend/src/common/leaf-types.util.ts | @anchor is-cost-leaf-type |
+| back-stala | NON_COST_NODE_TYPES (lustro frontu) | apps/backend/src/common/leaf-types.util.ts | @anchor non-cost-node-types-back |
+| back-funkcja | isCostNode (czy typ węzła niesie koszt i cenę) | apps/backend/src/common/leaf-types.util.ts | @anchor is-cost-node-back |
+| back-stala | MILESTONE_TYPE (lustro frontu) | apps/backend/src/common/leaf-types.util.ts | @anchor milestone-type-back |
+| back-funkcja | isMilestoneType | apps/backend/src/common/leaf-types.util.ts | @anchor is-milestone-type-back |
+| back-stala | MILESTONE_ERR_CHILD / _HAS_KIDS / _ROOT (komunikaty 400 kształtu milestone'a) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor milestone-shape-errors |
+| back-funkcja | assertMilestoneTree (zapis drzewa: milestone bez dzieci i nie na najwyższym poziomie) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor assert-milestone-tree |
+| back-funkcja | createNode — blokada dziecka pod milestone'em i milestone'a bez rodzica | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-create-milestone-guard |
+| back-funkcja | updateNode — typ milestone tylko bez dzieci i z rodzicem; parentId nie pod milestone | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-update-milestone-guard |
 | back-funkcja | nodeHasOwnStatus (backend) | apps/backend/src/common/leaf-types.util.ts | @anchor backend-node-has-own-status |
 | back-funkcja | guard zapisu statusu gałęzi | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-node-branch-status-guard |
 | back-stala | PURCHASE_LEAF_TYPES (backend) | apps/backend/src/common/leaf-types.util.ts | @anchor purchase-leaf-types-backend |
@@ -2221,6 +2299,7 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-funkcja | markOutOfBaseline (pozycja dodana po akceptacji) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-out-of-baseline |
 | ui-stala | POZA_BASELINE_META (plakietka „Poza ofertą” w Statusie oferty) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-out-of-baseline-meta |
 | ui-funkcja | buildBranchIndex (branchId — najbliższa gałąź w górę) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-branch-index |
+| ui-funkcja | milestones w buildBranchIndex (milestone'y z branchId, nie gałęzie) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-branch-milestones |
 | ui-funkcja | axisStageOf (stan pozycji na osi) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-axis-stage |
 | ui-stala | rozkład osi w kwotach wyceny (pustyRozklad / zaokraglijRozklad) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-stage-dist |
 | ui-funkcja | axisDisplay (etykieta osi: bramka albo status) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-axis-display |
@@ -2348,6 +2427,7 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-stala | OFFER_VALUE_FIELDS | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor offer-value-fields |
 | ui-stan | offerLocked (UnifiedWbsPanel) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor offer-locked |
 | ui-funkcja | guard w updateNodeField | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor update-node-field-offer-lock |
+| ui-stan | manualCostEditSeq | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor manual-cost-edit-seq |
 | ui-propsy | BudgetTable.offerLocked | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table-offer-locked |
 | ui-propsy | BudgetTable.costsOnly | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table-costs-only |
 | ui-propsy | WBSHybridTable.offerLocked | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-offer-lock |

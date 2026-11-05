@@ -68,7 +68,7 @@ export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, con
     }
     const teraz = Date.now();
     const wpisy = [];
-    // Pary Q&A, z których zrobiono otwarty bloker — w wątku zamiast „→ bloker” pokazują „bloker”.
+    // Pary Q&A, z których zrobiono otwarty bloker — w wątku zamiast „Ustaw bloker” pokazują „bloker”.
     const qaZBlokerem = new Set((constraints || [])
         .filter(k => k.status === 'OPEN' && k.sourceType === 'QA' && k.sourceId).map(k => k.sourceId));
 
@@ -150,13 +150,21 @@ export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, con
 
 // @anchor sygnaly-wezlow — liczniki sygnałów per węzeł (bez sumowania w górę drzewa).
 // `kolizje` (z `wykryjKolizje`) liczą się na pozycji materiałowej, której dostawa koliduje.
-const pusteSygnaly = () => ({ blok: 0, pyt: 0, czat: 0, zad: 0, poTerminie: 0, kol: 0 });
-export function sygnalyWezlow(wpisy, kolizje = []) {
+// `ms` = zagrożony milestone (poślizg, prognoza z blokerów albo kolizja), `kms` = pozycja w kolizji
+// z milestone'em bez blokera — oba idą w górę drzewa jak pozostałe sygnały.
+const pusteSygnaly = () => ({ blok: 0, pyt: 0, czat: 0, zad: 0, poTerminie: 0, kol: 0, ms: 0, kms: 0 });
+// @anchor sygnaly-wezlow-ms — `kolizjeMs` = [{ id, msId, blokerId }], `zagrozone` = id zagrożonych milestone'ów.
+export function sygnalyWezlow(wpisy, kolizje = [], kolizjeMs = [], zagrozone = []) {
     const out = {};
     for (const k of kolizje) {
         if (k.blokerId) continue;
         (out[k.materialId] || (out[k.materialId] = pusteSygnaly())).kol++;
     }
+    for (const k of kolizjeMs) {
+        if (k.blokerId) continue;
+        (out[k.id] || (out[k.id] = pusteSygnaly())).kms++;
+    }
+    for (const id of zagrozone) (out[id] || (out[id] = pusteSygnaly())).ms++;
     for (const w of wpisy) {
         const s = out[w.nodeId] || (out[w.nodeId] = pusteSygnaly());
         if (w.rodzaj === 'block' && w.otwarte) s.blok++;

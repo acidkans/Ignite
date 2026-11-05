@@ -7,6 +7,7 @@ import {
     Package, Wrench, Hammer, ClipboardCheck, Warehouse, Truck,
     Clock, Star, CheckCircle, XCircle, ShoppingCart, LogOut, PackagePlus, Sparkles,
 } from 'lucide-react';
+import { isCostNode } from './wbsConstants';
 
 // @anchor wbs-materials-type-meta — typy liści widoczne w panelu. Materiał i sprzęt mają
 // kartę produktową (`MaterialRequirement`), praca i usługa nie — wchodzą tu wyłącznie po to,
@@ -246,7 +247,7 @@ export const entryStatusOf = (e) => (ENTRY_STATUS_META[e?.status] ? e.status : E
 // Formuła IDENTYCZNA z `offerRevenueTotal` w Budżecie (brak narzutu ⇒ 0). Pozycja dodana po
 // akceptacji nie była w ofercie, więc nie wnosi przychodu.
 export const offerPriceOf = (node) => {
-    if (!node || node.type === 'group' || node._outOfBaseline) return 0;
+    if (!node || !isCostNode(node) || node._outOfBaseline) return 0;
     const q = Math.max(0, parseFloat(node.quantity) || 0);
     const uc = Math.max(0, parseFloat(node.unitCost) || 0);
     const m = node.margin != null && String(node.margin) !== '' ? parseFloat(node.margin) : null;

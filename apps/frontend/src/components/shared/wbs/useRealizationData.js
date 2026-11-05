@@ -6,7 +6,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { API_URL } from '../../../config';
 import { AXIS_STATUS_ORDER, hasPurchaseAxis, hasExecAxis, buildOwnerOptions, applyGroupMultipliers, buildHierarchy } from './wbsConstants';
-import { ganttDatesByNode } from './GanttSection';
+import { ganttDatesByNode } from '../harmonogram/harmonogramCzas';
 import {
     authHeaders, flattenWbsNodes, buildCardMap, wbsRootOf, realizationOf, planValueOf, markOutOfBaseline, ENTRY_STATUS,
 } from './realizationShared';
@@ -163,6 +163,35 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
         } catch (e) {
             if (poprzednie) setWbsNodes(prev => prev.map(n => (n.id === wbsNodeId ? poprzednie : n)));
+            throw e;
+        }
+    }, []);
+
+    // @anchor realization-save-plan-dates-batch — zbiorczy zapis dat (milestone + zależni) przez
+    // `PATCH /wbs-nodes/gantt-dates/batch` (transakcja + AuditLog); błąd cofa wszystkie zmiany.
+    const savePlanDatesBatch = useCallback(async (lista) => {
+        const zmiany = new Map(lista.map(({ id, od, ost: doDnia }) => {
+            const start = new Date(od); start.setHours(0, 0, 0, 0);
+            const ost = new Date(doDnia); ost.setHours(0, 0, 0, 0);
+            if (ost < start) ost.setTime(start.getTime());
+            const koniec = new Date(ost); koniec.setDate(koniec.getDate() + 1);
+            return [id, { planOd: start, planDo: ost, ganttStart: start.toISOString(), ganttEnd: koniec.toISOString() }];
+        }));
+        const poprzednie = new Map();
+        setWbsNodes(prev => prev.map(n => {
+            const z = zmiany.get(n.id);
+            if (!z) return n;
+            poprzednie.set(n.id, n);
+            return { ...n, ...z };
+        }));
+        try {
+            const res = await fetch(`${API_URL}/wbs-nodes/gantt-dates/batch`, {
+                method: 'PATCH', headers: authHeaders(),
+                body: JSON.stringify({ items: [...zmiany].map(([id, z]) => ({ id, ganttStart: z.ganttStart, ganttEnd: z.ganttEnd })) }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (e) {
+            setWbsNodes(prev => prev.map(n => poprzednie.get(n.id) || n));
             throw e;
         }
     }, []);
@@ -356,7 +385,7 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
     return {
         loading, wbsNodes, cards, actuals,
         fetchAll, fetchActuals, fetchCards,
-        saveComment, saveOwner, saveAxis, savePlanDates, addActual, updateActual, deleteActual, setClosed, toggleClosed,
+        saveComment, saveOwner, saveAxis, savePlanDates, savePlanDatesBatch, addActual, updateActual, deleteActual, setClosed, toggleClosed,
         actualsOf, cardOf, rowOf, ownerOptions,
         // @anchor realization-owner-users — konta zespołu zamówienia (właściciel blokera = `User`)
         ownerUsers,

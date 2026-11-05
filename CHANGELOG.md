@@ -1,3 +1,100 @@
+## 2026-11-05 — feat(mail): eksport strategii tylko do zespołu — odbiorcy z Ignite, bez kopii na OneDrive, podpowiedzi PM z użytkowników (v2026.11.05.2224)
+
+### architektura / API
+- zmieniono `back-endpoint` `GET /mail/recipients/:nodeId` — nowy opcjonalny query `scope=team`: zwraca wyłącznie aktywnych użytkowników Ignite (bez kontaktów klienta, lokalizacji i firmy)
+- zmieniono `back-endpoint` `POST /mail/send-export` — opcjonalne pole `scope=team`: 400, gdy którykolwiek adres Do/DW jest spoza aktywnych użytkowników
+- zmieniono `back-serwis` `UsersService` (wyszukiwanie użytkowników) — bez limitu 50 wyników
+
+### wytyczne
+- `ui-propsy` `ExportChoiceModal.recipientScope='team'` + `mailArchive={false}` — dokumenty wewnętrzne (strategia/zadania/Q&A) nie mogą wyjść do klienta i nie trafiają do teczki OneDrive przy wysyłce mailem
+
+## 2026-11-05 — feat(realizacja): Kokpit — najbliższe milestone'y z baseline, prognozą i poślizgiem, kolizje z milestone'em + „Ustaw bloker”, sygnał ◆ w drzewie (M4)
+
+### schema.prisma
+- `schema-pole` `Constraint.sourceType` — nowa wartość `MILESTONE` (bez migracji, String): bloker z kolizji pozycji z milestone'em, `sourceId` = `msId:pozycjaId`
+
+### architektura / API
+- dodano `back-endpoint` `GET /wbs-nodes/milestones/baseline/:nodeId` → `{ acceptedVersionId, acceptedAt, items: { [id]: { ganttStart, ganttEnd, root } } }` — daty milestone'ów zaakceptowanej wersji; ponieważ Realizacja pracuje NA tej wersji, daty przesunięte po akceptacji odtwarzane są z pierwszego wpisu AuditLog `WbsNode.ganttDates` (stan „przed”)
+- `back-serwis` `ConstraintsService` — `SOURCE_TYPES` + `MILESTONE`
+- `ui-sekcja` `Harmonogram` — milestone zapisuje się zawsze zbiorczo (`gantt-dates/batch`), także bez zależnych, żeby każda zmiana jego terminu trafiła do AuditLog; cień prognozy (przerywany romb +N dni z blokerów, podpis „prognoza +N d.”), zagrożony milestone na czerwono
+- `ui-sekcja` Kokpit `RealizacjaPanel` — karta „Najbliższe milestone'y” (plan, baseline, prognoza = plan + największy `impactDays` otwartych blokerów na milestonie w dniach roboczych, poślizg prognozy względem baseline), karta „Kolizje z milestone'em” (pozycje startujące przed pierwszym dozwolonym dniem, „w toku”, „Ustaw bloker” → bloker TECH na pozycji, termin = pierwszy dozwolony dzień, wpływ = dni za wcześnie); kafel Blokery liczy kolizje z milestone'em
+- `ui-funkcja` `sygnalyWezlow` — sygnały `ms` (zagrożony milestone: prognoza, poślizg albo kolizja) i `kms` (kolizja bez blokera); `ui-panel` `SidebarBranchTree` — znacznik ◆ przy gałęzi i ◆K przy pozycji, filtr „sygnały” je uwzględnia
+
+### słownik
+- dodano `wbs-nodes-milestones-baseline`, `wbs-milestones-baseline-service`, `realizacja-najblizsze-milestony`, `realizacja-kolizje-milestone`, `realizacja-ms-baseline`, `realizacja-ms-analiza`, `realizacja-bloker-kolizji-ms`, `harmonogram-cien-prognozy`, `sygnaly-wezlow-ms`, `sidebar-branch-tree-ms`
+
+### wytyczne
+- `schema-pole` `WbsNode.ganttStart/ganttEnd` milestone'a — zmieniać przez `PATCH /wbs-nodes/gantt-dates/batch`; zmiana przez `PATCH /wbs-nodes/:id` (np. kolumny od/do w tabeli WBS) nie zostawia śladu w AuditLog i po akceptacji nadpisuje baseline bez możliwości odtworzenia
+- `schema-pole` `Constraint.impactDays` na milestonie — nie zmienia planu, tylko prognozę (największy wpływ z otwartych blokerów, dni robocze)
+
+## 2026-11-05 — feat(harmonogram): milestone ogranicza zależnych — „nie wcześniej niż”, przesuwanie z zachowaniem odstępu, zapis zbiorczy dat (M3)
+
+### architektura / API
+- dodano `back-endpoint` `PATCH /wbs-nodes/gantt-dates/batch` `{ items: [{ id, ganttStart, ganttEnd }] }` — wszystko albo nic (transakcja), jeden wpis `AuditLog` (`entity` = `WbsNode.ganttDates`, `entityId` = zamówienie, `diff.items` z datami przed/po); 400 dla pustej listy, złej daty, końca przed startem i węzłów z różnych wersji, 404 dla nieistniejących
+- `ui-funkcja` `harmonogramCzas.js` — czyste funkcje `zaleznyOdMilestone`, `zalezniMilestone`, `pierwszyDozwolonyDzien`, `przesunZaleznych` (+ `roznicaDniRoboczych`, `przesunORobocze`, `splaszczDrzewo`), test `test/milestone-zaleznosci.test.mjs`
+- `ui-funkcja` `buildTasksFromTree` — domyślny start zależnego = max(start projektu, pierwszy dzień roboczy po końcu milestone'a); zapisane daty bez zmian
+- `ui-sekcja` `Harmonogram` — przeciągnięcie / daty z pól przed milestone dociągają start do pierwszego dozwolonego dnia (komunikat `hg-info`); przesunięcie milestone'a przesuwa zależnych o tyle samo dni roboczych w obie strony z podglądem na żywo i zapisem zbiorczym; pozycja startująca przed swoim milestone'em = kolizja (czerwony pasek / romb, legenda)
+- `ui-sekcja` `RealizacjaPanel` — reguły liczone na całym zamówieniu; pozycje z `execStatus` IN_PROGRESS / DONE / HANDED_OVER / INVOICED się nie ruszają (kolizja na czerwono)
+
+### słownik
+- dodano `wbs-nodes-gantt-dates-batch`, `wbs-gantt-dates-batch-service`, `realization-save-plan-dates-batch`, `splaszcz-drzewo`, `zalezny-od-milestone`, `zalezni-milestone`, `pierwszy-dozwolony-dzien`, `roznica-dni-roboczych`, `przesun-o-robocze`, `przesun-zaleznych`, `build-tasks-ms-regula`, `harmonogram-ms-propsy`, `harmonogram-min-od`, `harmonogram-zapisz`, `harmonogram-podglad-zaleznych`, `harmonogram-planowanie-ms`, `harmonogram-planowanie-batch`, `handle-gantt-dates-batch`, `realizacja-ms-reguly`, `realizacja-nieruchome-exec`
+
+### wytyczne
+- `ui-funkcja` `zaleznyOdMilestone` — zależni = rodzeństwo ZA milestone'em wg `WbsNode.sortOrder` z całymi poddrzewami; następny milestone zamyka zakres i sam zależy od poprzedniego. Zmiana `sortOrder` zmienia więc zależności
+- `back-endpoint` `PATCH /wbs-nodes/gantt-dates/batch` — każde przesunięcie kilku pasków naraz (milestone + zależni) idzie tym endpointem, nie seriami `PATCH /wbs-nodes/:id`
+- przesunięcie milestone'a = wariant „zachowaj odstęp” (decyzja użytkownika); w Realizacji rozpoczętych / wykonanych / odebranych robót nie ruszamy — konflikt zostaje widoczny
+
+## 2026-11-05 — feat(harmonogram): milestone jako romb na Harmonogramie, w wierszu gałęzi Realizacji i w eksportach (M2)
+
+### architektura / API
+- `ui-funkcja` `buildTasksFromTree` — milestone jest zadaniem typu `milestone`: zapisane okno `ganttStart..ganttEnd` albo 1 dzień od domyślnego startu; nie zmienia ilości pozycji (`_canUpdateDuration` = false). `ganttDatesByNode` daje więc milestone'om `planOd/planDo` także w Realizacji
+- `ui-sekcja` `Harmonogram` — fioletowy romb na terminie (ostatni dzień okna) + przerywane okno, gdy milestone trwa kilka dni; przeciąganie rombu przesuwa całość, krawędzie okna je zmieniają (1-dniowy romb bez rozciągania); legenda; klik po przeciągnięciu nie przenosi już startu (`poDragu`)
+- `ui-sekcja` `RealizacjaPanel` — milestone'y gałęzi w wierszu gałęzi Harmonogramu (romb + nazwa) i Macierzy (chip); klik → szczegóły milestone'a (wątek z @wzmiankami, termin, status, Q&A, blokery); sygnały i wątek gałęzi obejmują jej milestone'y
+- eksport Harmonogramu: Excel — wiersz `◆ nazwa`, dni „—”, okno na osi fioletowe (`FILL_MILESTONE`), cash flow pomija milestone'y jak dotąd; PDF — romb z oknem zamiast paska, dni „—”
+
+### słownik
+- dodano `is-milestone-type`, `harmonogram-przesun-milestone`, `harmonogram-rysuj-milestone`, `harmonogram-milestony-galezi`, `realizacja-milestony`, `realizacja-milestony-chipy`, `realizacja-szczegoly-milestone`
+
+### wytyczne
+- `ui-funkcja` `przesunMilestone` — termin milestone'a jest kalendarzowy: okno jedzie o tyle dni kalendarzowych, ile przeciągnięto; tylko 1-dniowy romb dociąga do dnia roboczego
+
+## 2026-11-05 — feat(wbs): typ węzła milestone — niekosztowy, bez dzieci, daty od/do w tabeli WBS
+
+### architektura / API
+- `schema-pole` `WbsNode.type` — nowa wartość `milestone` (bez migracji: kolumna String). Milestone jest niekosztowy (`NON_COST_NODE_TYPES` = group, milestone): zero w wycenie, budżecie, ofercie, eksportach i materiałach; daty w `ganttStart/ganttEnd` (koniec wyłączny)
+- `back-endpoint` `POST /wbs-nodes`, `PATCH /wbs-nodes/:id`, `POST /wbs-nodes/unified/:nodeId` — 400, gdy pod milestone'em powstaje/trafia węzeł, gdy milestone ma dzieci albo stoi na najwyższym poziomie (`assertMilestoneTree`, `wbs-create-milestone-guard`, `wbs-update-milestone-guard`)
+- `ui-tabela` `WBSHybridTable` — typ „◆ Milestone” (wyłączony dla węzła z dziećmi); wiersz milestone'a zamiast ilości i jednostki ma daty od/do, bez „+ dziecko” i wklejania
+- `ui-funkcja` `axisStatusCodeOf` — milestone nie wchodzi do sumy statusów gałęzi
+- `ui-funkcja` `buildBranchIndex` — milestone nie jest gałęzią; osobna lista `milestones` z `branchId`
+- typ milestone ukryty w selekcie typu tabeli Budżet i w katalogu materiałów
+
+### słownik
+- dodano `milestone-type`, `is-milestone-node`, `milestone-type-back`, `is-milestone-type-back`, `milestone-shape-errors`, `assert-milestone-tree`, `wbs-create-milestone-guard`, `wbs-update-milestone-guard`, `wbs-type-milestone`, `wbs-milestone-dates`, `realization-branch-milestones`, `data-lokalna-iso`, `zakres-dni-do-gantt`
+- dodano (M0, refaktor) `non-cost-node-types`, `is-cost-node`, `non-cost-node-types-back`, `is-cost-node-back`
+
+### wytyczne
+- `ui-funkcja` `isCostNode` / `back-funkcja` `isCostNode` — „czy to pozycja kosztowa” sprawdzamy wyłącznie tym helperem, nie `type === 'group'`; jawne `group` tylko tam, gdzie chodzi o pakiet (mnożnik ilości). Listy front/backend pilnuje `test/typy-lustro.test.mjs`
+- `schema-pole` `WbsNode.type` = `milestone` — zawsze węzeł bez dzieci, dziecko gałęzi; milestone pod przedmiotem projektu = milestone całego przedmiotu
+
+## 2026-11-05 — feat(harmonogram): jeden Harmonogram zamiast Gantta i Lookahead — wygląd Lookahead, zakresy 14 dni / miesiąc / całość, dni wolne, edycja dat, eksporty
+
+### architektura / API
+- dodano `ui-sekcja` `Harmonogram` (`components/shared/harmonogram/Harmonogram.jsx`) — wspólny widok robót dla Planowania i Realizacji, zbudowany na Lookahead (ten sam wygląd: pasek nawigacji, nagłówki dni, paski, romby dostaw, chipy gotowości, legenda). Nowe: zakres osi 14 dni / Miesiąc / Całość, tło dni wolnych (weekendy + polskie święta), przerwy w pasku na dni wolne, linia „dziś”, markery startu/końca projektu, przełącznik „praca w dni wolne” per gałąź, edycja dat z pól przy nazwie, rok przy datach spoza bieżącego roku, oś rozciągnięta do pełnej szerokości
+- przesunięcie paska zachowuje liczbę dni roboczych (zasada dawnego Gantta) także w Realizacji; rozciągnięcie zmienia jedną krawędź
+- dodano `ui-sekcja` `HarmonogramPlanowanie` — zastępuje `GanttSection` w sekcji „Harmonogram” Planowania; Start/Koniec projektu, zmiana Startu przesuwa zapisane paski; rozciągnięcie paska pracy w dniach nadal zmienia ilość pozycji (`handleGanttDurationChange`); eksport Excel (`appendGanttSheet`) i PDF dostają dane z `getExcelData` / `getHtml` w tym samym kształcie co z Gantta
+- `ui-sekcja` `RealizacjaPanel` — widok „Lookahead” zastąpiony „Harmonogramem” (zapamiętany widok `lookahead` przechodzi na `harmonogram`); w Realizacji ilość pozycji się nie zmienia (bez `onDurationChange`)
+- dodano `ui-funkcja` moduł `harmonogramCzas.js` — logika dat przeniesiona z `GanttSection` (święta, dni robocze, `buildTasksFromTree`, `ganttDatesByNode`, `buildExcelTimeline`); `useRealizationData` importuje stąd
+- usunięto `GanttSection.jsx`, zależność `gantt-task-react` i jej nadpisania w `index.css`
+
+### słownik
+- dodano `harmonogram`, `harmonogram-dni-robocze`, `harmonogram-przesun`, `harmonogram-przesun-okna`, `harmonogram-praca-w-wolne`, `harmonogram-szerokosc`, `harmonogram-okno`, `harmonogram-drag`, `harmonogram-excel-data`, `harmonogram-html`, `harmonogram-planowanie`, `harmonogram-planowanie-start`, `harmonogram-planowanie-overrides`, `harmonogram-planowanie-przesun-start`, `realizacja-opis-paska`
+- zmieniono ścieżkę `gantt-daty-wezlow`, `node-duration-months`, `add-calendar-months`, `is-valid-gantt-date`, `build-excel-timeline` → `harmonogram/harmonogramCzas.js`; skrót `GANTT` → `HARMONOGRAM`
+- usunięto `realizacja-lookahead`, `realizacja-lookahead-okno`, `realizacja-lookahead-drag`, `gantt-section`, `gantt-col-branch`, `shift-project-start`, `project-date-inputs`
+
+### wytyczne
+- `ui-sekcja` `Harmonogram` — jedyny widok harmonogramu w aplikacji; nowe warstwy (np. milestone'y) dodaje się tutaj, nie w osobnym komponencie
+- `ui-sekcja` `Harmonogram` — daty zawsze przez `savePlanDates` → `WbsNode.ganttStart/ganttEnd` (koniec wyłączny); `onDurationChange` (zmiana ilości) podaje tylko Planowanie
+
 ## 2026-11-03 — fix(materialy): panel Materiały pokazuje tylko materiał i sprzęt, także managerowi
 
 ### architektura / API

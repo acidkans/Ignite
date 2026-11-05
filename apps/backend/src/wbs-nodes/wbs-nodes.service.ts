@@ -2,12 +2,29 @@ import { randomBytes } from 'crypto';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
-import { isClosedLeafType, isManagerRoles, nodeHasOwnStatus, isPurchaseLeafType } from '../common/leaf-types.util';
+import { isClosedLeafType, isManagerRoles, nodeHasOwnStatus, isPurchaseLeafType, isCostNode, isMilestoneType } from '../common/leaf-types.util';
 import { defaultLogisticianOwner } from '../common/default-logistician.util';
 import { resolveVersionId } from '../common/version.util';
 import { assertOfferEditable, pickOfferChanges, OfferLockUser } from '../common/offer-lock.util';
 import { ExtraOrderNotifierService, EXTRA_ORDER_STATUS } from '../notifications/extra-order-notifier.service';
 import { groupMultiplierMap } from '../common/group-qty.util';
+import { AuditAction } from '../audit/audit.types';
+
+// @anchor milestone-shape-errors — komunikaty walidacji kształtu milestone'a (wspólne dla
+// tworzenia węzła, PATCH i zapisu całego drzewa).
+const MILESTONE_ERR_CHILD = "Milestone nie może mieć pozycji pod sobą — dodaj ją do gałęzi obok milestone'a.";
+const MILESTONE_ERR_HAS_KIDS = "Węzeł z pozycjami pod sobą nie może być milestone'em — milestone to osobny węzeł bez dzieci.";
+const MILESTONE_ERR_ROOT = "Przedmiot projektu nie może być milestone'em — dodaj milestone pod nim.";
+
+// @anchor assert-milestone-tree — milestone zawsze bez dzieci i nigdy na najwyższym poziomie.
+// Sprawdza płaską listę wierszy drzewa (zapis całego drzewa: `saveTree`).
+function assertMilestoneTree(rows: { id: string; parentId: string | null; type?: string | null }[]) {
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    for (const r of rows) {
+        if (isMilestoneType(r.type) && !r.parentId) throw new BadRequestException(MILESTONE_ERR_ROOT);
+        if (r.parentId && isMilestoneType(byId.get(r.parentId)?.type)) throw new BadRequestException(MILESTONE_ERR_CHILD);
+    }
+}
 
 // @anchor qa-pair
 export interface QaPair {
@@ -158,6 +175,7 @@ export class WbsNodesService {
 
             // Zbierz IDs z nowego drzewa
             const newRows = this.flattenForInsert(items, nodeId, vId, null);
+            assertMilestoneTree(newRows);
             const newIds = new Set(newRows.map(r => r.id));
 
             // Usuń węzły które nie istnieją w nowym drzewie.
@@ -321,7 +339,7 @@ export class WbsNodesService {
             // @anchor wbs-flatten-insert-totals — nowy węzeł z ceną (wklejony klon, wartości domyślne
             // typu) rodzi się z policzonymi totalami, tak jak po `updateBudgetFields`. Bez tego
             // zostawały zera z @default(0): koszt jedn. i narzut były, koszt całościowy 0.
-            const isGroupItem = String(item.type || '').toLowerCase() === 'group';
+            const isGroupItem = !isCostNode(item.type);
             const totals = (!isGroupItem && unitCost !== undefined)
                 ? (() => {
                     const q = quantity ?? 1; // Prisma @default(1) dla quantity
@@ -593,6 +611,14 @@ export class WbsNodesService {
     async createNode(data: { nodeId: string; parentId?: string; versionId?: string; name: string; type?: string; tags?: string[] }) {
         const vId = await resolveVersionId(this.prisma, data.nodeId, data.versionId);
 
+        // @anchor wbs-create-milestone-guard — pod milestone'em nic nie wisi, a sam milestone
+        // nie bywa przedmiotem projektu.
+        if (isMilestoneType(data.type) && !data.parentId) throw new BadRequestException(MILESTONE_ERR_ROOT);
+        if (data.parentId) {
+            const parent = await this.prisma.wbsNode.findUnique({ where: { id: data.parentId }, select: { type: true } });
+            if (isMilestoneType(parent?.type)) throw new BadRequestException(MILESTONE_ERR_CHILD);
+        }
+
         // Oblicz sortOrder — ostatni wśród rodzeństwa
         const siblings = await this.prisma.wbsNode.findMany({
             where: { nodeId: data.nodeId, versionId: vId, parentId: data.parentId || null },
@@ -627,6 +653,76 @@ export class WbsNodesService {
      * Gdy quantity się zmienia, synchronizuje powiązane MaterialRequirement
      * (jedno źródło prawdy: WbsNode.quantity → WbsNodeMaterial → MaterialRequirement).
      */
+    // @anchor wbs-milestones-baseline-service — `{ acceptedVersionId, acceptedAt, items: { [id]: { ganttStart, ganttEnd, root } } }`.
+    // Realizacja pracuje NA zaakceptowanej wersji, więc jej bieżące daty mogą być już przesunięte —
+    // baseline odtwarzamy z pierwszego wpisu zbiorczego zapisu dat po akceptacji (stan „przed”).
+    async getMilestonesBaseline(nodeId: string) {
+        const pn = await this.prisma.processNode.findUnique({ where: { id: nodeId }, select: { acceptedVersionId: true, acceptedAt: true } });
+        if (!pn?.acceptedVersionId) return { acceptedVersionId: null, acceptedAt: null, items: {} };
+        const ms = await this.prisma.wbsNode.findMany({
+            where: { nodeId, versionId: pn.acceptedVersionId, type: 'milestone' },
+            select: { id: true, sourceWbsNodeId: true, ganttStart: true, ganttEnd: true },
+        });
+        const items: Record<string, { ganttStart: string | null; ganttEnd: string | null; root: string }> = {};
+        const iso = (d: Date | null) => (d ? d.toISOString() : null);
+        for (const m of ms) items[m.id] = { ganttStart: iso(m.ganttStart), ganttEnd: iso(m.ganttEnd), root: m.sourceWbsNodeId || m.id };
+        if (ms.length) {
+            const wpisy = await this.prisma.auditLog.findMany({
+                where: { entity: 'WbsNode.ganttDates', entityId: nodeId, ...(pn.acceptedAt ? { createdAt: { gte: pn.acceptedAt } } : {}) },
+                orderBy: { createdAt: 'asc' }, select: { diff: true },
+            });
+            const odtworzone = new Set<string>();
+            for (const w of wpisy) {
+                const diff: any = w.diff;
+                if (diff?.versionId !== pn.acceptedVersionId) continue;
+                for (const it of diff?.items || []) {
+                    if (!items[it.id] || odtworzone.has(it.id)) continue;
+                    odtworzone.add(it.id);
+                    items[it.id] = { ...items[it.id], ganttStart: it.przed?.ganttStart ?? null, ganttEnd: it.przed?.ganttEnd ?? null };
+                }
+            }
+        }
+        return { acceptedVersionId: pn.acceptedVersionId, acceptedAt: pn.acceptedAt, items };
+    }
+
+    // @anchor wbs-gantt-dates-batch-service — `{ id, ganttStart, ganttEnd }[]` (koniec wyłączny, null = data
+    // domyślna). Wszystko albo nic: transakcja, a w AuditLog jeden wpis z datami przed i po.
+    async updateGanttDatesBatch(items: { id: string; ganttStart: string | null; ganttEnd: string | null }[], user?: OfferLockUser) {
+        if (!Array.isArray(items) || !items.length) throw new BadRequestException('Brak pozycji do zapisu');
+        if (items.length > 5000) throw new BadRequestException('Za dużo pozycji w jednym zapisie');
+        const data = new Map<string, { ganttStart: Date | null; ganttEnd: Date | null }>();
+        for (const it of items) {
+            if (!it?.id || typeof it.id !== 'string') throw new BadRequestException('Każda pozycja wymaga id');
+            const s = it.ganttStart ? new Date(it.ganttStart) : null;
+            const e = it.ganttEnd ? new Date(it.ganttEnd) : null;
+            if ((s && isNaN(s.getTime())) || (e && isNaN(e.getTime()))) throw new BadRequestException(`Niepoprawna data (${it.id})`);
+            if (s && e && e <= s) throw new BadRequestException(`Koniec przed startem (${it.id})`);
+            data.set(it.id, { ganttStart: s, ganttEnd: e });
+        }
+        const ids = [...data.keys()];
+        return this.prisma.$transaction(async (tx) => {
+            const przed = await tx.wbsNode.findMany({ where: { id: { in: ids } }, select: { id: true, nodeId: true, versionId: true, ganttStart: true, ganttEnd: true } });
+            if (przed.length !== ids.length) throw new NotFoundException('Część węzłów nie istnieje');
+            if (new Set(przed.map(p => p.versionId ?? '')).size > 1) throw new BadRequestException('Węzły z różnych wersji WBS');
+            for (const id of ids) await tx.wbsNode.update({ where: { id }, data: data.get(id)! });
+            const iso = (d: Date | null) => (d ? d.toISOString() : null);
+            await tx.auditLog.create({
+                data: {
+                    action: AuditAction.UPDATE, entity: 'WbsNode.ganttDates', entityId: przed[0].nodeId, userId: user?.userId ?? null,
+                    diff: {
+                        versionId: przed[0].versionId,
+                        items: przed.map(p => ({
+                            id: p.id,
+                            przed: { ganttStart: iso(p.ganttStart), ganttEnd: iso(p.ganttEnd) },
+                            po: { ganttStart: iso(data.get(p.id)!.ganttStart), ganttEnd: iso(data.get(p.id)!.ganttEnd) },
+                        })),
+                    },
+                },
+            });
+            return { updated: ids.length };
+        });
+    }
+
     async updateNode(id: string, data: any, user?: OfferLockUser) {
         const allowed: Record<string, any> = {};
         // `purchaseStatus` i `execStatus` to osie REALIZACJI — osobne kolumny, żeby zmiana
@@ -658,6 +754,24 @@ export class WbsNodesService {
                 ? JSON.stringify(data.tags)
                 : null;
         }
+        // @anchor wbs-update-milestone-guard — zmiana typu na milestone tylko dla węzła bez dzieci
+        // i nie na najwyższym poziomie; przeniesienie (parentId) pod milestone zabronione.
+        if (isMilestoneType(allowed.type) || allowed.parentId !== undefined) {
+            const cur = await this.prisma.wbsNode.findUnique({
+                where: { id },
+                select: { parentId: true, type: true, _count: { select: { children: true } } },
+            });
+            const typeAfter = allowed.type !== undefined ? allowed.type : cur?.type;
+            const parentAfter = allowed.parentId !== undefined ? allowed.parentId : cur?.parentId;
+            if (isMilestoneType(typeAfter)) {
+                if (!parentAfter) throw new BadRequestException(MILESTONE_ERR_ROOT);
+                if ((cur?._count.children ?? 0) > 0) throw new BadRequestException(MILESTONE_ERR_HAS_KIDS);
+            }
+            if (allowed.parentId) {
+                const parent = await this.prisma.wbsNode.findUnique({ where: { id: allowed.parentId }, select: { type: true } });
+                if (isMilestoneType(parent?.type)) throw new BadRequestException(MILESTONE_ERR_CHILD);
+            }
+        }
         if (data.qa !== undefined) {
             const cleaned = Array.isArray(data.qa) ? data.qa.map(cleanQaPair) : [];
             allowed.qa = cleaned.length > 0 ? JSON.stringify(cleaned) : null;
@@ -666,7 +780,7 @@ export class WbsNodesService {
         // Przy zmianie typu na 'group' zerujemy pola cenowe, inaczej stara cena
         // (z czasu, gdy węzeł był typu work/material/…) dubluje się z sumą dzieci
         // w eksportach oferty/budżetu.
-        if (String(allowed.type || '').toLowerCase() === 'group') {
+        if (!isCostNode(allowed.type)) {
             allowed.unitCost = 0;
             allowed.totalCost = 0;
             allowed.margin = 0;
@@ -681,7 +795,7 @@ export class WbsNodesService {
                 select: { type: true, unitCost: true, unitPrice: true },
             });
             const typeAfter = String(allowed.type ?? cur?.type ?? '').toLowerCase();
-            if (cur && typeAfter !== 'group') {
+            if (cur && isCostNode(typeAfter)) {
                 const up = allowed.unitPrice !== undefined ? (parseFloat(allowed.unitPrice) || 0) : (cur.unitPrice ?? 0);
                 allowed.totalCost = (cur.unitCost ?? 0) * allowed.quantity;
                 allowed.totalPrice = up * allowed.quantity;
@@ -692,7 +806,7 @@ export class WbsNodesService {
         // idą też tędy (edycja z drzewa, drag paska Gantta), a zmiana typu na `group` po cichu
         // zeruje całą wycenę węzła — po akceptacji baseline wszystkie trzy drogi wymagają zgody.
         if (allowed.quantity !== undefined || allowed.unitPrice !== undefined
-            || String(allowed.type || '').toLowerCase() === 'group') {
+            || !isCostNode(allowed.type)) {
             const existing = await this.prisma.wbsNode.findUnique({
                 where: { id },
                 select: { nodeId: true, quantity: true, unitCost: true, margin: true, discount: true, unitPrice: true },
@@ -701,9 +815,9 @@ export class WbsNodesService {
                 const changes = pickOfferChanges(existing, allowed);
                 // Etykieta dla dziennika: sama zmiana typu na `group` nie jest polem cenowym,
                 // ale to ona zeruje wycenę węzła — bez tego wpis w AuditLog nie tłumaczyłby, skąd zera.
-                if (String(allowed.type || '').toLowerCase() === 'group'
+                if (!isCostNode(allowed.type)
                     && ((existing.unitCost ?? 0) !== 0 || (existing.unitPrice ?? 0) !== 0)) {
-                    changes.type = { old: 'leaf', new: 'group (zerowanie wyceny węzła)' } as any;
+                    changes.type = { old: 'leaf', new: `${String(allowed.type).toLowerCase()} (zerowanie wyceny węzła)` } as any;
                 }
                 await assertOfferEditable(this.prisma, {
                     processNodeId: existing.nodeId,
@@ -1002,7 +1116,7 @@ export class WbsNodesService {
             select: { id: true, type: true, quantity: true },
         });
         for (const d of desc) {
-            if (String(d.type || '').toLowerCase() === 'group') continue;
+            if (!isCostNode(d.type)) continue;
             await this.syncMaterialsFromWbsNode(d.id, d.quantity ?? 0).catch(() => {});
         }
     }
@@ -1099,7 +1213,7 @@ export class WbsNodesService {
         // Nawet jeśli caller przyśle pola cenowe, dla type='group' wymuszamy zera,
         // spójnie z updateNode i eksportami (localPriceOf zwraca 0 dla group).
         const effectiveType = String(data.type ?? existing.type ?? '').toLowerCase();
-        if (effectiveType === 'group') {
+        if (!isCostNode(effectiveType)) {
             unitCost = 0; margin = 0; discount = 0; unitPrice = 0;
         }
 
@@ -1133,7 +1247,7 @@ export class WbsNodesService {
         else await this.syncMaterialsFromWbsNode(id, quantity).catch(() => {});
 
         // Sync: WbsNode.unitCost → MaterialRequirement.budgetedPriceNetto → propozycja isOffer
-        if (sentPricing && effectiveType !== 'group') {
+        if (sentPricing && isCostNode(effectiveType)) {
             await this.syncOfferPriceFromWbsNode(id, unitCost).catch(() => {});
         }
 

@@ -4,7 +4,7 @@
 //
 // Uruchomienie: node test/typy-lustro.test.mjs   (z apps/frontend, żeby zadziałał resolve)
 import { readFileSync } from 'node:fs';
-import { wbsTypeFromAny, LEAF_TYPE_OPTIONS } from '../apps/frontend/src/components/shared/wbs/wbsConstants.js';
+import { wbsTypeFromAny, LEAF_TYPE_OPTIONS, NON_COST_NODE_TYPES, isCostNode } from '../apps/frontend/src/components/shared/wbs/wbsConstants.js';
 
 const util = readFileSync(new URL('../apps/backend/src/common/leaf-types.util.ts', import.meta.url), 'utf8');
 
@@ -35,6 +35,18 @@ const eq = (name, got, want) => {
 // Listy typów muszą być identyczne po obu stronach
 eq('lista typów liści front = backend', [...LEAF_TYPE_OPTIONS].sort(), [...backendTypes].sort());
 
+// Typy niekosztowe (`isCostNode`) — ta sama lista po obu stronach; front nie liczy ceny tam,
+// gdzie backend jej nie zeruje, i odwrotnie.
+const backendNonCost = util.match(/NON_COST_NODE_TYPES = \[([^\]]*)\]/)[1]
+    .split(',').map(s => s.trim().replace(/'/g, '')).filter(Boolean)
+    .map(s => s === 'MILESTONE_TYPE' ? util.match(/MILESTONE_TYPE = '([^']+)'/)[1] : s);
+eq('typy niekosztowe front = backend', [...NON_COST_NODE_TYPES].sort(), [...backendNonCost].sort());
+eq('typ niekosztowy nie jest typem liścia', NON_COST_NODE_TYPES.some(t => LEAF_TYPE_OPTIONS.includes(t)), false);
+eq('isCostNode: group = niekosztowy', isCostNode('group'), false);
+eq('isCostNode: węzeł { type: "Group" } = niekosztowy', isCostNode({ type: 'Group' }), false);
+eq('isCostNode: work = kosztowy', isCostNode('work'), true);
+eq('isCostNode: pusty typ rozstrzyga wołający (true)', isCostNode(''), true);
+
 // Każde wejście, jakie realnie występuje w danych i w importach
 const WEJSCIA = [
     'DEVICE', 'MATERIAL', 'CABLE', 'SOFTWARE', 'SERVICE',   // stary enum
@@ -52,6 +64,10 @@ for (const w of WEJSCIA) {
 // nie ma sensu — katalog nie sprzedaje „grupujących".
 eq('group jest typem węzła WBS (front)', wbsTypeFromAny('group'), 'group');
 eq('group NIE jest typem pozycji kosztowej (backend)', backendNormalize('group'), '');
+// Milestone — ten sam celowy wyjątek co group: typ WĘZŁA, nie pozycji kosztowej.
+eq('milestone jest typem węzła WBS (front)', wbsTypeFromAny('milestone'), 'milestone');
+eq('milestone NIE jest typem pozycji kosztowej (backend)', backendNormalize('milestone'), '');
+eq('isCostNode: milestone = niekosztowy', isCostNode('milestone'), false);
 
 // Mapowania, na których stoi migracja katalogu (test/migracja-typy-katalogu.sql)
 eq('DEVICE → equipment', backendNormalize('DEVICE'), 'equipment');

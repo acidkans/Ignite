@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import ExcelJS from 'exceljs';
 import { Lock, FileSpreadsheet, RefreshCw } from 'lucide-react';
-import { isRejectedPlanNode, applyGroupMultipliers } from './wbsConstants';
+import { isRejectedPlanNode, applyGroupMultipliers, isCostNode } from './wbsConstants';
 
 const API_URL = '/api';
 
@@ -100,7 +100,7 @@ export default function BudgetModesPanel({ nodeId, mode, acceptance }) {
         // Pozycja odrzucona nie jest zakresem baseline — nie ma jej czego kupować ani rozliczać.
         // Ta sama reguła co w `orders.service` (podgląd akceptacji, porównanie wycena↔zakup).
         const baselineRows = ordered.filter(n => n.parentId != null
-            && String(n.type || '').toLowerCase() !== 'group'
+            && isCostNode(n)
             && !isRejectedPlanNode(n));
         return { baselineRows, wbsById: byId, subjectOf };
     }, [baselineWbs]);

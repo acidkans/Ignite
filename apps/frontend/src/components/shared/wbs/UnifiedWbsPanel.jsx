@@ -7,8 +7,8 @@ import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
-import GanttSection from './GanttSection';
-import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, PRICED_LEAF_TYPES, orderDefaultsFrom, leafDefaultsMissing, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes, applyGroupMultipliers, groupQtyFactor } from './wbsConstants';
+import HarmonogramPlanowanie from '../harmonogram/HarmonogramPlanowanie';
+import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, PRICED_LEAF_TYPES, orderDefaultsFrom, leafDefaultsMissing, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes, applyGroupMultipliers, groupQtyFactor, isCostNode } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { buildStrategyTasksQaPdfArtifact } from '../../../utils/strategyTasksQaPdfExport';
 import { exportQaFormPdf } from './exportQaFormPdf';
@@ -455,7 +455,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     }, [nodeId, loadOfferAiState]);
 
     const safeFileBase = () => String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|\s]+/g, '_') || 'projekt';
-    const ganttExportRef = useRef(null);
     const ganttGetHtmlRef = useRef(null);
     const ganttExcelDataRef = useRef(null);
 
@@ -1082,6 +1081,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // takiego pola świeżym (potencjalnie nieaktualnym) odczytem z API zanim PATCH się
     // zakończy — inaczej focus/visibilitychange/expand-refresh cofa świeżo wybraną jednostkę.
     const pendingFieldSaves = useRef(new Map());
+    // @anchor manual-cost-edit-seq — licznik ręcznych edycji ceny/narzutu per węzeł (Map<nodeId, number>).
+    // applyLeafDefaults porównuje go przed wysłaniem /budget: jeśli w międzyczasie ktoś wpisał cenę
+    // ręcznie, wartości domyślne typu NIE nadpisują jej (cena wracała do domyślnego 1 zł usługi).
+    const manualCostEditSeq = useRef(new Map());
 
     // Sync Q&A from in-memory tree into wbsData/cache without replacing wbsTree.
     // Called after every tree save to keep SchematTab export up-to-date while
@@ -1427,7 +1430,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // (mają dzieci) i grupujące pomijamy — ich wartość to suma dzieci. Zwraca
     // listę etykiet niepoprawnych pozycji (pusta = OK).
     const validateBudgetPricing = () => {
-        const rawRows = buildRows(VIEWS.BUDGET).filter(r => r.type !== 'group');
+        const rawRows = buildRows(VIEWS.BUDGET).filter(r => isCostNode(r));
         const parentIds = new Set(wbsData.map(n => n.parentId).filter(Boolean));
         const invalidRows = [];
         rawRows.forEach(r => {
@@ -1474,7 +1477,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         const byName = new Map();
         for (const n of wbsData) {
             const type = String(n.type || '').toLowerCase();
-            if (type === 'group' || parentIds.has(n.id)) continue;
+            if (!isCostNode(type) || parentIds.has(n.id)) continue;
             const name = String(n.name || '').trim();
             if (!name) continue;
             const key = name.toLowerCase();
@@ -1862,7 +1865,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         const ganttZoom = ganttContentWidth > A3_LANDSCAPE_USABLE ? (A3_LANDSCAPE_USABLE / ganttContentWidth).toFixed(4) : '1';
         const ganttSectionHtml = ganttData ? `
             <div class="section">
-                <div class="section-header">Harmonogram (Gantt)</div>
+                <div class="section-header">Harmonogram</div>
                 <div class="gantt-wrap"><div class="gantt-scale-inner" style="zoom:${ganttZoom};transform-origin:top left">${ganttData.html}</div></div>
             </div>` : '';
 
@@ -1969,7 +1972,7 @@ ${ganttData ? ganttData.styles : ''}
           ${logoDataUrl ? `<img class="doc-header-logo" src="${logoDataUrl}" alt="Logo" />` : ''}
           <div class="doc-header-text">
             <h1>${esc(orderName || projectName || 'Zamówienie')}</h1>
-            <div class="sub">${{ strategy: 'Jak to chcemy zrobić', oferta: 'Oferta', budget: 'Budżet', 'wbs-hybrid': 'Struktura projektu', wbs: 'Struktura projektu', materials: 'Materiały', gantt: 'Harmonogram (Gantt)' }[sectionKey] || 'Planowanie'}</div>
+            <div class="sub">${{ strategy: 'Jak to chcemy zrobić', oferta: 'Oferta', budget: 'Budżet', 'wbs-hybrid': 'Struktura projektu', wbs: 'Struktura projektu', materials: 'Materiały', gantt: 'Harmonogram' }[sectionKey] || 'Planowanie'}</div>
             <div class="meta">Przygotowano: ${date}</div>
           </div>
         </div>
@@ -2015,7 +2018,7 @@ ${ganttSectionHtml}
     // Zwraca m.in. `ref` — geometrię arkusza (litery kolumn, zakres danych), żeby
     // arkusz „Podsumowanie" mógł liczyć formułami z tego arkusza, a nie z aplikacji.
     const appendBudgetSheet = (workbook, opts = {}) => {
-        const rawRows = buildRows(VIEWS.BUDGET).filter(r => r.type !== 'group');
+        const rawRows = buildRows(VIEWS.BUDGET).filter(r => isCostNode(r));
         if (!rawRows.length) return { ok: false, empty: true, invalidRows: [] };
 
         // Walidacja pozycji liściowych — zerowy koszt jednostkowy lub narzut
@@ -2400,7 +2403,7 @@ ${ganttSectionHtml}
                 const kids = byParent[n.id];
                 const isGroup = !!(kids && kids.length);
                 // Liść budżetu = ten sam filtr co buildRows(VIEWS.BUDGET).
-                const isBudgetLeaf = n.parentId != null && n.type !== 'group';
+                const isBudgetLeaf = n.parentId != null && isCostNode(n);
                 const own = isBudgetLeaf ? canonical(n) : { cost: 0, price: 0 };
                 const entry = {
                     depth,
@@ -2489,6 +2492,7 @@ ${ganttSectionHtml}
         const FILL_WEEKEND = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E5E9' } };
         const FILL_START = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF22C55E' } };
         const FILL_END = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEF4444' } };
+        const FILL_MILESTONE = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7C3AED' } };
 
         const hdr = sheet.getRow(1);
         hdr.height = tl.mode === 'Day' ? 56 : 20;
@@ -2530,7 +2534,7 @@ ${ganttSectionHtml}
             const cells = tl.rowCells[ri] || [];
             tl.columns.forEach((c, i) => {
                 const cell = row.getCell(TL_OFFSET + 1 + i);
-                if (cells[i]) cell.fill = FILL_TASK;
+                if (cells[i]) cell.fill = r.milestone ? FILL_MILESTONE : FILL_TASK;
                 else if (c.nonWorking) cell.fill = FILL_WEEKEND;
             });
         });
@@ -2576,7 +2580,7 @@ ${ganttSectionHtml}
                 const uc = Math.max(0, parseFloat(n.unitCost) || 0);
                 const m = (n.margin != null && String(n.margin) !== '') ? parseFloat(n.margin) : 0;
                 const d = Math.max(0, parseFloat(n.discount) || 0);
-                const isBudgetLeaf = n.parentId != null && n.type !== 'group';
+                const isBudgetLeaf = n.parentId != null && isCostNode(n);
                 const ownCost = isBudgetLeaf ? uc * q : 0;
                 let ownPrice = isBudgetLeaf && m ? ownCost * (1 + m / 100) : 0;
                 if (ownPrice > 0 && d > 0) ownPrice = Math.max(0, ownPrice * (1 - d / 100));
@@ -2702,7 +2706,7 @@ ${ganttSectionHtml}
                     const computeSummaryFromItems = (items) => {
                         const leaves = (items || []).filter(it => {
                             const t = String(it.type || '').toLowerCase();
-                            return it.parentId != null && t !== 'group';
+                            return it.parentId != null && isCostNode(t);
                         });
                         let totalCost = 0, totalRevenue = 0;
                         const byType = {};
@@ -2753,7 +2757,7 @@ ${ganttSectionHtml}
                         };
                         const leaves = (items || []).filter(it => {
                             const t = String(it.type || '').toLowerCase();
-                            return it.parentId != null && t !== 'group';
+                            return it.parentId != null && isCostNode(t);
                         });
                         const byPath = {};
                         for (const it of leaves) {
@@ -4165,7 +4169,7 @@ ${ganttSectionHtml}
         // Gałęzie grupujące (type='group') mają cenę 0 — ich wartość to suma dzieci,
         // spójnie z appendBudgetSheet, który filtruje r.type !== 'group'.
         const localPriceOf = (item) => {
-            if (item.type === 'group') return 0;
+            if (!isCostNode(item)) return 0;
             const q = Math.max(0, parseFloat(item.quantity) || 0);
             const uc = Math.max(0, parseFloat(item.unitCost) || 0);
             const tc = uc * q;
@@ -5214,6 +5218,9 @@ ${ganttSectionHtml}
         const pend = pendingFieldSaves.current.get(id) || new Set();
         pend.add(field);
         pendingFieldSaves.current.set(id, pend);
+        if (field === 'unitCost' || field === 'margin') {
+            manualCostEditSeq.current.set(id, (manualCostEditSeq.current.get(id) || 0) + 1);
+        }
         try {
             if (field === 'unitCost' || field === 'margin') {
                 // Pole budżetowe — zapisujemy przez /budget, nie przez /wbs-nodes (tree).
@@ -5271,7 +5278,7 @@ ${ganttSectionHtml}
                 // Zmiana typu na 'group' zeruje pola cenowe RÓWNIEŻ optymistycznie —
                 // backend robi to samo (updateNode), ale bez lokalnego zerowania
                 // rollup w drzewie/budżecie trzymałby starą cenę do czasu refreshu.
-                const zeroesForGroup = (field === 'type' && String(value).toLowerCase() === 'group')
+                const zeroesForGroup = (field === 'type' && !isCostNode(value))
                     ? { unitCost: 0, totalCost: 0, margin: 0, discount: 0, unitPrice: 0, totalPrice: 0 }
                     : {};
                 setWbsData(prev => prev.map(item => item.id === id ? { ...item, [field]: value, ...zeroesForGroup } : item));
@@ -5336,6 +5343,19 @@ ${ganttSectionHtml}
                 body: JSON.stringify({ ganttStart: startIso, ganttEnd: endIso }),
             });
         } catch (e) { console.error('Gantt date save error:', e); }
+    }, [authHeaders]);
+
+    // @anchor handle-gantt-dates-batch — zbiorczy zapis dat Harmonogramu (milestone + zależni) przez
+    // `PATCH /wbs-nodes/gantt-dates/batch`; błąd leci wyżej, żeby Harmonogram cofnął podgląd.
+    const handleGanttDatesBatch = useCallback(async (items) => {
+        if (!items?.length) return;
+        if (!(await guardSnapshotEdit())) throw new Error('Edycja wersji zablokowana');
+        const res = await fetch(`${API_URL}/wbs-nodes/gantt-dates/batch`, {
+            method: 'PATCH',
+            headers: authHeaders(),
+            body: JSON.stringify({ items }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
     }, [authHeaders]);
 
     // Drag krawędzi belki w Gantcie → quantity (dni) przez wbs-nodes/{id} (PATCH).
@@ -5485,9 +5505,33 @@ ${ganttSectionHtml}
     const applyLeafDefaults = useCallback(async (id, defaults) => {
         if (!id || !defaults) return;
         // Wartości domyślne nadpisują koszt jedn., ilość i narzut — po akceptacji tylko za zgodą.
+        // Numer ręcznej edycji ceny sprzed guardu — modal guardu może trwać, a użytkownik
+        // w tym czasie (albo zaraz po zmianie typu) wpisuje własną cenę.
+        const costSeqAtStart = manualCostEditSeq.current.get(id) || 0;
+        const costEditedManually = () => {
+            const pend = pendingFieldSaves.current.get(id);
+            return (manualCostEditSeq.current.get(id) || 0) !== costSeqAtStart
+                || !!(pend && (pend.has('unitCost') || pend.has('margin')));
+        };
         if (!(await guardOfferEdit())) return;
         const node = wbsData.find(n => n.id === id) || {};
         const unit = defaults.unit ?? node.unit;
+        if (costEditedManually()) {
+            // Ręczna cena ma pierwszeństwo — z domyślnych bierzemy tylko jednostkę.
+            if (unit != null) {
+                setWbsData(prev => prev.map(item => item.id === id ? { ...item, unit } : item));
+                setWbsTreeAndRef(prev => {
+                    const upd = items => items.map(n => n.id === id ? { ...n, unit } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
+                    return { ...prev, items: upd(prev.items || []) };
+                });
+                try {
+                    await fetch(`${API_URL}/wbs-nodes/${id}`, {
+                        method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ unit }),
+                    });
+                } catch (e) { console.error('Apply leaf defaults error:', e); }
+            }
+            return;
+        }
         const unitCost = Number(defaults.unitCost) || 0;
         // Ilość: zachowaj istniejącą dodatnią (retype istniejącej pozycji), w innym wypadku 1 (nowa pozycja).
         const existingQty = parseFloat(node.quantity);
@@ -5511,9 +5555,13 @@ ${ganttSectionHtml}
                     method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ unit }),
                 });
             }
-            await fetch(`${API_URL}/wbs-nodes/${id}/budget`, {
-                method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ unitCost, quantity, margin, discount }),
-            });
+            // Cena wpisana ręcznie w trakcie zapisu jednostki — nie wysyłaj domyślnej ceny,
+            // bo dotarłaby do bazy po ręcznej i ją nadpisała.
+            if (!costEditedManually()) {
+                await fetch(`${API_URL}/wbs-nodes/${id}/budget`, {
+                    method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ unitCost, quantity, margin, discount }),
+                });
+            }
             await refreshWbsNodes();
         } catch (e) { console.error('Apply leaf defaults error:', e); }
     }, [wbsData, authHeaders, refreshWbsNodes, setWbsTreeAndRef]);
@@ -6220,7 +6268,7 @@ ${ganttSectionHtml}
             traverseWbs('__root__');
 
             return [...budgetScopeData]
-                .filter(item => item.parentId != null && item.type !== 'group')
+                .filter(item => item.parentId != null && isCostNode(item))
                 .sort((a, b) => (wbsOrderMap.get(a.id) ?? 0) - (wbsOrderMap.get(b.id) ?? 0))
                 .map(item => {
                     const normalizedType = String(item.type || '').toLowerCase();
@@ -6376,7 +6424,7 @@ ${ganttSectionHtml}
         // gałąź grupująca (type='group') ⇒ 0 (wartość to suma dzieci), brak narzutu ⇒ 0
         // (nie koszt). Wcześniej fallback do totalPrice zawyżał sumy w zakładce Założenia.
         const offerPriceOf = (item) => {
-            if (item.type === 'group') return 0;
+            if (!isCostNode(item)) return 0;
             const q = Math.max(0, parseFloat(item.quantity) || 0);
             const uc = Math.max(0, parseFloat(item.unitCost) || 0);
             const tc = uc * q;
@@ -6434,7 +6482,7 @@ ${ganttSectionHtml}
             if (!item.parentId) return sum;
             // Gałęzie grupujące pomijamy — ich wartość to suma dzieci, spójnie
             // z buildRows(VIEWS.BUDGET) i eksportami oferty/budżetu.
-            if (item.type === 'group') return sum;
+            if (!isCostNode(item)) return sum;
             const q = Math.max(0, parseFloat(item.quantity) || 0);
             const uc = Math.max(0, parseFloat(item.unitCost) || 0);
             const totalCost = uc * q;
@@ -6587,7 +6635,7 @@ ${ganttSectionHtml}
                         {(key === 'wbs' || key === 'wbs-hybrid') && (
                             // @anchor strategy-tasks-qa-pdf-button
                             <button
-                                onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'PDF — strategia, zadania, Q&A', defaultFilename: `${safeFileBase()}_strategia_zadania_QA.pdf`, oneDriveFolderKey: 'reports', makeArtifact: () => buildStrategyTasksQaPdfArtifact({ wbsData, processNodeId: nodeId, orderName: orderName || projectName }) }); }}
+                                onClick={(e) => { e.stopPropagation(); exportNoPricesRef.current = false; openExport({ title: 'PDF — strategia, zadania, Q&A', defaultFilename: `${safeFileBase()}_strategia_zadania_QA.pdf`, oneDriveFolderKey: 'reports', recipientScope: 'team', mailArchive: false, makeArtifact: () => buildStrategyTasksQaPdfArtifact({ wbsData, processNodeId: nodeId, orderName: orderName || projectName }) }); }}
                                 className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all flex-shrink-0 whitespace-nowrap"
                                 title="PDF: strategia + zadania + Q&A"
                             >
@@ -6763,13 +6811,13 @@ ${ganttSectionHtml}
                     ));
                 }
                 if (key === 'gantt') {
-                    return renderSection('gantt', 'Harmonogram (Gantt)', BarChart3, 'cyan', (
-                        <GanttSection
+                    return renderSection('gantt', 'Harmonogram', BarChart3, 'cyan', (
+                        <HarmonogramPlanowanie
                             wbsTree={wbsTree}
                             projectName={orderName || projectName || 'Projekt'}
                             onNodeDurationChange={handleGanttDurationChange}
                             onGanttDateChange={handleGanttDateChange}
-                            onExportReady={fn => { ganttExportRef.current = fn; }}
+                            onGanttDatesBatch={handleGanttDatesBatch}
                             onGetHtmlReady={fn => { ganttGetHtmlRef.current = fn; }}
                             onExcelDataReady={fn => { ganttExcelDataRef.current = fn; }}
                             projectStartDate={ganttProjectStart}
@@ -7116,6 +7164,8 @@ ${ganttSectionHtml}
                     makeArtifact={pendingExport.makeArtifact}
                     oneDriveFolderName={oneDriveFolderName}
                     oneDriveFolderKey={pendingExport.oneDriveFolderKey || 'reports'}
+                    recipientScope={pendingExport.recipientScope}
+                    mailArchive={pendingExport.mailArchive !== false}
                 />
             )}
 

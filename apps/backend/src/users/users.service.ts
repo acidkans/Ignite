@@ -280,7 +280,6 @@ export class UsersService {
       where: { isActive: true },
       select: { id: true, firstName: true, lastName: true, email: true, phone: true, company: true },
       orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
-      take: 50,
     });
     if (!term) return users;
     return users.filter(u => {

@@ -7,6 +7,7 @@ import ExportChoiceModal from './ExportChoiceModal';
 import MarkdownEditor from './MarkdownEditor';
 import OrderTeamModal from './OrderTeamModal';
 import { shortCompanyName } from './wbs/realizationShared';
+import { fuzzyMatch } from './trainings/trainingsShared';
 
 function countWorkingDays(startStr, endStr) {
     if (!startStr || !endStr) return null;
@@ -317,8 +318,10 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
             .catch(() => {});
     }, []);
 
-    const handleSave = async (overrideItems = null, overrideContacts = null) => {
+    // overrideForm — pola formularza ustawione w tym samym ticku (np. wybór PM z podpowiedzi), których `form` jeszcze nie ma
+    const handleSave = async (overrideItems = null, overrideContacts = null, overrideForm = null) => {
         setSaving(true);
+        const f = overrideForm ? { ...form, ...overrideForm } : form;
         try {
             const token = sessionStorage.getItem('token');
             const dataItems = overrideItems || items;
@@ -326,19 +329,19 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                 nodeId,
                 versionId,
                 offerDeadline: offerDeadlineIso || null,
-                projectStart: form.projectStart || null,
-                projectEnd: form.projectEnd || null,
-                projectGoal: form.projectGoal || null,
-                clientProjectManager: form.pmName || null,
-                clientProjectManagerCompany: form.pmCompany || null,
-                clientProjectManagerNip: form.pmNip || null,
-                clientProjectManagerPhone: form.clientProjectManagerPhone || null,
-                clientProjectManagerEmail: form.clientProjectManagerEmail || null,
-                clientContacts: JSON.stringify(overrideContacts ?? form.clientContacts),
+                projectStart: f.projectStart || null,
+                projectEnd: f.projectEnd || null,
+                projectGoal: f.projectGoal || null,
+                clientProjectManager: f.pmName || null,
+                clientProjectManagerCompany: f.pmCompany || null,
+                clientProjectManagerNip: f.pmNip || null,
+                clientProjectManagerPhone: f.clientProjectManagerPhone || null,
+                clientProjectManagerEmail: f.clientProjectManagerEmail || null,
+                clientContacts: JSON.stringify(overrideContacts ?? f.clientContacts),
                 projectItems: JSON.stringify(dataItems),
-                offerStatus: form.offerStatus || null,
-                offerStatusComment: form.offerStatusComment || null,
-                mailDomainId: form.mailDomainId || '',
+                offerStatus: f.offerStatus || null,
+                offerStatusComment: f.offerStatusComment || null,
+                mailDomainId: f.mailDomainId || '',
             };
             const res = await fetch(`${API_URL}/order-requirements`, {
                 method: 'POST',
@@ -539,13 +542,59 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
             setContactSuggest(prev => ({ ...prev, [contactId]: { open: false, results: [] } }));
             return;
         }
-        const q = value.toLowerCase();
-        const results = allUsers.filter(u => {
-            const full = `${u.firstName || ''} ${u.lastName || ''} ${u.email}`.toLowerCase();
-            return full.includes(q);
-        }).slice(0, 8);
+        const results = suggestUsers(value);
         setContactSuggest(prev => ({ ...prev, [contactId]: { open: results.length > 0, results } }));
     };
+
+    // @anchor suggest-users — użytkownicy dopasowani fuzzy (bez polskich znaków, literówki z przerwami) po imieniu, nazwisku, mailu i firmie
+    const suggestUsers = (value) => {
+        if (String(value || '').trim().length < 2) return [];
+        return allUsers.map(u => {
+            const m = fuzzyMatch(value, `${u.firstName || ''} ${u.lastName || ''} ${u.email || ''} ${u.company || ''}`);
+            return m ? { u, score: m.score } : null;
+        }).filter(Boolean).sort((a, b) => b.score - a.score).slice(0, 8).map(x => x.u);
+    };
+
+    // @anchor handle-pm-name-change — PM z podpowiedziami jak dodatkowe kontakty (klucz 'pm' w contactSuggest)
+    const handlePmNameChange = (value) => {
+        if (!value) {
+            setForm(prev => ({ ...prev, pmName: '', pmCompany: '', pmNip: '', clientProjectManagerPhone: '', clientProjectManagerEmail: '' }));
+        } else {
+            setForm(prev => ({ ...prev, pmName: value }));
+        }
+        const results = suggestUsers(value);
+        setContactSuggest(prev => ({ ...prev, pm: { open: results.length > 0, results } }));
+    };
+
+    // @anchor select-user-for-pm
+    const selectUserForPm = (user) => {
+        const patch = {
+            pmName: [user.firstName, user.lastName].filter(Boolean).join(' '),
+            clientProjectManagerEmail: user.email || form.clientProjectManagerEmail,
+            pmCompany: user.company ?? form.pmCompany,
+            clientProjectManagerPhone: user.phone ?? form.clientProjectManagerPhone,
+        };
+        setForm(prev => ({ ...prev, ...patch }));
+        setContactSuggest(prev => ({ ...prev, pm: { open: false, results: [] } }));
+        handleSave(null, null, patch);
+    };
+
+    // @anchor render-user-suggest — lista podpowiedzi użytkowników pod polem „Imię i nazwisko”
+    const renderUserSuggest = (key, onPick) => contactSuggest[key]?.open && (
+        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-[#1a1a2e] border border-white/10 rounded-lg shadow-xl overflow-hidden">
+            {contactSuggest[key].results.map(u => (
+                <button
+                    key={u.id}
+                    type="button"
+                    onMouseDown={() => onPick(u)}
+                    className="w-full text-left px-3 py-2 hover:bg-white/10 transition-colors border-b border-white/5 last:border-0"
+                >
+                    <div className="text-[13px] text-gray-200">{[u.firstName, u.lastName].filter(Boolean).join(' ')}</div>
+                    <div className="text-[11px] text-gray-500">{u.email}{u.company ? ` · ${u.company}` : ''}</div>
+                </button>
+            ))}
+        </div>
+    );
 
     const selectUserForContact = (contactId, user) => {
         const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
@@ -864,15 +913,17 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                                         <span className="text-[14px] font-bold uppercase tracking-wider text-gray-400">Project Manager</span>
                                     </div>
                                     <div className="grid grid-cols-5 gap-3">
-                                        <div>
+                                        <div className="relative">
                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Imię i Nazwisko</label>
-                                            <input type="text" value={form.pmName} onChange={e => {
-                                            if (!e.target.value) {
-                                                setForm(prev => ({ ...prev, pmName: '', pmCompany: '', pmNip: '', clientProjectManagerPhone: '', clientProjectManagerEmail: '' }));
-                                            } else {
-                                                setForm(prev => ({ ...prev, pmName: e.target.value }));
-                                            }
-                                        }} onBlur={() => handleSave()} className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                            <input type="text" value={form.pmName} autoComplete="off"
+                                                onChange={e => handlePmNameChange(e.target.value)}
+                                                onFocus={() => { if ((form.pmName || '').length >= 2) handlePmNameChange(form.pmName); }}
+                                                onBlur={() => {
+                                                    setTimeout(() => setContactSuggest(prev => ({ ...prev, pm: { ...prev.pm, open: false } })), 150);
+                                                    handleSave();
+                                                }}
+                                                className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30" />
+                                            {renderUserSuggest('pm', selectUserForPm)}
                                         </div>
                                         <div>
                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Firma</label>
@@ -966,21 +1017,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                                                                 }}
                                                                 className="w-full bg-black/40 border border-white/5 rounded px-2 py-2 text-[16px] text-gray-200 focus:outline-none focus:border-blue-500/30"
                                                             />
-                                                            {contactSuggest[contact.id]?.open && (
-                                                                <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-[#1a1a2e] border border-white/10 rounded-lg shadow-xl overflow-hidden">
-                                                                    {contactSuggest[contact.id].results.map(u => (
-                                                                        <button
-                                                                            key={u.id}
-                                                                            type="button"
-                                                                            onMouseDown={() => selectUserForContact(contact.id, u)}
-                                                                            className="w-full text-left px-3 py-2 hover:bg-white/10 transition-colors border-b border-white/5 last:border-0"
-                                                                        >
-                                                                            <div className="text-[13px] text-gray-200">{[u.firstName, u.lastName].filter(Boolean).join(' ')}</div>
-                                                                            <div className="text-[11px] text-gray-500">{u.email}</div>
-                                                                        </button>
-                                                                    ))}
-                                                                </div>
-                                                            )}
+                                                            {renderUserSuggest(contact.id, u => selectUserForContact(contact.id, u))}
                                                         </div>
                                                         <div>
                                                             <label className="text-[13px] font-bold uppercase tracking-widest text-gray-500 mb-1 block ml-1">Firma</label>

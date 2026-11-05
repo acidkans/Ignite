@@ -59,7 +59,7 @@ po prawej Kokpit gałęzi albo Macierz pozycji z rozwijanym wątkiem. Bez nowych
 - `Constraint` (rejestr blokerów) z API `/constraints`; pytanie Q&A można zamienić w bloker (`sourceType = QA`).
 - NodeQuestion świadomie odłożone: `WbsNode.qa` zostaje źródłem prawdy (pary mają stałe `id`).
 - Lookahead 14 dni: daty robót tylko z Gantta, dostawy z FORECAST, gotowość MAT / PYT / BLK.
-- Kontrola kolizji dostaw: dostawa materiału < 2 dni przed robotami w gałęzi → karta w Kokpicie, „→ bloker”, czerwony romb.
+- Kontrola kolizji dostaw: dostawa materiału < 2 dni przed robotami w gałęzi → karta w Kokpicie, „Ustaw bloker”, czerwony romb.
 - Wygląd zakładki Realizacja jak w mockupie (`realizacja.css`).
 
 ## Etap 3 — w toku
@@ -67,3 +67,9 @@ po prawej Kokpit gałęzi albo Macierz pozycji z rozwijanym wątkiem. Bez nowych
   przeciągnięcie zapisuje status przez `saveAxis` (tylko w tym samym torze; „Odebrane protokołem” wyłączone,
   karty za bramką etapu leżą w pierwszej kolumnie i się nie przeciągają). Bez nowych tabel.
 - Dalej do wyboru: Teren (telefon) + DailyLog, gałąź = Site + Rollout + Permit, ChangeOrder + prognoza EAC.
+
+## Etap 4 — w toku (2026-11-05)
+- Jeden **Harmonogram** zamiast Gantta (Planowanie) i Lookahead (Realizacja): wygląd Lookahead, zakres 14 dni / miesiąc / całość,
+  dni wolne i święta, praca w dni wolne per gałąź, edycja dat, start/koniec projektu, eksport Excel/PDF. `gantt-task-react` usunięty.
+- Zrobione wcześniej, a nieopisane tu: całe drzewo w lewym panelu, szczegóły pozycji z zakupami, kokpit z przychodem i zyskiem, @wzmianki w czacie (commit d5e0404).
+- Dalej: model `Milestone` (romb na Harmonogramie, baseline daty przy starcie realizacji, poślizg w Kokpicie), potem Teren + DailyLog, ChangeOrder + EAC.

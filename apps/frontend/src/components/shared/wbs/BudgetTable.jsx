@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { Trash2, ArrowUp, ArrowDown } from 'lucide-react';
-import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, TYPE_OPTIONS, TYPE_LABELS, UNIT_OPTIONS, parseLocaleNumber, sanitizeQtyInput, evalQtyFormula } from './wbsConstants';
+import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, TYPE_OPTIONS, TYPE_LABELS, UNIT_OPTIONS, parseLocaleNumber, sanitizeQtyInput, evalQtyFormula, isMilestoneNode } from './wbsConstants';
 import { offerLockInputProps } from '../OfferLockGuard';
 import FilterDropdown from './FilterDropdown';
 
@@ -662,7 +662,7 @@ export default function BudgetTable({
                                         className={SELECT}
                                     >
                                         <option value="">—</option>
-                                        {TYPE_OPTIONS.map(o => <option key={o} value={o}>{TYPE_LABELS[o] || o}</option>)}
+                                        {TYPE_OPTIONS.filter(o => !isMilestoneNode(o)).map(o => <option key={o} value={o}>{TYPE_LABELS[o] || o}</option>)}
                                     </select>
                                 </td>
 

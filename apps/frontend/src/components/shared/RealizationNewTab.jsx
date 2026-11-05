@@ -41,6 +41,7 @@ import {
     hasPurchaseAxis, hasExecAxis, DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS, axisGateOf,
     sanitizeQtyInput, parsePriceInput, DRAWER,
 } from './wbs/wbsConstants';
+import { isMilestoneNode } from './wbs/wbsConstants';
 import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, getParentPath, leafNodesOf,
     wbsRootOf, shortCompanyName, purchaseUnitOf, realizationOf, planUnitOf, planValueOf, fmtQty, fmtZl, fmtDate,
@@ -239,10 +240,13 @@ export function buildBranchIndex(flatNodes, rootName, visibleTypes = LEAF_TYPES)
     };
 
     const root = { id: SYNTHETIC_ROOT, parentId: null, name: rootName || 'Zamówienie', type: '' };
-    const branches = [root, ...(flatNodes || []).filter(n => !isLeaf(n)).map(n => ({
+    // Milestone nie jest ani gałęzią, ani pozycją — osobna lista, przypięta do gałęzi-rodzica.
+    const branches = [root, ...(flatNodes || []).filter(n => !isLeaf(n) && !isMilestoneNode(n)).map(n => ({
         ...n, parentId: n.parentId || SYNTHETIC_ROOT,
     }))];
     const leaves = leafNodesOf(flatNodes, visibleTypes).map(n => ({ ...n, branchId: nearestBranch(n) }));
+    // @anchor realization-branch-milestones — milestone'y z `branchId` = gałąź, w której stoją.
+    const milestones = (flatNodes || []).filter(isMilestoneNode).map(n => ({ ...n, branchId: nearestBranch(n) }));
 
     const nodeById = Object.fromEntries([...branches, ...leaves].map(n => [n.id, n]));
     const childrenOf = {};
@@ -262,7 +266,7 @@ export function buildBranchIndex(flatNodes, rootName, visibleTypes = LEAF_TYPES)
         return leaves.filter(l => set.has(l.branchId));
     };
 
-    return { branches, leaves, nodeById, childrenOf, subtreeIds, leavesOfSubtree };
+    return { branches, leaves, milestones, nodeById, childrenOf, subtreeIds, leavesOfSubtree };
 }
 
 // ─── Analiza zamówienia ───────────────────────────────────────────────────────
@@ -1333,7 +1337,7 @@ function CommentCell({ node, readOnly, onSave }) {
 // Wpisy są tu EDYTOWALNE w miejscu, a nowy dodaje się przyciskiem w nagłówku szuflady —
 // dopisywanie jest świadomą czynnością, więc formularz otwiera się na żądanie, a nie stoi
 // pustym wierszem pod każdą pozycją.
-function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms = [], onAdd, onUpdate, onDelete }) {
+export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms = [], onAdd, onUpdate, onDelete }) {
     const withCard = TYPE_META[node.type]?.hasCard;
     const [adding, setAdding] = useState(false);
     // @anchor realization-new-drawer-search — wyszukiwarka nagłówka zawęża WPISY szuflady, gdy
@@ -1370,7 +1374,7 @@ function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms = [], 
     const head = (
         <div className={DRAWER.cardHead}>
             <span className={`${DRAWER.cardTitle} ${DRAWER.accent.real.title} text-[length:var(--rn-lg)]`}>
-                {withCard ? 'Zakupy zrealizowane' : 'Wykonanie zrealizowane'}
+                Zrealizowane zakupy
             </span>
             {nadmiar.length > 0 && (
                 <span className="rounded border border-red-400/40 bg-red-500/10 px-2 py-0.5 text-[length:var(--rn-md)] text-red-300"

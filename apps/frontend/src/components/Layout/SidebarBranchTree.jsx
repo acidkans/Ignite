@@ -4,19 +4,38 @@ import { nazwaWyswietlana } from '../shared/realizacja/realizacjaShared';
 
 // @anchor sidebar-branch-tree — drzewo gałęzi WBS zamówienia w lewym panelu aplikacji, pod aktywnym
 // zamówieniem. Publikuje je zakładka „Realizacja" (`realizacja-branch-nav`); poza nią go nie ma.
-// Tylko nawigacja: klik = zoom środka na gałąź, dwuklik = krótka nazwa. Struktury się tu nie
+// Całe drzewo: gałęzie i pod nimi pozycje (`realizacja-nav-pozycje`). Klik w gałąź = zoom środka
+// na gałąź, klik w pozycję = podgląd pozycji w środku, dwuklik w gałąź = krótka nazwa. Struktury się tu nie
 // edytuje — po baseline jest zablokowana, a gałęzie dodaje się w Strukturze projektu.
+// @anchor sidebar-branch-toggles — przełączniki drzewa (sygnały, pełne nazwy) w wierszu zamówienia.
+export function SidebarBranchToggles({ nav }) {
+    const stop = (e) => e.stopPropagation();
+    return (
+        <span className="flex shrink-0 items-center gap-2 text-[10px] font-normal text-gray-400" onClick={stop} onDoubleClick={stop}>
+            <label title="Pokaż tylko gałęzie i pozycje z blokerami, kolizjami dostaw, zagrożonymi milestone'ami, pytaniami albo zadaniami po terminie" className="flex cursor-pointer items-center gap-1">
+                <input type="checkbox" checked={!!nav.sygnaly} onChange={e => nav.onSygnaly(e.target.checked)} className="accent-fuchsia-500" /> sygnały
+            </label>
+            <label title="Pełne nazwy zamiast krótkich" className="flex cursor-pointer items-center gap-1">
+                <input type="checkbox" checked={!!nav.pelne} onChange={e => nav.onPelne(e.target.checked)} className="accent-fuchsia-500" /> pełne
+            </label>
+        </span>
+    );
+}
+
 export default function SidebarBranchTree({ nav, level = 0 }) {
-    const [tylkoSyg, setTylkoSyg] = useState(false);
+    const tylkoSyg = !!nav.sygnaly;
     const [rozwiniete, setRozwiniete] = useState(() => new Set());
+    const [zwiniete, setZwiniete] = useState(() => new Set());
     const [edycja, setEdycja] = useState(null); // { id, value }
 
-    const { byId, dzieci } = useMemo(() => {
+    const { byId, dzieci, pozycjeOf } = useMemo(() => {
         const byId = Object.fromEntries(nav.galezie.map(g => [g.id, g]));
         const dzieci = {};
         for (const g of nav.galezie) (dzieci[g.parentId] || (dzieci[g.parentId] = [])).push(g);
-        return { byId, dzieci };
-    }, [nav.galezie]);
+        const pozycjeOf = {};
+        for (const p of nav.pozycje || []) (pozycjeOf[p.parentId] || (pozycjeOf[p.parentId] = [])).push(p);
+        return { byId, dzieci, pozycjeOf };
+    }, [nav.galezie, nav.pozycje]);
 
     const focus = nav.focusId;
     const sciezka = useMemo(() => {
@@ -27,8 +46,25 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
         return out;
     }, [byId, focus]);
 
-    const maSyg = (g) => g.syg.blok > 0 || g.syg.pyt > 0 || g.syg.poTerminie > 0 || g.syg.kol > 0;
+    const maSyg = (g) => g.syg.blok > 0 || g.syg.pyt > 0 || g.syg.poTerminie > 0 || g.syg.kol > 0 || g.syg.ms > 0 || g.syg.kms > 0;
     const pad = (d) => ({ paddingLeft: `${(level + d) * 10 + 8}px` });
+    const wybrany = nav.selectedId ?? nav.focusId;
+
+    // @anchor sidebar-branch-tree-pozycja — wiersz pozycji (liścia): klik = podgląd w środku.
+    const wierszPozycji = (p, d) => (
+        <div key={p.id} onClick={() => nav.onPozycja?.(p.id)} title={`${p.name} · ${p.typ}`}
+            className={`flex cursor-pointer items-center gap-1 rounded-md py-0.5 pr-1.5 text-[11.5px] transition-colors ${wybrany === p.id
+                ? 'bg-sky-500/15 text-white ring-1 ring-inset ring-sky-500/30' : 'text-gray-500 hover:bg-white/5 hover:text-gray-200'}`}
+            style={pad(d)}>
+            <span className="flex size-4 shrink-0 items-center justify-center"><span className="size-1 rounded-full bg-gray-600" /></span>
+            <span className={`min-w-0 flex-1 ${nav.pelne ? 'whitespace-normal leading-tight' : 'truncate'}`}>{nazwaWyswietlana(p, nav.pelne)}</span>
+            {p.syg.blok > 0 && <span title="Otwarte blokery" className="shrink-0 rounded bg-red-500/20 px-1 font-mono text-[10px] text-red-300">{p.syg.blok}</span>}
+            {p.syg.kol > 0 && <span title="Kolizja dostawy" className="shrink-0 rounded bg-orange-500/20 px-1 font-mono text-[10px] text-orange-300">{p.syg.kol}K</span>}
+            {p.syg.kms > 0 && <span title="Kolizja z milestone'em: start przed końcem milestone'a" className="shrink-0 rounded bg-violet-500/20 px-1 font-mono text-[10px] text-violet-300">◆K</span>}
+            {p.syg.pyt > 0 && <span title="Pytania bez odpowiedzi" className="shrink-0 rounded bg-amber-500/20 px-1 font-mono text-[10px] text-amber-300">{p.syg.pyt}?</span>}
+            {p.syg.poTerminie > 0 && <span title="Zadania po terminie" className="size-1.5 shrink-0 rounded-full bg-red-400" />}
+        </div>
+    );
 
     const zapiszEdycje = () => {
         if (!edycja) return;
@@ -39,10 +75,10 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
 
     // Funkcja, nie komponent: komponent zdefiniowany w renderze przemontowywałby się przy każdym
     // naciśnięciu klawisza i pole krótkiej nazwy gubiłoby fokus.
-    const wiersz = (g, d, korzen = false) => {
-        const maDzieci = (dzieci[g.id] || []).length > 0;
-        const otwarte = korzen || d === 0 || rozwiniete.has(g.id) || sciezka.some(s => s.id === g.id);
-        const wybrana = focus === g.id;
+    const wiersz = (g, d) => {
+        const maDzieci = (dzieci[g.id] || []).length > 0 || (pozycjeOf[g.id] || []).length > 0;
+        const otwarte = !zwiniete.has(g.id) && (rozwiniete.has(g.id) || sciezka.some(s => s.id === g.id));
+        const wybrana = wybrany === g.id;
         return (
             <div key={g.id}>
                 <div onClick={() => nav.onFocus(g.id)} title={g.name}
@@ -51,7 +87,9 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
                     style={pad(d)}>
                     <span onClick={(e) => {
                         e.stopPropagation();
-                        setRozwiniete(prev => { const n = new Set(prev); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n; });
+                        const przelacz = (set, dodaj) => set(prev => { const n = new Set(prev); dodaj ? n.add(g.id) : n.delete(g.id); return n; });
+                        przelacz(setRozwiniete, !otwarte);
+                        przelacz(setZwiniete, otwarte);
                     }} className={`flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-white/10 ${maDzieci ? '' : 'invisible'}`}>
                         <ChevronRight size={10} className={otwarte ? 'rotate-90' : ''} />
                     </span>
@@ -71,29 +109,26 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
                     )}
                     {g.syg.blok > 0 && <span title="Otwarte blokery (rejestr blokerów i pilne wpisy czatu)" className="shrink-0 rounded bg-red-500/20 px-1 font-mono text-[10px] text-red-300">{g.syg.blok}</span>}
                     {g.syg.kol > 0 && <span title="Kolizje dostaw: dostawa za blisko startu robót" className="shrink-0 rounded bg-orange-500/20 px-1 font-mono text-[10px] text-orange-300">{g.syg.kol}K</span>}
+                    {/* @anchor sidebar-branch-tree-ms — zagrożone milestone'y gałęzi (poślizg, prognoza z blokerów, kolizja) */}
+                    {(g.syg.ms > 0 || g.syg.kms > 0) && <span title={`Zagrożone milestone'y: ${g.syg.ms}${g.syg.kms ? ` · pozycje w kolizji z milestone'em: ${g.syg.kms}` : ''}`} className="shrink-0 rounded bg-violet-500/20 px-1 font-mono text-[10px] text-violet-300">◆{g.syg.ms || ''}</span>}
                     {g.syg.pyt > 0 && <span title="Pytania bez odpowiedzi" className="shrink-0 rounded bg-amber-500/20 px-1 font-mono text-[10px] text-amber-300">{g.syg.pyt}?</span>}
                     {g.syg.poTerminie > 0 && <span title="Zadania po terminie" className="size-1.5 shrink-0 rounded-full bg-red-400" />}
                 </div>
                 {maDzieci && otwarte && (dzieci[g.id] || [])
                     .filter(c => !tylkoSyg || maSyg(c))
                     .map(c => wiersz(c, d + 1))}
+                {otwarte && (pozycjeOf[g.id] || [])
+                    .filter(p => !tylkoSyg || maSyg(p))
+                    .map(p => wierszPozycji(p, d + 1))}
             </div>
         );
     };
 
-    const widok = focus && byId[focus] ? [byId[focus]] : (dzieci[nav.rootId] || []);
+    // Zawsze całe drzewo od korzenia; ścieżka do wybranej gałęzi rozwija się sama (`sciezka`).
+    const widok = dzieci[nav.rootId] || [];
 
     return (
         <div className="mt-0.5 mb-1 border-l border-fuchsia-500/20 ml-3">
-            <div className="flex items-center gap-2 px-2 py-1 text-[9.5px] font-bold uppercase tracking-widest text-gray-600">
-                <span className="flex-1">Gałęzie</span>
-                <label title="Pokaż tylko gałęzie z blokerami, kolizjami dostaw, pytaniami albo zadaniami po terminie" className="flex cursor-pointer items-center gap-1 normal-case tracking-normal">
-                    <input type="checkbox" checked={tylkoSyg} onChange={e => setTylkoSyg(e.target.checked)} className="accent-fuchsia-500" /> sygnały
-                </label>
-                <label title="Pełne nazwy zamiast krótkich" className="flex cursor-pointer items-center gap-1 normal-case tracking-normal">
-                    <input type="checkbox" checked={nav.pelne} onChange={e => nav.onPelne(e.target.checked)} className="accent-fuchsia-500" /> pełne
-                </label>
-            </div>
             {focus && byId[focus] && (
                 <div className="flex flex-wrap items-center gap-x-1 px-2 pb-1 text-[11px]">
                     <button onClick={() => nav.onFocus(nav.rootId)} className="text-sky-300/80 hover:text-sky-200">↑ całe zamówienie</button>
@@ -105,8 +140,9 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
                     ))}
                 </div>
             )}
-            {widok.filter(g => !tylkoSyg || maSyg(g) || g.id === focus).map(g => wiersz(g, 0, g.id === focus))}
-            {!widok.length && <p className="px-3 py-1 text-[11px] italic text-gray-600">Zamówienie nie ma gałęzi.</p>}
+            {widok.filter(g => !tylkoSyg || maSyg(g) || sciezka.some(s => s.id === g.id)).map(g => wiersz(g, 0))}
+            {(pozycjeOf[nav.rootId] || []).filter(p => !tylkoSyg || maSyg(p)).map(p => wierszPozycji(p, 0))}
+            {!widok.length && !(pozycjeOf[nav.rootId] || []).length && <p className="px-3 py-1 text-[11px] italic text-gray-600">Zamówienie nie ma gałęzi.</p>}
         </div>
     );
 }

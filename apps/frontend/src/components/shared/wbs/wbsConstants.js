@@ -49,11 +49,38 @@ export const TYPE_LABELS = {
   service: 'Usługa',
   lodging: 'Nocleg',
   fuel: 'Paliwo',
+  milestone: 'Milestone',
   product: 'Produkt',
 };
 
 // @anchor type-options
-export const TYPE_OPTIONS = ['', 'group', 'work', 'material', 'equipment', 'service', 'lodging', 'fuel'];
+export const TYPE_OPTIONS = ['', 'group', 'work', 'material', 'equipment', 'service', 'lodging', 'fuel', 'milestone'];
+
+// @anchor milestone-type — typ węzła „kamień milowy”: niekosztowy, zawsze bez dzieci, zawsze pod
+// gałęzią (nigdy przedmiot projektu). Daty w `ganttStart/ganttEnd` (koniec wyłączny). Lustro
+// `MILESTONE_TYPE` w `common/leaf-types.util.ts`; backend odrzuca dziecko pod milestone'em (400).
+export const MILESTONE_TYPE = 'milestone';
+
+// @anchor is-milestone-node — czy węzeł (albo sam typ) jest milestone'em.
+export const isMilestoneNode = (nodeOrType) => {
+  const t = nodeOrType !== null && typeof nodeOrType === 'object' ? nodeOrType.type : nodeOrType;
+  return String(t || '').toLowerCase().trim() === MILESTONE_TYPE;
+};
+
+// @anchor non-cost-node-types — typy węzłów, które NIE są pozycją kosztową: nie mają własnego
+// kosztu ani ceny, nie wchodzą do wyceny, budżetu, oferty, eksportów ani materiałów.
+// Lustro `NON_COST_NODE_TYPES` w `common/leaf-types.util.ts` (pilnuje `test/typy-lustro.test.mjs`).
+// Pusty typ celowo NIE stoi na liście: gałąź bez typu rozpoznaje się po dzieciach / `parentId`,
+// tak jak dotąd w każdym z miejsc, które wołają `isCostNode`.
+export const NON_COST_NODE_TYPES = ['group', MILESTONE_TYPE];
+
+// @anchor is-cost-node — czy węzeł (albo sam typ) może nieść koszt i cenę. Zastępuje rozsiane
+// `type === 'group'` / `!== 'group'` tam, gdzie znaczyły „czy to pozycja kosztowa”; tam, gdzie
+// chodzi o pakiet (mnożnik ilości grupy), zostaje jawne sprawdzenie `group`.
+export const isCostNode = (nodeOrType) => {
+  const t = nodeOrType !== null && typeof nodeOrType === 'object' ? nodeOrType.type : nodeOrType;
+  return !NON_COST_NODE_TYPES.includes(String(t || '').toLowerCase().trim());
+};
 
 // @anchor wbs-type-from-any
 // Normalizuje dowolny typ pozycji do kanonicznego typu z drzewa WBS.
@@ -555,7 +582,7 @@ export const buildGroupMultiplierMap = (nodes) => {
 // ilość zawiera już mnożnik pakietów). Gałąź grupująca ⇒ 0. Zapisanego `WbsNode.totalCost` nie
 // czytamy — bywa nieaktualny (np. 0 po Kopiuj/Wklej poddrzewa).
 export const nodeCostOf = (node) => {
-  if (String(node?.type || '').toLowerCase() === 'group') return 0;
+  if (!isCostNode(node)) return 0;
   const q = Math.max(0, parseFloat(node?.quantity) || 0);
   const uc = Math.max(0, parseFloat(node?.unitCost) || 0);
   return uc * q;
@@ -903,6 +930,8 @@ export const axisStatusCodeOf = (node, axis = 'plan') => {
   // w ogóle nie ma: nie wchodzi. Inaczej gałąź świeżych pozycji meldowałaby „Do zamówienia 12"
   // nad zbiorem, w którym nikt niczego jeszcze nie może zamówić.
   if (axisGateOf(node, axis)) return null;
+  // Milestone ma własny status, ale nie jest pozycją — nie miesza się do sumy statusów gałęzi.
+  if (isMilestoneNode(node)) return null;
   if (axis === 'purchase') return hasPurchaseAxis(node?.type) ? (node?.purchaseStatus || DEFAULT_PURCHASE_STATUS) : null;
   if (axis === 'exec')     return hasExecAxis(node?.type)     ? (node?.execStatus     || DEFAULT_EXEC_STATUS)     : null;
   // Kody planu sprowadzamy do PLANISTYCZNYCH (`planStatusFromAny`), bo `WbsNode.status` niesie
@@ -1070,7 +1099,7 @@ export const flattenHierarchy = (root, depth = 0) => {
 // ── Domyślne wartości liści budżetowych ──────────────────────────────────────
 // @anchor leaf-type-options
 // Typy liści (bez grupującego i pustego) — kolejność = kolejność wierszy w modalu „Domyślne wartości".
-export const LEAF_TYPE_OPTIONS = TYPE_OPTIONS.filter(t => t !== '' && t !== 'group');
+export const LEAF_TYPE_OPTIONS = TYPE_OPTIONS.filter(t => t !== '' && isCostNode(t));
 
 // @anchor zero-leaf-defaults
 // Wyzerowana baza wartości domyślnych każdego typu liścia. Stosowana dla NOWEGO zamówienia

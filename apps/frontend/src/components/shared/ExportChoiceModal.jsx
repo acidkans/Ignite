@@ -15,10 +15,12 @@ import { useOneDriveFolders, resolveOneDriveFolder } from '../../utils/oneDriveF
 //   pierwszym zapisie. Protokoły odbioru lądują w `Protokoły odbioru/<nazwa gałęzi WBS>`.
 // onExported: () => void | Promise — wołane po UDANYM eksporcie (pobranie, mail, OneDrive).
 //   Używa go protokół odbioru: dopiero wyjście dokumentu z aplikacji zapisuje odbiór w rejestrze.
+// recipientScope: 'team' — dokument wewnętrzny (strategia): odbiorcy tylko z zespołu (front + backend).
+// mailArchive: false — wysyłka mailem NIE odkłada kopii na OneDrive (przycisk „OneDrive” działa dalej).
 // defaultTo / defaultCc / defaultSubject / defaultMessage — podpowiedzi formularza maila. Tylko
 //   wartości startowe: każde pole zostaje w pełni edytowalne, bo adresat i treść bywają inne niż
 //   domyślne (protokół idzie czasem do inwestora, nie do wykonawcy zakresu).
-export default function ExportChoiceModal({ open, onClose, title = 'Eksport', defaultFilename = 'plik', nodeId, makeArtifact, oneDriveFolderName, oneDriveFolderKey = 'reports', oneDriveDocumentCategory, oneDriveSubfolder = '', onExported, defaultTo, defaultCc, defaultSubject, defaultMessage }) {
+export default function ExportChoiceModal({ open, onClose, title = 'Eksport', defaultFilename = 'plik', nodeId, makeArtifact, oneDriveFolderName, oneDriveFolderKey = 'reports', oneDriveDocumentCategory, oneDriveSubfolder = '', onExported, recipientScope, mailArchive = true, defaultTo, defaultCc, defaultSubject, defaultMessage }) {
   const [mode, setMode] = useState('choice'); // 'choice' | 'email'
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -96,14 +98,14 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
     setBusy(true); setError('');
     try {
       const art = await resolveArtifact(await makeArtifact());
-      const sent = await sendExport({ blob: art.blob, filename: art.filename, to, cc, subject: subject || title, message, nodeId });
+      const sent = await sendExport({ blob: art.blob, filename: art.filename, to, cc, subject: subject || title, message, nodeId, scope: recipientScope });
       const fromInfo = sent?.from ? ` z ${sent.from}` : '';
       if (sent?.sentCopyError) setError(`Mail wysłany, ale bez kopii w „Wysłanych”: ${sent.sentCopyError}`);
       // Archiwizacja na OneDrive z TEGO SAMEGO artefaktu — plik w teczce jest bit w bit tym,
       // co poszło mailem. Jej błąd nie unieważnia wysyłki: mail już wyszedł, więc mówimy
       // o nim wprost i dopisujemy, czego nie udało się odłożyć.
       let odInfo = '';
-      if (oneDriveFolderName) {
+      if (oneDriveFolderName && mailArchive) {
         try {
           const { path } = await uploadToOneDrive({
             blob: art.blob, filename: art.filename, nodeId,
@@ -186,11 +188,11 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Do</label>
-                <RecipientInput value={to} onChange={setTo} nodeId={nodeId} />
+                <RecipientInput value={to} onChange={setTo} nodeId={nodeId} scope={recipientScope} />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">DW (do wiadomości)</label>
-                <RecipientInput value={cc} onChange={setCc} nodeId={nodeId} />
+                <RecipientInput value={cc} onChange={setCc} nodeId={nodeId} scope={recipientScope} />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Temat</label>
@@ -203,16 +205,20 @@ export default function ExportChoiceModal({ open, onClose, title = 'Eksport', de
                 <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={defaultMessage ? 10 : 3} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 resize-y custom-scrollbar" placeholder="Treść wiadomości…" />
               </div>
               <button onClick={handleSend} disabled={busy || senderBlocked} title={senderBlocked ? senderInfo.senderError : undefined} className={`${btnBase} bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white mt-1`}>
-                {busy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {busy ? 'Wysyłanie…' : (oneDriveFolderName ? 'Wyślij załącznik i zapisz na OneDrive' : 'Wyślij załącznik')}
+                {busy ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {busy ? 'Wysyłanie…' : (oneDriveFolderName && mailArchive ? 'Wyślij załącznik i zapisz na OneDrive' : 'Wyślij załącznik')}
               </button>
-              {/* @anchor export-choice-mail-na-od — wysyłka ZAWSZE archiwizuje ten sam plik
-                  w folderze gałęzi. Bez wyboru: dokument, który poszedł do klienta, musi być
-                  w teczce projektu, a osobny klik po wysyłce był krokiem do zapomnienia. */}
+              {/* @anchor export-choice-mail-na-od — wysyłka archiwizuje ten sam plik w folderze
+                  gałęzi. Bez wyboru: dokument, który poszedł do klienta, musi być w teczce projektu,
+                  a osobny klik po wysyłce był krokiem do zapomnienia. Wyjątek: `mailArchive={false}`
+                  dla dokumentów wewnętrznych (strategia), które nie idą do klienta. */}
               <p className="text-[10px] text-gray-500 text-center">
                 Załącznik = ten sam plik, który zostałby pobrany.
-                {oneDriveFolderName
+                {!mailArchive
+                  ? ' Wysyłka mailem nie zapisuje kopii na OneDrive.'
+                  : oneDriveFolderName
                   ? ` Kopia trafia na OneDrive → ${sciezka}.`
                   : ' Gałąź nie ma folderu OneDrive — kopia nie zostanie zarchiwizowana.'}
+                {recipientScope === 'team' ? ' Dokument wewnętrzny — tylko do osób z zespołu.' : ''}
               </p>
             </div>
           )}

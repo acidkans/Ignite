@@ -467,12 +467,20 @@ export class MailService {
   async sendExport(
     userId: string,
     file: Express.Multer.File,
-    body: { to?: any; cc?: any; subject?: string; message?: string; nodeId?: string },
+    body: { to?: any; cc?: any; subject?: string; message?: string; nodeId?: string; scope?: string },
   ) {
     if (!file) throw new BadRequestException('Brak pliku do wysłania.');
     const to = parseList(body?.to);
     if (!to.length) throw new BadRequestException('Podaj co najmniej jednego odbiorcę.');
     const cc = parseList(body?.cc).filter(e => !to.includes(e));
+    // @anchor mail-send-export-team-scope — `scope: 'team'` (np. strategia): wyłącznie aktywni
+    // użytkownicy Ignite. Dokument wewnętrzny nie może wyjść do klienta, także po wpisaniu adresu ręcznie.
+    if (body?.scope === 'team') {
+      const users = await this.prisma.user.findMany({ where: { isActive: true }, select: { email: true } });
+      const team = new Set(users.map(u => String(u.email || '').trim().toLowerCase()));
+      const outside = [...to, ...cc].filter(e => !team.has(e.toLowerCase()));
+      if (outside.length) throw new BadRequestException(`Ten dokument można wysłać tylko do osób z zespołu. Spoza zespołu: ${outside.join(', ')}`);
+    }
     // multer dostarcza originalname w latin1 — przywróć UTF-8 dla polskich znaków
     const filename = Buffer.from(file.originalname || 'eksport', 'latin1').toString('utf8');
     const subject = (body?.subject || `Eksport: ${filename}`).slice(0, 250);
@@ -516,7 +524,9 @@ export class MailService {
   // Agreguje sugerowane adresy dla danego węzła zamówienia: właściciel, uprawnieni
   // (użytkownicy + zespoły), kontakt klienta (OrderRequirements), kontakt lokalizacji
   // (Site), firma (Company) oraz cały aktywny zespół. Odduplikowane po adresie.
-  async getRecipients(nodeId: string) {
+  // `scope === 'team'` — tylko użytkownicy Ignite (właściciel, uprawnieni, zespoły, cały aktywny zespół),
+  // bez kontaktów klienta, lokalizacji i firmy.
+  async getRecipients(nodeId: string, scope?: string) {
     const out = new Map<string, { email: string; label: string; source: string }>();
     const add = (email: any, label: string, source: string) => {
       const e = String(email || '').trim().toLowerCase();
@@ -574,6 +584,10 @@ export class MailService {
       .catch(() => []);
     for (const u of users) add(u.email, fullName(u), 'Zespół');
 
+    if (scope === 'team') {
+      const team = new Set(users.map(u => String(u.email || '').trim().toLowerCase()));
+      return [...out.values()].filter(r => team.has(r.email));
+    }
     return [...out.values()];
   }
 }
