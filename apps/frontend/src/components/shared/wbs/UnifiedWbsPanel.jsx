@@ -5358,6 +5358,43 @@ ${ganttSectionHtml}
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
     }, [authHeaders]);
 
+    // @anchor handle-harmonogram-przestaw — przeciągnięcie wiersza w Harmonogramie Planowania: węzeł `id`
+    // przed/po `celId` w tym samym rodzeństwie drzewa WBS. Drzewo zmienia się od razu (WBS i Harmonogram),
+    // a zmienione `sortOrder` idą pojedynczymi `PATCH /wbs-nodes/:id` (bez zapisu całego drzewa).
+    const handleHarmonogramPrzestaw = useCallback(async (id, celId, gdzie = 'po') => {
+        if (!(await guardSnapshotEdit())) throw new Error('Edycja wersji zablokowana');
+        const znajdz = (lista, rodzic) => {
+            for (const n of lista || []) {
+                if (n.id === id) return { lista, rodzic };
+                const r = n.children?.length ? znajdz(n.children, n) : null;
+                if (r) return r;
+            }
+            return null;
+        };
+        const miejsce = znajdz(wbsTreeRef.current?.items, null);
+        if (!miejsce || !miejsce.lista.some(n => n.id === celId)) {
+            throw new Error('Kolejność zmienisz tylko w obrębie tej samej gałęzi WBS — przenieś pozycję do innej gałęzi w strukturze WBS.');
+        }
+        const stare = new Map(miejsce.lista.map(n => [n.id, Number(n.sortOrder)]));
+        const bez = miejsce.lista.filter(n => n.id !== id);
+        const k = bez.findIndex(n => n.id === celId);
+        bez.splice(gdzie === 'przed' ? k : k + 1, 0, miejsce.lista.find(n => n.id === id));
+        const nowa = bez.map((n, i) => ({ ...n, sortOrder: i }));
+        const zmiany = nowa.filter(n => stare.get(n.id) !== n.sortOrder);
+        if (!zmiany.length) return;
+        const rodzicId = miejsce.rodzic?.id ?? null;
+        const podmien = (lista) => (lista || []).map(n => (n.id === rodzicId
+            ? { ...n, children: nowa }
+            : (n.children?.length ? { ...n, children: podmien(n.children) } : n)));
+        setWbsTreeAndRef(prev => ({ ...prev, items: rodzicId ? podmien(prev.items) : nowa }));
+        const wyniki = await Promise.all(zmiany.map(n => fetch(`${API_URL}/wbs-nodes/${n.id}`, {
+            method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ sortOrder: n.sortOrder }),
+        }).then(r => r.ok).catch(() => false)));
+        onWbsUpdate?.();
+        await refreshWbsNodes();
+        if (wyniki.some(ok => !ok)) throw new Error('Nie wszystkie pozycje zapisały nową kolejność — odśwież WBS.');
+    }, [authHeaders, setWbsTreeAndRef, refreshWbsNodes, onWbsUpdate]);
+
     // Drag krawędzi belki w Gantcie → quantity (dni) przez wbs-nodes/{id} (PATCH).
     // Unit zmienia się na 'dni' tylko gdy node ma już dniową jednostkę lub pustą — pakiet/komplet itp. zostają bez zmian.
     // @anchor handle-gantt-duration-change
@@ -6818,6 +6855,7 @@ ${ganttSectionHtml}
                             onNodeDurationChange={handleGanttDurationChange}
                             onGanttDateChange={handleGanttDateChange}
                             onGanttDatesBatch={handleGanttDatesBatch}
+                            onPrzestaw={handleHarmonogramPrzestaw}
                             onGetHtmlReady={fn => { ganttGetHtmlRef.current = fn; }}
                             onExcelDataReady={fn => { ganttExcelDataRef.current = fn; }}
                             projectStartDate={ganttProjectStart}

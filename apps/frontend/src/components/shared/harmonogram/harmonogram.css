@@ -117,3 +117,7 @@
 .rz .hg-tor.ms-row .ms-cien { top: 19px; }
 .rz .hg-tor.ms-row .ms-cien-l { top: 26px; }
 .rz .hg-tor.ms-row .poza { top: 18px; }
+/* @anchor harmonogram-przestaw-css — przeciąganie wiersza: uchwyt kursora i linia miejsca wstawienia */
+.rz .hg-lbl.przest { cursor: grab; }
+.rz .hg-lbl.drop-przed { box-shadow: inset 0 2px 0 var(--accent); }
+.rz .hg-lbl.drop-po { box-shadow: inset 0 -2px 0 var(--accent); }

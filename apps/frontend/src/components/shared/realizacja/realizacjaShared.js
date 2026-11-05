@@ -48,7 +48,7 @@ export const RODZAJE_BLOKERA = {
 
 const CLOSED_TASK = ['DONE', 'CANCELLED'];
 const osoba = (u) => u ? [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || '' : '';
-const parseQa = (qa) => {
+export const parseQa = (qa) => {
     if (Array.isArray(qa)) return qa;
     try { const v = JSON.parse(qa || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
 };

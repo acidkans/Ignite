@@ -3,7 +3,7 @@
 // komentarz, osoba, wpisy, „rozliczone"). Wspólne dla zakładki „Realizacja" (`RealizationNewTab`)
 // i szuflady realizacji w WBS (`WbsRealizationDrawer`) — reguła „cofnięcie zakupu cofa wykonanie"
 // i liczby pozycji nie mogą żyć w dwóch kopiach.
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { API_URL } from '../../../config';
 import { AXIS_STATUS_ORDER, hasPurchaseAxis, hasExecAxis, buildOwnerOptions, applyGroupMultipliers, buildHierarchy } from './wbsConstants';
 import { ganttDatesByNode } from '../harmonogram/harmonogramCzas';
@@ -74,9 +74,10 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
     }, [nodeId, token, isManagerOrAdmin]);
 
     // ─ Pobieranie danych — te same trzy endpointy co `RealizationTab` ────────
-    const fetchAll = useCallback(async () => {
+    // `cicho` = przeładowanie bez ekranu ładowania (np. po zmianie kolejności) — widok zostaje na miejscu.
+    const fetchAll = useCallback(async (cicho = false) => {
         if (!nodeId) return;
-        setLoading(true);
+        if (cicho !== true) setLoading(true);
         try {
             const headers = { Authorization: `Bearer ${token}` };
             const q = versionId ? `?versionId=${versionId}` : '';
@@ -195,6 +196,32 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
             throw e;
         }
     }, []);
+
+    // @anchor realization-zapisz-kolejnosc — przestawienie węzła `id` przed/po `celId` (to samo rodzeństwo
+    // w WBS): nowe `sortOrder` 0..n dla całego rodzeństwa, `PATCH /wbs-nodes/:id { sortOrder }` tylko dla
+    // zmienionych, potem ciche przeładowanie drzewa (kolejność i domyślne daty Gantta zależą od sortOrder).
+    const wbsRef = useRef(wbsNodes);
+    wbsRef.current = wbsNodes;
+    const zapiszKolejnosc = useCallback(async (id, celId, gdzie = 'po') => {
+        const lista = wbsRef.current;
+        const a = lista.find(n => n.id === id), b = lista.find(n => n.id === celId);
+        if (!a || !b) return;
+        if ((a.parentId || null) !== (b.parentId || null)) {
+            throw new Error('Kolejność zmienisz tylko w obrębie tej samej gałęzi WBS — przenieś pozycję do innej gałęzi w strukturze WBS.');
+        }
+        const pozycja = new Map(lista.map((n, i) => [n.id, i]));
+        const rodzenstwo = lista.filter(n => (n.parentId || null) === (a.parentId || null) && n.id !== id)
+            .sort((x, y) => ((Number(x.sortOrder) || 0) - (Number(y.sortOrder) || 0)) || (pozycja.get(x.id) - pozycja.get(y.id)));
+        const k = rodzenstwo.findIndex(n => n.id === celId);
+        rodzenstwo.splice(gdzie === 'przed' ? k : k + 1, 0, a);
+        const zmiany = rodzenstwo.map((n, i) => ({ id: n.id, sortOrder: i })).filter(z => Number(lista.find(n => n.id === z.id)?.sortOrder) !== z.sortOrder);
+        if (!zmiany.length) return;
+        const wyniki = await Promise.all(zmiany.map(z => fetch(`${API_URL}/wbs-nodes/${z.id}`, {
+            method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ sortOrder: z.sortOrder }),
+        }).then(r => r.ok).catch(() => false)));
+        await fetchAll(true);
+        if (wyniki.some(ok => !ok)) throw new Error('Nie wszystkie pozycje zapisały nową kolejność — sprawdź WBS.');
+    }, [fetchAll]);
 
     // @anchor realization-new-save-comment — `WbsNode.comment` przez `PATCH /wbs-nodes/:id`,
     // plus rozgłoszenie `wbs-comment-changed`: ten sam komentarz czyta WBS, panel Materiały
@@ -385,7 +412,7 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
     return {
         loading, wbsNodes, cards, actuals,
         fetchAll, fetchActuals, fetchCards,
-        saveComment, saveOwner, saveAxis, savePlanDates, savePlanDatesBatch, addActual, updateActual, deleteActual, setClosed, toggleClosed,
+        saveComment, saveOwner, saveAxis, savePlanDates, savePlanDatesBatch, zapiszKolejnosc, addActual, updateActual, deleteActual, setClosed, toggleClosed,
         actualsOf, cardOf, rowOf, ownerOptions,
         // @anchor realization-owner-users — konta zespołu zamówienia (właściciel blokera = `User`)
         ownerUsers,

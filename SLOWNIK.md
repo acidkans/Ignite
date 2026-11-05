@@ -826,6 +826,16 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-sekcja | MilestonyChipy (milestone'y w wierszu gałęzi Macierzy) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-milestony-chipy |
 | ui-sekcja | SzczegolyMilestone (wątek · termin, status, Q&A · blokery) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szczegoly-milestone |
 | ui-stala | grupyHarmonogramu (milestone'y jako własne wiersze Harmonogramu w Realizacji) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-grupy-harmonogramu |
+| ui-stan | duzyEkran (≥1600 px — Kokpit dokleja harmonogram pod spodem) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-duzy-ekran |
+| ui-sekcja | harmonogram pod Kokpitem (duże ekrany, węzeł z fokusa) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit-harmonogram |
+| ui-stan | qaOverrides (pary Q&A zapisane z Kokpitu w tej sesji) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-qa-overrides |
+| ui-funkcja | zapiszQa (edycja pary Q&A z wątku Kokpitu, PATCH /wbs-nodes/:id { qa }) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zapisz-qa |
+| ui-stala | edycjaWatku (handlery edycji wpisu w Kokpicie) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-edycja-watku |
+| ui-sekcja | WpisEdycja (rozwinięty wpis wątku: Q&A, bloker, odpowiedź w czacie) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-edycja |
+| ui-propsy | onPrzestaw (Harmonogram: przeciąganie wiersza za nazwę zmienia kolejność w WBS) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-przestaw |
+| ui-stala | harmonogram-przestaw-css (kursor i linia wstawienia przy przeciąganiu) | apps/frontend/src/components/shared/harmonogram/harmonogram.css | @anchor harmonogram-przestaw-css |
+| ui-funkcja | zapiszKolejnosc (nowe sortOrder rodzeństwa, PATCH /wbs-nodes/:id, ciche przeładowanie) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-zapisz-kolejnosc |
+| ui-funkcja | handleHarmonogramPrzestaw (Planowanie: przeciągnięcie wiersza Harmonogramu zmienia kolejność w drzewie WBS) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-harmonogram-przestaw |
 | ui-funkcja | splaszczDrzewo (drzewo → płaska lista z parentId) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor splaszcz-drzewo |
 | ui-funkcja | zaleznyOdMilestone ({ id: msId } — rodzeństwo za milestone'em z poddrzewami, łańcuch) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor zalezny-od-milestone |
 | ui-funkcja | zalezniMilestone (zależni przechodnio) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor zalezni-milestone |

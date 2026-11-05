@@ -106,7 +106,19 @@ export default function Harmonogram({
     // (`zaleznyOdMilestone`), `msWezly` = { [id]: { type, name, planOd, planDo, nieruchomy } } dla WSZYSTKICH
     // pozycji z datami (także spoza zoomu), `savePlanDatesBatch([{ id, od, ost }])` = zapis zbiorczy.
     msZaleznosc = null, msWezly = null, savePlanDatesBatch = null,
+    // @anchor harmonogram-przestaw — przeciąganie wiersza za nazwę: `onPrzestaw(id, celId, 'przed'|'po')`
+    // zmienia kolejność w WBS (`sortOrder`); błąd (np. inna gałąź WBS) wraca jako komunikat.
+    onPrzestaw = null,
 }) {
+    const przeciagany = useRef(null);
+    const [cel, setCel] = useState(null); // { id, gdzie } — linia wstawienia pod kursorem
+    const upusc = async (celId, gdzie) => {
+        const id = przeciagany.current;
+        przeciagany.current = null;
+        setCel(null);
+        if (!id || id === celId || !onPrzestaw) return;
+        try { await onPrzestaw(id, celId, gdzie); } catch (e) { setInfo([e?.message || 'Nie udało się zmienić kolejności']); }
+    };
     const [zakres, setZakresState] = useState(() => czytaj(zakresKey, domyslnyZakres));
     const setZakres = (z) => { setZakresState(z); zapiszSS(zakresKey, z); setPrzesun(0); };
     // @anchor harmonogram-przesun-okna — przesunięcie okna: dni (14 dni) albo miesiące (Miesiąc).
@@ -558,7 +570,20 @@ export default function Harmonogram({
                                         const edyt = canEdit && !!savePlanDates && pasek && !opisPaska(l).zablokowany;
                                         const ed = edycjaDat === l.id;
                                         return (
-                                            <div key={l.id} className="hg-lbl" style={{ height: jestMs(l) ? ROW_H_MS : ROW_H, paddingLeft: 8 + (pokazWciecia ? Math.max(0, (l.depth || 0) - 1) * 10 : 0) }}>
+                                            <div key={l.id} className={`hg-lbl${onPrzestaw ? ' przest' : ''}${cel?.id === l.id ? ` drop-${cel.gdzie}` : ''}`}
+                                                style={{ height: jestMs(l) ? ROW_H_MS : ROW_H, paddingLeft: 8 + (pokazWciecia ? Math.max(0, (l.depth || 0) - 1) * 10 : 0) }}
+                                                draggable={!!onPrzestaw && !ed}
+                                                title={onPrzestaw ? 'Przeciągnij, by zmienić kolejność (zmienia też WBS)' : undefined}
+                                                onDragStart={onPrzestaw ? (e) => { przeciagany.current = l.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', l.id); } : undefined}
+                                                onDragEnd={onPrzestaw ? () => { przeciagany.current = null; setCel(null); } : undefined}
+                                                onDragOver={onPrzestaw ? (e) => {
+                                                    if (!przeciagany.current || przeciagany.current === l.id) return;
+                                                    e.preventDefault();
+                                                    const r = e.currentTarget.getBoundingClientRect();
+                                                    const gdzie = e.clientY - r.top < r.height / 2 ? 'przed' : 'po';
+                                                    if (cel?.id !== l.id || cel?.gdzie !== gdzie) setCel({ id: l.id, gdzie });
+                                                } : undefined}
+                                                onDrop={onPrzestaw ? (e) => { e.preventDefault(); upusc(l.id, cel?.id === l.id ? cel.gdzie : 'po'); } : undefined}>
                                                 <span className={`t${onOtworz ? ' klik' : ''}${jestMs(l) ? ' ms-n' : ''}`} title={l.name} onClick={onOtworz ? () => onOtworz(l.id) : undefined}>{jestMs(l) ? '◆ ' : ''}{nazwa(l)}</span>
                                                 <span className="m">
                                                     {pasek && !ed && (
