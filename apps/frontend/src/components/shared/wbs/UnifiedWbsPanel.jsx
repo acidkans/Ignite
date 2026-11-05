@@ -1081,6 +1081,10 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // takiego pola świeżym (potencjalnie nieaktualnym) odczytem z API zanim PATCH się
     // zakończy — inaczej focus/visibilitychange/expand-refresh cofa świeżo wybraną jednostkę.
     const pendingFieldSaves = useRef(new Map());
+    // @anchor manual-cost-edit-seq — licznik ręcznych edycji ceny/narzutu per węzeł (Map<nodeId, number>).
+    // applyLeafDefaults porównuje go przed wysłaniem /budget: jeśli w międzyczasie ktoś wpisał cenę
+    // ręcznie, wartości domyślne typu NIE nadpisują jej (cena wracała do domyślnego 1 zł usługi).
+    const manualCostEditSeq = useRef(new Map());
 
     // Sync Q&A from in-memory tree into wbsData/cache without replacing wbsTree.
     // Called after every tree save to keep SchematTab export up-to-date while
@@ -5214,6 +5218,9 @@ ${ganttSectionHtml}
         const pend = pendingFieldSaves.current.get(id) || new Set();
         pend.add(field);
         pendingFieldSaves.current.set(id, pend);
+        if (field === 'unitCost' || field === 'margin') {
+            manualCostEditSeq.current.set(id, (manualCostEditSeq.current.get(id) || 0) + 1);
+        }
         try {
             if (field === 'unitCost' || field === 'margin') {
                 // Pole budżetowe — zapisujemy przez /budget, nie przez /wbs-nodes (tree).
@@ -5498,9 +5505,33 @@ ${ganttSectionHtml}
     const applyLeafDefaults = useCallback(async (id, defaults) => {
         if (!id || !defaults) return;
         // Wartości domyślne nadpisują koszt jedn., ilość i narzut — po akceptacji tylko za zgodą.
+        // Numer ręcznej edycji ceny sprzed guardu — modal guardu może trwać, a użytkownik
+        // w tym czasie (albo zaraz po zmianie typu) wpisuje własną cenę.
+        const costSeqAtStart = manualCostEditSeq.current.get(id) || 0;
+        const costEditedManually = () => {
+            const pend = pendingFieldSaves.current.get(id);
+            return (manualCostEditSeq.current.get(id) || 0) !== costSeqAtStart
+                || !!(pend && (pend.has('unitCost') || pend.has('margin')));
+        };
         if (!(await guardOfferEdit())) return;
         const node = wbsData.find(n => n.id === id) || {};
         const unit = defaults.unit ?? node.unit;
+        if (costEditedManually()) {
+            // Ręczna cena ma pierwszeństwo — z domyślnych bierzemy tylko jednostkę.
+            if (unit != null) {
+                setWbsData(prev => prev.map(item => item.id === id ? { ...item, unit } : item));
+                setWbsTreeAndRef(prev => {
+                    const upd = items => items.map(n => n.id === id ? { ...n, unit } : { ...n, children: n.children?.length ? upd(n.children) : n.children });
+                    return { ...prev, items: upd(prev.items || []) };
+                });
+                try {
+                    await fetch(`${API_URL}/wbs-nodes/${id}`, {
+                        method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ unit }),
+                    });
+                } catch (e) { console.error('Apply leaf defaults error:', e); }
+            }
+            return;
+        }
         const unitCost = Number(defaults.unitCost) || 0;
         // Ilość: zachowaj istniejącą dodatnią (retype istniejącej pozycji), w innym wypadku 1 (nowa pozycja).
         const existingQty = parseFloat(node.quantity);
@@ -5524,9 +5555,13 @@ ${ganttSectionHtml}
                     method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ unit }),
                 });
             }
-            await fetch(`${API_URL}/wbs-nodes/${id}/budget`, {
-                method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ unitCost, quantity, margin, discount }),
-            });
+            // Cena wpisana ręcznie w trakcie zapisu jednostki — nie wysyłaj domyślnej ceny,
+            // bo dotarłaby do bazy po ręcznej i ją nadpisała.
+            if (!costEditedManually()) {
+                await fetch(`${API_URL}/wbs-nodes/${id}/budget`, {
+                    method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ unitCost, quantity, margin, discount }),
+                });
+            }
             await refreshWbsNodes();
         } catch (e) { console.error('Apply leaf defaults error:', e); }
     }, [wbsData, authHeaders, refreshWbsNodes, setWbsTreeAndRef]);
@@ -7129,6 +7164,8 @@ ${ganttSectionHtml}
                     makeArtifact={pendingExport.makeArtifact}
                     oneDriveFolderName={oneDriveFolderName}
                     oneDriveFolderKey={pendingExport.oneDriveFolderKey || 'reports'}
+                    recipientScope={pendingExport.recipientScope}
+                    mailArchive={pendingExport.mailArchive !== false}
                 />
             )}
 
@@ -7164,8 +7201,6 @@ ${ganttSectionHtml}
                                             />
                                             <div className="flex gap-2">
                                                 <button onClick={commitPreset} className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 rounded-lg text-amber-300 text-[10px] font-bold uppercase tracking-widest transition-all">Zapisz</button>
-                    recipientScope={pendingExport.recipientScope}
-                    mailArchive={pendingExport.mailArchive !== false}
                                                 <button onClick={() => { setEditingPreset(undefined); setEditingPresetDraft({ label: '', text: '' }); }} className="px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-gray-400 text-[10px] font-bold uppercase tracking-widest transition-all">Anuluj</button>
                                             </div>
                                         </>

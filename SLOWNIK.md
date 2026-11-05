@@ -2427,6 +2427,7 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-stala | OFFER_VALUE_FIELDS | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor offer-value-fields |
 | ui-stan | offerLocked (UnifiedWbsPanel) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor offer-locked |
 | ui-funkcja | guard w updateNodeField | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor update-node-field-offer-lock |
+| ui-stan | manualCostEditSeq | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor manual-cost-edit-seq |
 | ui-propsy | BudgetTable.offerLocked | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table-offer-locked |
 | ui-propsy | BudgetTable.costsOnly | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table-costs-only |
 | ui-propsy | WBSHybridTable.offerLocked | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-offer-lock |
