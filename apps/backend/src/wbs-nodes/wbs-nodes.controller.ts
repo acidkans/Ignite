@@ -41,6 +41,16 @@ export class WbsNodesController {
     }
 
     /**
+     * Zbiorczy zapis dat Harmonogramu (np. milestone + jego zależni) — jedna transakcja i jeden
+     * wpis AuditLog. Trasa ma dwa segmenty, więc nie koliduje z `PATCH :id`.
+     */
+    // @anchor wbs-nodes-gantt-dates-batch
+    @Patch('gantt-dates/batch')
+    updateGanttDatesBatch(@Body() body: { items: { id: string; ganttStart: string | null; ganttEnd: string | null }[] }, @Req() req: any) {
+        return this.service.updateGanttDatesBatch(body?.items, req.user);
+    }
+
+    /**
      * Aktualizuje pola węzła WBS (nazwa, typ, status, owner itd.).
      */
     // @anchor wbs-nodes-update

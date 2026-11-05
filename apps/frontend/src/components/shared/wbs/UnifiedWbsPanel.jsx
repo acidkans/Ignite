@@ -5338,6 +5338,19 @@ ${ganttSectionHtml}
         } catch (e) { console.error('Gantt date save error:', e); }
     }, [authHeaders]);
 
+    // @anchor handle-gantt-dates-batch — zbiorczy zapis dat Harmonogramu (milestone + zależni) przez
+    // `PATCH /wbs-nodes/gantt-dates/batch`; błąd leci wyżej, żeby Harmonogram cofnął podgląd.
+    const handleGanttDatesBatch = useCallback(async (items) => {
+        if (!items?.length) return;
+        if (!(await guardSnapshotEdit())) throw new Error('Edycja wersji zablokowana');
+        const res = await fetch(`${API_URL}/wbs-nodes/gantt-dates/batch`, {
+            method: 'PATCH',
+            headers: authHeaders(),
+            body: JSON.stringify({ items }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    }, [authHeaders]);
+
     // Drag krawędzi belki w Gantcie → quantity (dni) przez wbs-nodes/{id} (PATCH).
     // Unit zmienia się na 'dni' tylko gdy node ma już dniową jednostkę lub pustą — pakiet/komplet itp. zostają bez zmian.
     // @anchor handle-gantt-duration-change
@@ -6769,6 +6782,7 @@ ${ganttSectionHtml}
                             projectName={orderName || projectName || 'Projekt'}
                             onNodeDurationChange={handleGanttDurationChange}
                             onGanttDateChange={handleGanttDateChange}
+                            onGanttDatesBatch={handleGanttDatesBatch}
                             onGetHtmlReady={fn => { ganttGetHtmlRef.current = fn; }}
                             onExcelDataReady={fn => { ganttExcelDataRef.current = fn; }}
                             projectStartDate={ganttProjectStart}

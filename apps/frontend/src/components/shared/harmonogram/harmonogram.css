@@ -86,3 +86,10 @@
 .rz .hg .legend .ms, .rz .hg .legend .ms-okno { position: static; display: inline-block; vertical-align: middle; cursor: default; }
 .rz .hg .legend .ms { width: 10px; height: 10px; margin: 0 4px 0 2px; }
 .rz .hg .legend .ms-okno { width: 22px; height: 10px; }
+
+/* M3 — kolizja z milestone'em (start przed końcem milestone'a) i podgląd przesuwanych zależnych */
+.rz .hg .bar.konflikt { box-shadow: 0 0 0 2px var(--bad); background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgba(238, 110, 88, .45) 6px 9px); }
+.rz .hg .legend .bar.konflikt { box-shadow: 0 0 0 1.5px var(--bad); }
+.rz .hg .bar.podglad, .rz .hg .ms.podglad { opacity: .75; box-shadow: 0 0 0 2px var(--ms); }
+.rz .hg-info .hg-info-bad { color: var(--bad); }
+.rz .hg-info > div + div { margin-top: 4px; }

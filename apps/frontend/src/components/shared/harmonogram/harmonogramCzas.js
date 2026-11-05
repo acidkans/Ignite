@@ -150,9 +150,116 @@ export const addWorkingDays = (start, dur) => {
     return d;
 };
 
+// ─── Milestone'y: zależności i reguła „nie wcześniej niż” ─────────────────────
+const dzien0 = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+const plusDni = (d, n) => { const x = dzien0(d); x.setDate(x.getDate() + n); return x; };
+
+// @anchor splaszcz-drzewo — drzewo (`children`) → płaska lista z `parentId` (z drzewa, nie z pola).
+export const splaszczDrzewo = (items, parentId = null, out = []) => {
+    for (const n of items || []) {
+        out.push({ id: n.id, parentId, type: n.type, sortOrder: n.sortOrder });
+        splaszczDrzewo(n.children, n.id, out);
+    }
+    return out;
+};
+
+// @anchor zalezny-od-milestone — `{ [id]: msId }`: milestone, który „rządzi” węzłem. Zależni = rodzeństwo
+// stojące ZA milestone'em (kolejność `sortOrder`) wraz z całymi poddrzewami; następny milestone
+// w gałęzi przejmuje zakres i sam zależy od poprzedniego (łańcuch A → B → zależni B).
+// `flat` = [{ id, parentId, type, sortOrder }]; korzenie = węzły, których rodzica nie ma na liście.
+export const zaleznyOdMilestone = (flat) => {
+    const lista = flat || [];
+    const ids = new Set(lista.map(n => n.id));
+    const dzieci = new Map();
+    for (const n of lista) {
+        const k = n.parentId && ids.has(n.parentId) ? n.parentId : '';
+        if (!dzieci.has(k)) dzieci.set(k, []);
+        dzieci.get(k).push(n);
+    }
+    for (const l of dzieci.values()) l.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
+    const out = {};
+    const walk = (klucz, rzadzi) => {
+        let cur = rzadzi;
+        for (const n of dzieci.get(klucz) || []) {
+            if (cur) out[n.id] = cur;
+            if (isMilestoneType(n.type)) { cur = n.id; continue; }
+            walk(n.id, cur);
+        }
+    };
+    walk('', null);
+    return out;
+};
+
+// @anchor zalezni-milestone — wszyscy zależni od milestone'a (przechodnio, przez kolejne milestone'y).
+export const zalezniMilestone = (zaleznosc, msId) => {
+    const odwrotnie = {};
+    for (const [id, m] of Object.entries(zaleznosc || {})) (odwrotnie[m] || (odwrotnie[m] = [])).push(id);
+    const out = [];
+    const stos = [msId];
+    const byly = new Set([msId]);
+    while (stos.length) {
+        for (const id of odwrotnie[stos.pop()] || []) if (!byly.has(id)) { byly.add(id); out.push(id); stos.push(id); }
+    }
+    return out;
+};
+
+// @anchor pierwszy-dozwolony-dzien — najwcześniejszy start zależnego: pierwszy dzień roboczy po
+// ostatnim dniu milestone'a (`msOst` włącznie); gałąź pracująca w dni wolne liczy kalendarzowo.
+export const pierwszyDozwolonyDzien = (msOst, wow = false) => {
+    const d = plusDni(msOst, 1);
+    return wow ? d : advanceToWorkingDay(d);
+};
+
+// @anchor roznica-dni-roboczych — o ile dni roboczych (ze znakiem) przesunął się dzień `a` do `b`.
+export const roznicaDniRoboczych = (a, b) => {
+    const x = dzien0(a), y = dzien0(b);
+    if (+x === +y) return 0;
+    const krok = y > x ? 1 : -1;
+    let n = 0;
+    for (const c = new Date(x); +c !== +y;) { c.setDate(c.getDate() + krok); if (!isNonWorkingDay(c)) n += krok; }
+    return n;
+};
+
+// @anchor przesun-o-robocze — dzień przesunięty o `n` dni roboczych (ze znakiem); `n` = 0 → bez zmian.
+export const przesunORobocze = (d, n) => {
+    const c = dzien0(d);
+    const krok = n >= 0 ? 1 : -1;
+    for (let k = Math.abs(n); k > 0;) { c.setDate(c.getDate() + krok); if (!isNonWorkingDay(c)) k--; }
+    return c;
+};
+
+// @anchor przesun-zaleznych — wariant „zachowaj odstęp”: zależni jadą o tyle dni roboczych, o ile
+// przesunął się koniec milestone'a (w obie strony), z zachowaniem swojej liczby dni roboczych;
+// zależny milestone zachowuje okno kalendarzowe. `wezly` = { [id]: { planOd, planDo, type, nieruchomy } }
+// (planDo = ostatni dzień); `nieruchomy` (np. roboty rozpoczęte w Realizacji) zostaje na miejscu.
+// Zwraca { [id]: { od, ost } } tylko dla przesuniętych.
+export const przesunZaleznych = (wezly, ids, deltaRob) => {
+    const out = {};
+    if (!deltaRob) return out;
+    for (const id of ids || []) {
+        const w = wezly?.[id];
+        if (!w || !w.planOd || !w.planDo || w.nieruchomy) continue;
+        const od = dzien0(w.planOd), ost = dzien0(w.planDo);
+        if (isMilestoneType(w.type)) {
+            const nod = przesunORobocze(od, deltaRob);
+            out[id] = { od: nod, ost: plusDni(nod, Math.max(0, Math.round((ost - od) / DAY_MS))) };
+            continue;
+        }
+        let ile = 0;
+        for (const c = new Date(od); c <= ost; c.setDate(c.getDate() + 1)) if (!isNonWorkingDay(c)) ile++;
+        const nod = advanceToWorkingDay(przesunORobocze(od, deltaRob));
+        out[id] = { od: nod, ost: plusDni(addWorkingDays(nod, Math.max(1, ile)), -1) };
+    }
+    return out;
+};
+
 // branchWorkOnHolidays: { [nodeId]: boolean } – per-branch setting for depth-0 nodes
 export const buildTasksFromTree = (items, projectStart, projectName, overrides, branchWorkOnHolidays) => {
     const tasks = [];
+    // @anchor build-tasks-ms-regula — domyślny start zależnego od milestone'a = max(start projektu,
+    // pierwszy dozwolony dzień); zapisane daty się nie zmieniają (konflikt pokazuje Harmonogram).
+    const zaleznosc = zaleznyOdMilestone(splaszczDrzewo(items));
+    const koniecMs = {};
     const taskBranchMap = {};
     const branchNameMap = {};
     let cursor = new Date(projectStart);
@@ -208,7 +315,12 @@ export const buildTasksFromTree = (items, projectStart, projectName, overrides, 
                 let start, end, type;
                 // tylko praca z jednostką dni może aktualizować ilość przez timeline
                 const canUpdateDuration = isWorkType(node.type) && isDayUnit(node.unit);
-                const defaultStart = effectiveWow ? new Date(projectStart) : advanceToWorkingDay(new Date(projectStart));
+                let defaultStart = effectiveWow ? new Date(projectStart) : advanceToWorkingDay(new Date(projectStart));
+                const rzadzi = zaleznosc[node.id];
+                if (rzadzi && koniecMs[rzadzi]) {
+                    const min = pierwszyDozwolonyDzien(new Date(koniecMs[rzadzi].getTime() - DAY_MS), effectiveWow);
+                    if (min > defaultStart) defaultStart = min;
+                }
                 if (isMs) {
                     // Milestone: zapisane okno albo jeden dzień od domyślnego startu; nie przesuwa kursora.
                     const zapisane = ovr?.start && ovr?.end && isValidGanttDate(ovr.start) && isValidGanttDate(ovr.end);
@@ -216,6 +328,7 @@ export const buildTasksFromTree = (items, projectStart, projectName, overrides, 
                     end = zapisane ? new Date(ovr.end) : new Date(start.getTime() + DAY_MS);
                     if (end <= start) end = new Date(start.getTime() + DAY_MS);
                     type = 'milestone';
+                    koniecMs[node.id] = end;
                 } else if (ovr?.start && ovr?.end && isValidGanttDate(ovr.start) && isValidGanttDate(ovr.end)) {
                     start = new Date(ovr.start);
                     end = new Date(ovr.end);

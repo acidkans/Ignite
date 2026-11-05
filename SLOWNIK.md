@@ -332,6 +332,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | ganttDatesByNode (daty pasków harmonogramu: zapisane albo domyślne; do = ostatni dzień) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor gantt-daty-wezlow |
 | ui-funkcja | planOd / planDo (daty robót pozycji w danych realizacji, z `ganttDatesByNode`) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-plan-od-do |
 | ui-funkcja | savePlanDates (zapis `ganttStart/ganttEnd` z Harmonogramu w Realizacji) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-save-plan-dates |
+| ui-funkcja | savePlanDatesBatch (zbiorczy zapis dat w Realizacji, cofa przy błędzie) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-save-plan-dates-batch |
 | ui-sekcja | Tablica | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tablica |
 | ui-stala | TABLICA_KOLUMNY | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tablica-kolumny |
 | ui-stala | RODZAJE_BLOKERA | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor rodzaje-blokera |
@@ -537,6 +538,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-hook | DocumentationSidebar — nasłuch `documents-changed` | apps/frontend/src/components/Documentation/DocumentationSidebar.jsx | @anchor docs-sidebar-documents-changed |
 | back-endpoint | POST /wbs-nodes | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-create |
 | back-endpoint | PATCH /wbs-nodes/:id | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-update |
+| back-endpoint | PATCH /wbs-nodes/gantt-dates/batch (zbiorczy zapis dat Harmonogramu) | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-gantt-dates-batch |
+| back-funkcja | updateGanttDatesBatch (transakcja + jeden wpis AuditLog `WbsNode.ganttDates`) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-gantt-dates-batch-service |
 | back-endpoint | PATCH /wbs-nodes/:id/budget | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-update-budget |
 | back-endpoint | DELETE /wbs-nodes/:id | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-delete |
 
@@ -810,6 +813,23 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stala | msById / nazwyWezlow / milestonyPoddrzewa (milestone'y zamówienia w Realizacji) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-milestony |
 | ui-sekcja | MilestonyChipy (milestone'y w wierszu gałęzi Macierzy) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-milestony-chipy |
 | ui-sekcja | SzczegolyMilestone (wątek · termin, status, Q&A · blokery) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szczegoly-milestone |
+| ui-funkcja | splaszczDrzewo (drzewo → płaska lista z parentId) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor splaszcz-drzewo |
+| ui-funkcja | zaleznyOdMilestone ({ id: msId } — rodzeństwo za milestone'em z poddrzewami, łańcuch) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor zalezny-od-milestone |
+| ui-funkcja | zalezniMilestone (zależni przechodnio) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor zalezni-milestone |
+| ui-funkcja | pierwszyDozwolonyDzien (dzień roboczy po końcu milestone'a) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor pierwszy-dozwolony-dzien |
+| ui-funkcja | roznicaDniRoboczych (przesunięcie w dniach roboczych ze znakiem) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor roznica-dni-roboczych |
+| ui-funkcja | przesunORobocze (dzień ± n dni roboczych) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor przesun-o-robocze |
+| ui-funkcja | przesunZaleznych (wariant „zachowaj odstęp”) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor przesun-zaleznych |
+| ui-funkcja | buildTasksFromTree — reguła „nie wcześniej niż” w domyślnych datach | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor build-tasks-ms-regula |
+| ui-propsy | msZaleznosc / msWezly / savePlanDatesBatch (reguły milestone'ów) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-ms-propsy |
+| ui-funkcja | minOdOf (pierwszy dozwolony start pozycji) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-min-od |
+| ui-funkcja | zapisz (dociąganie do milestone'a, przesuwanie zależnych, komunikat hg-info) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-zapisz |
+| ui-stan | podgladZal (podgląd na żywo przesuwanych zależnych) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-podglad-zaleznych |
+| ui-stala | msZaleznosc / msWezly w Planowaniu | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-ms |
+| ui-funkcja | savePlanDatesBatch w Planowaniu (cofa podgląd przy błędzie) | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-batch |
+| ui-funkcja | handleGanttDatesBatch (PATCH gantt-dates/batch z guardem snapshotu) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-gantt-dates-batch |
+| ui-stala | msZaleznosc / msWezly w Realizacji (całe zamówienie) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-ms-reguly |
+| ui-stala | NIERUCHOME_EXEC (IN_PROGRESS, DONE, HANDED_OVER, INVOICED) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-nieruchome-exec |
 | ui-funkcja | handleGanttDateChange | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-gantt-date-change |
 | ui-funkcja | handleMaterialNodeCreated | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-material-node-created |
 | ui-funkcja | handleHybridNodesDeleted | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-hybrid-nodes-deleted |

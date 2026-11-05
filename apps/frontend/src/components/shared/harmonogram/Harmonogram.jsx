@@ -10,6 +10,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
     DAY_MS, isNonWorkingDay, isPolishHoliday, advanceToWorkingDay, retreatToWorkingDay, addWorkingDays,
     buildExcelTimeline, toExcelUtcDate, isMilestoneType,
+    pierwszyDozwolonyDzien, zalezniMilestone, przesunZaleznych, roznicaDniRoboczych,
 } from './harmonogramCzas';
 import './harmonogram.css';
 
@@ -99,6 +100,10 @@ export default function Harmonogram({
     onZoom = null, onOtworz = null,
     domyslnyZakres = '14', zakresKey = null, projectStart = null, projectEnd = null,
     nazwaProjektu = '', onApi = null, pokazWciecia = false,
+    // @anchor harmonogram-ms-propsy — reguły milestone'ów (M3): `msZaleznosc` = { [id]: msId }
+    // (`zaleznyOdMilestone`), `msWezly` = { [id]: { type, name, planOd, planDo, nieruchomy } } dla WSZYSTKICH
+    // pozycji z datami (także spoza zoomu), `savePlanDatesBatch([{ id, od, ost }])` = zapis zbiorczy.
+    msZaleznosc = null, msWezly = null, savePlanDatesBatch = null,
 }) {
     const [zakres, setZakresState] = useState(() => czytaj(zakresKey, domyslnyZakres));
     const setZakres = (z) => { setZakresState(z); zapiszSS(zakresKey, z); setPrzesun(0); };
@@ -172,10 +177,43 @@ export default function Harmonogram({
     // Klik po puszczeniu przeciągniętego rombu nie otwiera szczegółów.
     const poDragu = useRef(false);
 
+    // @anchor harmonogram-zapisz — zapis dat z regułami milestone'ów: start zależnego nie wcześniej niż
+    // pierwszy dzień roboczy po jego milestonie (dociągnięcie + komunikat), a przesunięcie milestone'a
+    // przesuwa zależnych o tyle samo dni roboczych („zachowaj odstęp”) jednym zapisem zbiorczym.
+    // @anchor harmonogram-min-od — pierwszy dozwolony start pozycji (null = nie zależy od milestone'a).
+    const minOdOf = useCallback((l, galazId) => {
+        const ms = msWezly?.[msZaleznosc?.[l.id]];
+        return ms?.planDo ? pierwszyDozwolonyDzien(ms.planDo, wowOf(galazId)) : null;
+    }, [msWezly, msZaleznosc, wowOf]);
+
     const zapisz = useCallback(async (l, galazId, od, ost, tryb) => {
         if (!savePlanDates) return;
+        const w = wowOf(galazId);
+        const komunikaty = [];
+        const min = tryb !== 'r' ? minOdOf(l, galazId) : null;
+        if (min && dzien0(od) < min) {
+            if (tryb === 'l') od = min;
+            else ({ od, ost } = przesunWg({ ...l, planOd: od, planDo: ost }, 'move', roznicaDni(min, od), w));
+            if (dzien0(ost) < dzien0(od)) ost = od;
+            const ms = msWezly?.[msZaleznosc?.[l.id]];
+            komunikaty.push(<>Start <b>{nazwa(l)}</b> dociągnięty do <b>{dzienMies(od)}</b> — pierwszy dzień roboczy po milestonie „{ms?.name || 'milestone'}”.</>);
+        }
+        let zalezni = [];
+        let stoja = 0;
+        if (jestMs(l) && msZaleznosc && msWezly && tryb !== 'l') {
+            const delta = roznicaDniRoboczych(l.planDo, ost);
+            const ids = zalezniMilestone(msZaleznosc, l.id);
+            zalezni = Object.entries(przesunZaleznych(msWezly, ids, delta)).map(([id, p]) => ({ id, od: p.od, ost: p.ost }));
+            stoja = delta ? ids.filter(id => msWezly[id]?.nieruchomy && msWezly[id]?.planOd).length : 0;
+            if (zalezni.length) komunikaty.push(<>Milestone <b>{nazwa(l)}</b>: {zalezni.length} zależn{zalezni.length === 1 ? 'a pozycja przesunięta' : 'ych przesuniętych'} o <b>{delta > 0 ? '+' : ''}{delta}</b> dni rob.</>);
+            if (stoja) komunikaty.push(<span className="hg-info-bad">{stoja} rozpoczęt{stoja === 1 ? 'a pozycja zostaje' : 'ych zostaje'} na miejscu — kolizja z milestone'em (na czerwono).</span>);
+        }
         try {
-            await savePlanDates(l.id, od, ost);
+            if (zalezni.length && savePlanDatesBatch) await savePlanDatesBatch([{ id: l.id, od, ost }, ...zalezni]);
+            else {
+                await savePlanDates(l.id, od, ost);
+                for (const z of zalezni) await savePlanDates(z.id, z.od, z.ost);
+            }
         } catch (e) {
             console.error('[Harmonogram] zapis dat:', e);
             alert('Nie udało się zapisać dat robót');
@@ -187,10 +225,18 @@ export default function Harmonogram({
             const nowe = Math.max(1, dniRobocze(od, ost, w));
             if (stare !== nowe) {
                 onDurationChange(l.id, nowe);
-                setInfo({ name: nazwa(l), stare, nowe });
+                komunikaty.push(<><b>Zmieniono liczbę dni</b> {nazwa(l)}: {stare} → <b>{nowe}</b> {nowe === 1 ? 'dzień' : 'dni'} roboczych (ilość pozycji zaktualizowana).</>);
             }
         }
-    }, [savePlanDates, onDurationChange, wowOf, nazwa]);
+        if (komunikaty.length) setInfo(komunikaty);
+    }, [savePlanDates, savePlanDatesBatch, onDurationChange, wowOf, nazwa, minOdOf, msZaleznosc, msWezly]);
+
+    // @anchor harmonogram-podglad-zaleznych — podgląd na żywo: przesunięci zależni przeciąganego milestone'a.
+    const podgladZal = useMemo(() => {
+        if (!drag?.delta || !jestMs(drag.l) || drag.tryb === 'l' || !msZaleznosc || !msWezly) return null;
+        const p = przesunMilestone(drag.l, drag.tryb, drag.delta, wowOf(drag.galazId));
+        return przesunZaleznych(msWezly, zalezniMilestone(msZaleznosc, drag.l.id), roznicaDniRoboczych(drag.l.planDo, p.ost));
+    }, [drag, msZaleznosc, msWezly, wowOf]);
 
     const ciagnie = !!drag;
     useEffect(() => {
@@ -247,9 +293,12 @@ export default function Harmonogram({
         const dd = drag?.l.id === l.id ? drag : null;
         let a = idx(l.planOd), b = idx(l.planDo);
         if (dd && dd.delta) { const p = przesunMilestone(l, dd.tryb, dd.delta, w); a = idx(p.od); b = idx(p.ost); }
+        else if (podgladZal?.[l.id]) { a = idx(podgladZal[l.id].od); b = idx(podgladZal[l.id].ost); }
         if (a === null || b === null || b < 0 || a >= ileDni) return null;
+        const minOd = minOdOf(l, galazId);
+        const konflikt = !!minOd && dzien0(l.planOd) < minOd;
         const okno = b > a;
-        const tytul = `◆ ${l.name}\nMilestone ${dzienMies(l.planOd)}${okno ? `–${dzienMies(l.planDo)}` : ''}${l._msOpis ? ` · ${l._msOpis}` : ''}${edyt ? '\nPrzeciągnij romb, by przesunąć' : ''}${onOtworz ? '\nKlik otwiera szczegóły' : ''}`;
+        const tytul = `◆ ${l.name}\nMilestone ${dzienMies(l.planOd)}${okno ? `–${dzienMies(l.planDo)}` : ''}${l._msOpis ? ` · ${l._msOpis}` : ''}${konflikt ? `\nKolizja: przed końcem poprzedniego milestone'a (najwcześniej ${dzienMies(minOd)})` : ''}${edyt ? '\nPrzeciągnij romb, by przesunąć' : ''}${onOtworz ? '\nKlik otwiera szczegóły' : ''}`;
         const a0 = Math.max(a, 0), b0 = Math.min(b, ileDni - 1);
         return (
             <React.Fragment key={l.id}>
@@ -261,7 +310,7 @@ export default function Harmonogram({
                     </div>
                 )}
                 {b < ileDni && (
-                    <span className={`ms${wGrupie ? ' g' : ''}${edyt ? ' drag' : ''}${dd ? ' ciagniety' : ''}${l._msKonflikt ? ' late' : ''}`}
+                    <span className={`ms${wGrupie ? ' g' : ''}${edyt ? ' drag' : ''}${dd ? ' ciagniety' : ''}${l._msKonflikt || konflikt ? ' late' : ''}${podgladZal?.[l.id] ? ' podglad' : ''}`}
                         style={{ left: b * dzienPx + dzienPx / 2 - 7 }} title={tytul}
                         onPointerDown={edyt ? e => zacznij(e, l, galazId, 'move') : undefined}
                         onClick={e => { e.stopPropagation(); if (!poDragu.current && onOtworz) onOtworz(l.id); }} />
@@ -513,9 +562,13 @@ export default function Harmonogram({
                                             const dd = drag?.l.id === l.id ? drag : null;
                                             let d0 = r0, d1 = r1;
                                             if (dd && dd.delta) {
-                                                const p = przesunPasek(l, dd.tryb, dd.delta, w);
+                                                const p = przesunWg(l, dd.tryb, dd.delta, w);
                                                 d0 = idx(p.od); d1 = idx(p.ost);
+                                            } else if (podgladZal?.[l.id]) {
+                                                d0 = idx(podgladZal[l.id].od); d1 = idx(podgladZal[l.id].ost);
                                             }
+                                            const minOd = pasek ? minOdOf(l, galazId) : null;
+                                            const konflikt = !!minOd && dzien0(l.planOd) < minOd;
                                             const widoczny = pasek && d1 >= 0 && d0 < ileDni;
                                             const od = widoczny ? Math.max(d0, 0) : -1;
                                             const dl = widoczny ? Math.min(d1, ileDni - 1) - od + 1 : 0;
@@ -528,11 +581,11 @@ export default function Harmonogram({
                                                     onClick={edyt ? (e) => klikToru(e, l, galazId) : undefined}>
                                                     {jestMs(l) && pasek && rysujMs(l, galazId, edyt)}
                                                     {widoczny && !jestMs(l) && (
-                                                        <div className={`bar ${opis.klasa}${d0 < 0 ? ' cut-l' : ''}${d1 >= ileDni ? ' cut-r' : ''}${edyt ? ' drag' : ''}${dd ? ' ciagniety' : ''}`}
+                                                        <div className={`bar ${opis.klasa}${d0 < 0 ? ' cut-l' : ''}${d1 >= ileDni ? ' cut-r' : ''}${edyt ? ' drag' : ''}${dd ? ' ciagniety' : ''}${konflikt ? ' konflikt' : ''}${podgladZal?.[l.id] ? ' podglad' : ''}`}
                                                             style={{ left: od * dzienPx + 2, width: Math.max(6, dl * dzienPx - 4) }}
                                                             onPointerDown={edyt ? e => zacznij(e, l, galazId, 'move') : undefined}
                                                             onClick={e => e.stopPropagation()}
-                                                            title={`${l.name}\nRoboty ${dzienMies(l.planOd)}–${dzienMies(l.planDo)} · ${dniRobocze(l.planOd, l.planDo, w)} dni roboczych${opis.tekst ? ` · ${opis.tekst}` : ''}`}>
+                                                            title={`${l.name}\nRoboty ${dzienMies(l.planOd)}–${dzienMies(l.planDo)} · ${dniRobocze(l.planOd, l.planDo, w)} dni roboczych${opis.tekst ? ` · ${opis.tekst}` : ''}${konflikt ? `\nKolizja z milestone'em „${msWezly?.[msZaleznosc?.[l.id]]?.name || ''}” — najwcześniej ${dzienMies(minOd)}` : ''}`}>
                                                             {przerwy.map(i => <i key={i} className="przerwa" style={{ left: i * dzienPx - 2, width: dzienPx }} />)}
                                                             {edyt && d0 >= 0 && <span className="uchwyt l" onPointerDown={e => zacznij(e, l, galazId, 'l')} />}
                                                             {dl * dzienPx > 50 && <span className="tx">{opis.tekst || `${dniRobocze(l.planOd, l.planDo, w)} d.`}</span>}
@@ -564,6 +617,7 @@ export default function Harmonogram({
                 {opisPaska !== domyslnyOpis && <><span><i className="bar b-done" />wykonane</span><span><i className="bar b-hold" />wstrzymane</span></>}
                 <span><i className="ms" />milestone</span>
                 <span><i className="ms-okno" />okno milestone'a</span>
+                {msZaleznosc && <span><i className="bar b-work konflikt" />kolizja z milestone'em</span>}
                 <span><i className="sw-wolny" />dzień wolny</span>
                 {maDostawy && <><span><i className="diam" />dostawa</span><span><i className="diam late" />dostawa za blisko robót</span></>}
                 {(projectStart || projectEnd) && <><span><i className="sw-mark ps" />start projektu</span><span><i className="sw-mark pe" />koniec</span></>}
@@ -572,7 +626,7 @@ export default function Harmonogram({
 
             {info && (
                 <div className="hg-info" onClick={() => setInfo(null)}>
-                    <b>Zmieniono liczbę dni</b> {info.name}: {info.stare} → <b>{info.nowe}</b> {info.nowe === 1 ? 'dzień' : 'dni'} roboczych (ilość pozycji zaktualizowana).
+                    {info.map((t, i) => <div key={i}>{t}</div>)}
                 </div>
             )}
         </div>

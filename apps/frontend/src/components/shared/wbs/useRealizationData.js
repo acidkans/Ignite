@@ -167,6 +167,35 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
         }
     }, []);
 
+    // @anchor realization-save-plan-dates-batch — zbiorczy zapis dat (milestone + zależni) przez
+    // `PATCH /wbs-nodes/gantt-dates/batch` (transakcja + AuditLog); błąd cofa wszystkie zmiany.
+    const savePlanDatesBatch = useCallback(async (lista) => {
+        const zmiany = new Map(lista.map(({ id, od, ost: doDnia }) => {
+            const start = new Date(od); start.setHours(0, 0, 0, 0);
+            const ost = new Date(doDnia); ost.setHours(0, 0, 0, 0);
+            if (ost < start) ost.setTime(start.getTime());
+            const koniec = new Date(ost); koniec.setDate(koniec.getDate() + 1);
+            return [id, { planOd: start, planDo: ost, ganttStart: start.toISOString(), ganttEnd: koniec.toISOString() }];
+        }));
+        const poprzednie = new Map();
+        setWbsNodes(prev => prev.map(n => {
+            const z = zmiany.get(n.id);
+            if (!z) return n;
+            poprzednie.set(n.id, n);
+            return { ...n, ...z };
+        }));
+        try {
+            const res = await fetch(`${API_URL}/wbs-nodes/gantt-dates/batch`, {
+                method: 'PATCH', headers: authHeaders(),
+                body: JSON.stringify({ items: [...zmiany].map(([id, z]) => ({ id, ganttStart: z.ganttStart, ganttEnd: z.ganttEnd })) }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (e) {
+            setWbsNodes(prev => prev.map(n => poprzednie.get(n.id) || n));
+            throw e;
+        }
+    }, []);
+
     // @anchor realization-new-save-comment — `WbsNode.comment` przez `PATCH /wbs-nodes/:id`,
     // plus rozgłoszenie `wbs-comment-changed`: ten sam komentarz czyta WBS, panel Materiały
     // i marker schematu, więc bez zdarzenia zostawałyby ze starą treścią do przeładowania.
@@ -356,7 +385,7 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
     return {
         loading, wbsNodes, cards, actuals,
         fetchAll, fetchActuals, fetchCards,
-        saveComment, saveOwner, saveAxis, savePlanDates, addActual, updateActual, deleteActual, setClosed, toggleClosed,
+        saveComment, saveOwner, saveAxis, savePlanDates, savePlanDatesBatch, addActual, updateActual, deleteActual, setClosed, toggleClosed,
         actualsOf, cardOf, rowOf, ownerOptions,
         // @anchor realization-owner-users — konta zespołu zamówienia (właściciel blokera = `User`)
         ownerUsers,

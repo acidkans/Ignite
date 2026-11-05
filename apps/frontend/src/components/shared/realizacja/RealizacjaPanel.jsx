@@ -25,6 +25,7 @@ import {
     dniOkna, indeksDnia, gotowoscPozycji, wykryjKolizje, BUFOR_DOSTAWY_DNI,
 } from './realizacjaShared';
 import Harmonogram from '../harmonogram/Harmonogram';
+import { zaleznyOdMilestone } from '../harmonogram/harmonogramCzas';
 import './realizacja.css';
 
 const FOCUS_KEY = (nodeId) => `realizacja-focus-${nodeId}`;
@@ -48,6 +49,8 @@ const opisPaskaRobot = (l) => {
     return { klasa: wstrzymane ? 'b-hold' : zrobione ? 'b-done' : 'b-work', tekst: wstrzymane ? 'wstrzymane' : String(status || '').toLowerCase(), zablokowany: zrobione };
 };
 const maPasekRobot = (l) => hasExecAxis(l.type);
+// @anchor realizacja-nieruchome-exec — pozycje, których przesunięcie milestone'a nie rusza (kolizja na czerwono).
+const NIERUCHOME_EXEC = ['IN_PROGRESS', 'DONE', 'HANDED_OVER', 'INVOICED'];
 // Dostawa = prognozowany wpis zakupu (FORECAST) pozycji z osią zakupu.
 const czyDostawa = (l, e) => hasPurchaseAxis(l.type) && entryStatusOf(e) === 'FORECAST';
 const DNI_TYG = ['nd', 'pn', 'wt', 'śr', 'cz', 'pt', 'sb'];
@@ -100,7 +103,7 @@ export default function RealizacjaPanel({
     // Ta sama reguła co w „Realizacji (tabela)" (`realization-new-visible-types`).
     const visibleTypes = isManagerOrAdmin ? LEAF_TYPES : OPEN_LEAF_TYPES;
 
-    const { loading, wbsNodes, actuals, saveAxis, savePlanDates, actualsOf, rowOf, ownerUsers, addActual, updateActual, deleteActual } =
+    const { loading, wbsNodes, actuals, saveAxis, savePlanDates, savePlanDatesBatch, actualsOf, rowOf, ownerUsers, addActual, updateActual, deleteActual } =
         useRealizationData({ nodeId, versionId, acceptedAt, isManagerOrAdmin });
     // @anchor realizacja-zakupy-api — dodawanie/edycja/usuwanie wpisów zakupu (`LeafActual`), te same
     // funkcje co szuflada w „Realizacja (tabela)" (`realization-new-purchase-drawer`).
@@ -118,6 +121,13 @@ export default function RealizacjaPanel({
     // i nazwy wszystkiego, do czego może się odnosić wpis wątku.
     const msById = useMemo(() => Object.fromEntries(idx.milestones.map(m => [m.id, m])), [idx]);
     const nazwyWezlow = useMemo(() => ({ ...idx.nodeById, ...msById }), [idx, msById]);
+    // @anchor realizacja-ms-reguly — reguły milestone'ów (M3) na CAŁYM zamówieniu, nie tylko w zoomie:
+    // kto od kogo zależy i daty wszystkich pozycji; rozpoczęte, wykonane i odebrane roboty się nie ruszają.
+    const msZaleznosc = useMemo(() => zaleznyOdMilestone(nodes), [nodes]);
+    const msWezly = useMemo(() => Object.fromEntries(nodes.filter(n => n.planOd && n.planDo).map(n => [n.id, {
+        type: n.type, name: nazwaWyswietlana(n, true), planOd: n.planOd, planDo: n.planDo,
+        nieruchomy: NIERUCHOME_EXEC.includes(n.execStatus),
+    }])), [nodes]);
     // Milestone'y poddrzewa gałęzi — po `branchId`, jak pozycje.
     const milestonyPoddrzewa = useCallback((id, tylkoWprost = false) => {
         if (tylkoWprost) return idx.milestones.filter(m => m.branchId === id);
@@ -427,6 +437,7 @@ export default function RealizacjaPanel({
                         grupy={grupy} nazwa={nazwaPel} maPasek={maPasekRobot} opisPaska={opisPaskaRobot}
                         actualsOf={actualsOf} czyDostawa={czyDostawa} gotowosc={gotowosc} GotowoscChipy={GotowoscChipy}
                         kolizje={kolizje} canEdit={canEdit} savePlanDates={savePlanDates}
+                        msZaleznosc={msZaleznosc} msWezly={msWezly} savePlanDatesBatch={savePlanDatesBatch}
                         onZoom={setFocus} onOtworz={otworzPozycje}
                         domyslnyZakres="14" zakresKey="realizacja-harmonogram-zakres"
                     />

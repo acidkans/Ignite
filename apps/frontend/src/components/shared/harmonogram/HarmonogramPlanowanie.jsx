@@ -7,6 +7,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Harmonogram from './Harmonogram';
 import {
     DAY_MS, isValidGanttDate, buildTasksFromTree, inclusiveEnd, advanceToWorkingDay, addWorkingDays, isNonWorkingDay,
+    zaleznyOdMilestone, splaszczDrzewo,
 } from './harmonogramCzas';
 import '../realizacja/realizacja.css';
 
@@ -16,7 +17,7 @@ const nazwaPelna = (n) => String(n?.name || '').trim() || '(bez nazwy)';
 // @anchor harmonogram-planowanie
 export default function HarmonogramPlanowanie({
     wbsTree, projectName, projectStartDate, projectEndDate,
-    onNodeDurationChange, onGanttDateChange, onGetHtmlReady, onExcelDataReady, canEdit = true,
+    onNodeDurationChange, onGanttDateChange, onGanttDatesBatch, onGetHtmlReady, onExcelDataReady, canEdit = true,
 }) {
     const items = useMemo(() => wbsTree?.items || [], [wbsTree]);
 
@@ -47,20 +48,24 @@ export default function HarmonogramPlanowanie({
         setOverrides(prev => ({ ...z, ...prev }));
     }, [wbsTree, items]);
 
-    const { grupy, liczba } = useMemo(() => {
+    // @anchor harmonogram-planowanie-ms — zależności od milestone'ów i daty wszystkich pasków dla reguł M3.
+    const msZaleznosc = useMemo(() => zaleznyOdMilestone(splaszczDrzewo(items)), [items]);
+    const { grupy, liczba, msWezly } = useMemo(() => {
         const start = new Date(`${projectStart}T00:00:00`);
         const { tasks, taskBranchMap } = buildTasksFromTree(items, isValidGanttDate(start) ? start : new Date(), projectName, overrides, {});
         const galezie = new Map();
         for (const n of items) galezie.set(n.id, { galaz: n, liscie: [] });
         const bez = { galaz: null, liscie: [] };
+        const wezly = {};
         for (const t of tasks) {
             if (!t || !isValidGanttDate(t.start) || !isValidGanttDate(t.end)) continue;
             const ost = new Date(Math.max(+t.start, +inclusiveEnd(t.end)));
             const l = { ...t.node, id: t.id, planOd: new Date(t.start), planDo: ost, depth: t.depth, _canUpdateDuration: t._canUpdateDuration };
+            wezly[t.id] = { type: t.node?.type, name: nazwaPelna(t.node), planOd: l.planOd, planDo: ost };
             (galezie.get(taskBranchMap[t.id]) || bez).liscie.push(l);
         }
         const out = [...galezie.values(), bez].filter(g => g.liscie.length);
-        return { grupy: out, liczba: tasks.length };
+        return { grupy: out, liczba: tasks.length, msWezly: wezly };
     }, [items, projectStart, projectName, overrides]);
 
     const savePlanDates = useCallback(async (id, od, ost) => {
@@ -69,6 +74,24 @@ export default function HarmonogramPlanowanie({
         setOverrides(prev => ({ ...prev, [id]: { start: s.toISOString(), end: e.toISOString() } }));
         await onGanttDateChange?.(id, s.toISOString(), e.toISOString());
     }, [onGanttDateChange]);
+
+    // @anchor harmonogram-planowanie-batch — zapis zbiorczy (milestone + zależni); błąd cofa podgląd.
+    const savePlanDatesBatch = useCallback(async (lista) => {
+        const zakres = lista.map(({ id, od, ost }) => {
+            const s = new Date(od); s.setHours(0, 0, 0, 0);
+            const e = new Date(ost); e.setHours(0, 0, 0, 0); e.setDate(e.getDate() + 1);
+            return { id, ganttStart: s.toISOString(), ganttEnd: e.toISOString() };
+        });
+        let poprzednie = null;
+        setOverrides(prev => { poprzednie = prev; const n = { ...prev }; for (const z of zakres) n[z.id] = { start: z.ganttStart, end: z.ganttEnd }; return n; });
+        try {
+            if (onGanttDatesBatch) await onGanttDatesBatch(zakres);
+            else for (const z of zakres) await onGanttDateChange?.(z.id, z.ganttStart, z.ganttEnd);
+        } catch (err) {
+            if (poprzednie) setOverrides(poprzednie);
+            throw err;
+        }
+    }, [onGanttDatesBatch, onGanttDateChange]);
 
     // @anchor harmonogram-planowanie-przesun-start — zmiana Startu przesuwa zapisane paski o tyle samo
     // (z zachowaniem dni roboczych); zapis do bazy z opóźnieniem, żeby nie PATCH-ować każdej cyfry.
@@ -132,6 +155,7 @@ export default function HarmonogramPlanowanie({
             </div>
             <Harmonogram
                 grupy={grupy} nazwa={nazwaPelna} canEdit={canEdit} savePlanDates={savePlanDates}
+                msZaleznosc={msZaleznosc} msWezly={msWezly} savePlanDatesBatch={savePlanDatesBatch}
                 onDurationChange={onNodeDurationChange} pokazWciecia
                 domyslnyZakres="calosc" zakresKey="planowanie-harmonogram-zakres"
                 projectStart={projectStart} projectEnd={projectEnd || null}

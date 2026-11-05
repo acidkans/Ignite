@@ -1,3 +1,20 @@
+## 2026-11-05 — feat(harmonogram): milestone ogranicza zależnych — „nie wcześniej niż”, przesuwanie z zachowaniem odstępu, zapis zbiorczy dat (M3)
+
+### architektura / API
+- dodano `back-endpoint` `PATCH /wbs-nodes/gantt-dates/batch` `{ items: [{ id, ganttStart, ganttEnd }] }` — wszystko albo nic (transakcja), jeden wpis `AuditLog` (`entity` = `WbsNode.ganttDates`, `entityId` = zamówienie, `diff.items` z datami przed/po); 400 dla pustej listy, złej daty, końca przed startem i węzłów z różnych wersji, 404 dla nieistniejących
+- `ui-funkcja` `harmonogramCzas.js` — czyste funkcje `zaleznyOdMilestone`, `zalezniMilestone`, `pierwszyDozwolonyDzien`, `przesunZaleznych` (+ `roznicaDniRoboczych`, `przesunORobocze`, `splaszczDrzewo`), test `test/milestone-zaleznosci.test.mjs`
+- `ui-funkcja` `buildTasksFromTree` — domyślny start zależnego = max(start projektu, pierwszy dzień roboczy po końcu milestone'a); zapisane daty bez zmian
+- `ui-sekcja` `Harmonogram` — przeciągnięcie / daty z pól przed milestone dociągają start do pierwszego dozwolonego dnia (komunikat `hg-info`); przesunięcie milestone'a przesuwa zależnych o tyle samo dni roboczych w obie strony z podglądem na żywo i zapisem zbiorczym; pozycja startująca przed swoim milestone'em = kolizja (czerwony pasek / romb, legenda)
+- `ui-sekcja` `RealizacjaPanel` — reguły liczone na całym zamówieniu; pozycje z `execStatus` IN_PROGRESS / DONE / HANDED_OVER / INVOICED się nie ruszają (kolizja na czerwono)
+
+### słownik
+- dodano `wbs-nodes-gantt-dates-batch`, `wbs-gantt-dates-batch-service`, `realization-save-plan-dates-batch`, `splaszcz-drzewo`, `zalezny-od-milestone`, `zalezni-milestone`, `pierwszy-dozwolony-dzien`, `roznica-dni-roboczych`, `przesun-o-robocze`, `przesun-zaleznych`, `build-tasks-ms-regula`, `harmonogram-ms-propsy`, `harmonogram-min-od`, `harmonogram-zapisz`, `harmonogram-podglad-zaleznych`, `harmonogram-planowanie-ms`, `harmonogram-planowanie-batch`, `handle-gantt-dates-batch`, `realizacja-ms-reguly`, `realizacja-nieruchome-exec`
+
+### wytyczne
+- `ui-funkcja` `zaleznyOdMilestone` — zależni = rodzeństwo ZA milestone'em wg `WbsNode.sortOrder` z całymi poddrzewami; następny milestone zamyka zakres i sam zależy od poprzedniego. Zmiana `sortOrder` zmienia więc zależności
+- `back-endpoint` `PATCH /wbs-nodes/gantt-dates/batch` — każde przesunięcie kilku pasków naraz (milestone + zależni) idzie tym endpointem, nie seriami `PATCH /wbs-nodes/:id`
+- przesunięcie milestone'a = wariant „zachowaj odstęp” (decyzja użytkownika); w Realizacji rozpoczętych / wykonanych / odebranych robót nie ruszamy — konflikt zostaje widoczny
+
 ## 2026-11-05 — feat(harmonogram): milestone jako romb na Harmonogramie, w wierszu gałęzi Realizacji i w eksportach (M2)
 
 ### architektura / API

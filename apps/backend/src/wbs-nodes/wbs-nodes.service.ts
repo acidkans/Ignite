@@ -8,6 +8,7 @@ import { resolveVersionId } from '../common/version.util';
 import { assertOfferEditable, pickOfferChanges, OfferLockUser } from '../common/offer-lock.util';
 import { ExtraOrderNotifierService, EXTRA_ORDER_STATUS } from '../notifications/extra-order-notifier.service';
 import { groupMultiplierMap } from '../common/group-qty.util';
+import { AuditAction } from '../audit/audit.types';
 
 // @anchor milestone-shape-errors — komunikaty walidacji kształtu milestone'a (wspólne dla
 // tworzenia węzła, PATCH i zapisu całego drzewa).
@@ -652,6 +653,44 @@ export class WbsNodesService {
      * Gdy quantity się zmienia, synchronizuje powiązane MaterialRequirement
      * (jedno źródło prawdy: WbsNode.quantity → WbsNodeMaterial → MaterialRequirement).
      */
+    // @anchor wbs-gantt-dates-batch-service — `{ id, ganttStart, ganttEnd }[]` (koniec wyłączny, null = data
+    // domyślna). Wszystko albo nic: transakcja, a w AuditLog jeden wpis z datami przed i po.
+    async updateGanttDatesBatch(items: { id: string; ganttStart: string | null; ganttEnd: string | null }[], user?: OfferLockUser) {
+        if (!Array.isArray(items) || !items.length) throw new BadRequestException('Brak pozycji do zapisu');
+        if (items.length > 5000) throw new BadRequestException('Za dużo pozycji w jednym zapisie');
+        const data = new Map<string, { ganttStart: Date | null; ganttEnd: Date | null }>();
+        for (const it of items) {
+            if (!it?.id || typeof it.id !== 'string') throw new BadRequestException('Każda pozycja wymaga id');
+            const s = it.ganttStart ? new Date(it.ganttStart) : null;
+            const e = it.ganttEnd ? new Date(it.ganttEnd) : null;
+            if ((s && isNaN(s.getTime())) || (e && isNaN(e.getTime()))) throw new BadRequestException(`Niepoprawna data (${it.id})`);
+            if (s && e && e <= s) throw new BadRequestException(`Koniec przed startem (${it.id})`);
+            data.set(it.id, { ganttStart: s, ganttEnd: e });
+        }
+        const ids = [...data.keys()];
+        return this.prisma.$transaction(async (tx) => {
+            const przed = await tx.wbsNode.findMany({ where: { id: { in: ids } }, select: { id: true, nodeId: true, versionId: true, ganttStart: true, ganttEnd: true } });
+            if (przed.length !== ids.length) throw new NotFoundException('Część węzłów nie istnieje');
+            if (new Set(przed.map(p => p.versionId ?? '')).size > 1) throw new BadRequestException('Węzły z różnych wersji WBS');
+            for (const id of ids) await tx.wbsNode.update({ where: { id }, data: data.get(id)! });
+            const iso = (d: Date | null) => (d ? d.toISOString() : null);
+            await tx.auditLog.create({
+                data: {
+                    action: AuditAction.UPDATE, entity: 'WbsNode.ganttDates', entityId: przed[0].nodeId, userId: user?.userId ?? null,
+                    diff: {
+                        versionId: przed[0].versionId,
+                        items: przed.map(p => ({
+                            id: p.id,
+                            przed: { ganttStart: iso(p.ganttStart), ganttEnd: iso(p.ganttEnd) },
+                            po: { ganttStart: iso(data.get(p.id)!.ganttStart), ganttEnd: iso(data.get(p.id)!.ganttEnd) },
+                        })),
+                    },
+                },
+            });
+            return { updated: ids.length };
+        });
+    }
+
     async updateNode(id: string, data: any, user?: OfferLockUser) {
         const allowed: Record<string, any> = {};
         // `purchaseStatus` i `execStatus` to osie REALIZACJI — osobne kolumny, żeby zmiana
