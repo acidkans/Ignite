@@ -6,7 +6,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { API_URL } from '../../../config';
 import { AXIS_STATUS_ORDER, hasPurchaseAxis, hasExecAxis, buildOwnerOptions, applyGroupMultipliers, buildHierarchy } from './wbsConstants';
-import { ganttDatesByNode } from './GanttSection';
+import { ganttDatesByNode } from '../harmonogram/harmonogramCzas';
 import {
     authHeaders, flattenWbsNodes, buildCardMap, wbsRootOf, realizationOf, planValueOf, markOutOfBaseline, ENTRY_STATUS,
 } from './realizationShared';

@@ -184,7 +184,7 @@
 .rz .kc .m { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 11px; color: var(--muted); }
 .rz .kc .gate { font-size: 11px; font-style: italic; color: var(--warn); }
 
-/* `realizacja-lookahead-drag` — Lookahead jako tablica planowania (przeciąganie pasków) */
+/* Harmonogram (dawny Lookahead) — przeciąganie pasków; siatka w harmonogram/harmonogram.css */
 .rz .la-nav { display: flex; align-items: center; gap: 4px; }
 .rz .la-nav button { background: var(--sunk); border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; font-size: 12px; color: inherit; cursor: pointer; }
 .rz .la-nav button:hover, .rz .la-nav button.on { border-color: var(--accent); color: var(--accent); }
@@ -223,7 +223,15 @@
 .rz .kol-uchwyt::after { content: ''; position: absolute; left: 3px; top: 0; bottom: 0; width: 2px; border-radius: 1px; background: transparent; transition: background .15s; }
 .rz .kol-uchwyt:hover::after { background: var(--line); }
 @media (max-width: 1200px) { .rz .expin.rs { grid-template-columns: 1fr !important; gap: 12px; } .rz .kol-uchwyt { display: none; } }
+/* @anchor realizacja-kolumny-do-krawedzi — boczne karty (wątek, blokery) wyciągnięte w stronę krawędzi
+   ekranu: zjadają margines .mbody + .expin (30px), środkowa kolumna zostaje bez zmian */
+@media (min-width: 1201px) {
+    .rz .expin.rs > .stack:first-child { margin-left: -24px; }
+    .rz .expin.rs > .stack:last-child { margin-right: -24px; }
+}
 /* @anchor realizacja-pole-czatu-css — lista podpowiedzi „@" nad polem czatu */
 .rz .mention-menu { position: absolute; left: 12px; right: 12px; bottom: 100%; margin-bottom: 4px; z-index: 30; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.45); overflow: hidden; max-height: 240px; overflow-y: auto; }
 .rz .mention-menu button { text-align: left; padding: 6px 10px; font-size: 12.5px; background: transparent; border: 0; color: inherit; cursor: pointer; }
 .rz .mention-menu button.on, .rz .mention-menu button:hover { background: var(--sunk); }
+.rz .podglad-head .wroc { background: var(--sunk); border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.rz .podglad-head .wroc:hover { border-color: var(--accent); color: var(--accent); }

@@ -52,7 +52,7 @@ Używaj nazwy z kolumny **Skrót** — Claude będzie wiedział dokładnie co zm
 | PANEL_WYMAGANIA | Zakładka "Informacje o zamówieniu" z terminami i kontaktami | `RequirementsTab` | `components/shared/RequirementsTab.jsx` | 71 |
 | PANEL_INFO_WEZLA | Informacje o wybranym węźle drzewa | `NodeInfoTab` | `components/shared/NodeInfoTab.jsx` | 5 |
 | PANEL_OFERTY | Zakładka z listą ofert | `OffersTab` | `components/shared/OffersTab.jsx` | 148 |
-| GANTT | Wykres harmonogramu projektu | `GanttSection` | `components/shared/wbs/GanttSection.jsx` | 358 |
+| HARMONOGRAM | Harmonogram robót (Planowanie + Realizacja) | `Harmonogram` | `components/shared/harmonogram/Harmonogram.jsx` | — |
 | DRZEWO | Lewy panel z hierarchią węzłów projektu | `DynamicSidebar` | `components/Layout/DynamicSidebar.jsx` | 17 |
 | LOGOWANIE | Strona logowania i rejestracji | `LoginPage` | `LoginPage.jsx` | 5 |
 
@@ -234,6 +234,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-przycisk | Uruchom realizację (nagłówek) | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-start-realization-button |
 | ui-przycisk | chip REALIZACJA + cofnięcie | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-realization-chip |
 | ui-zakladka | realizacja (TAB_META) | apps/frontend/src/DashboardPage.jsx | @anchor tab-realizacja |
+| ui-stan | tabsPinned / tabsOpen (pasek zakładek chowany do listwy, wysuwany po najechaniu; pinezka przypina) | apps/frontend/src/DashboardPage.jsx | @anchor tabs-bar-autohide |
 | ui-modal | krok „Baseline zapisany” w modalu akceptacji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-accept-done-step |
 | ui-modal | Cofnąć uruchomienie realizacji? | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-stop-realization-modal |
 | ui-stan | branchNav | apps/frontend/src/components/Layout/MainLayout.jsx | @anchor main-layout-branch-nav |
@@ -252,6 +253,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stala | zakupyApi | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zakupy-api |
 | ui-sekcja | szuflada zakupów pozycji | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szuflada-zakupow |
 | ui-hook | useSzerokosciKolumn | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szerokosci-kolumn |
+| ui-stala | boczne karty Kokpitu do krawędzi (margines -24px wątku i blokerów, środek bez zmian) | apps/frontend/src/components/shared/realizacja/realizacja.css | @anchor realizacja-kolumny-do-krawedzi |
 | ui-sekcja | TrzyKolumny | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-trzy-kolumny |
 | ui-funkcja | Kokpit — przychód i zysk | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit-wynik |
 | ui-input | PoleCzatu | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-pole-czatu |
@@ -306,17 +308,30 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | back-funkcja | remove | apps/backend/src/constraints/constraints.service.ts | @anchor constraints-remove |
 | ui-stala | ownerUsers (zwrot hooka) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-owner-users |
 | ui-stala | WIDOKI | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-widoki |
+| ui-przycisk | segment „Pozycja” + „‹ widok” (szczegóły pozycji widoczne w przełączniku widoków, powrót do widoku) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-segment-pozycja |
 | ui-funkcja | akcje (zamknij / otworz / zPytania) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-akcje-blokera |
 | ui-funkcja | gotowosc | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-gotowosc |
 | ui-sekcja | GotowoscChipy | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-gotowosc-chipy |
 | ui-formularz | BlokerForm | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-bloker-form |
 | ui-funkcja | decyzje (sortowanie blokerów) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolejnosc-blokerow |
-| ui-sekcja | Lookahead | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-lookahead |
-| ui-stan | przesun / ileDni (okno Lookahead: przesunięcie od dziś i długość 14/28 dni) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-lookahead-okno |
-| ui-stan | drag (ciągnięty pasek robót w Lookahead: tryb move/l/r, delta dni) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-lookahead-drag |
-| ui-funkcja | ganttDatesByNode (daty pasków jak w Gantcie: zapisane albo domyślne; do = ostatni dzień) | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor gantt-daty-wezlow |
+| ui-sekcja | Harmonogram (wspólny widok robót Planowanie + Realizacja, wygląd Lookahead; zakres 14 dni / miesiąc / całość) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram |
+| ui-funkcja | dniRobocze (dni robocze od..ost włącznie, opcjonalnie z dniami wolnymi) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-dni-robocze |
+| ui-funkcja | przesunPasek (nowe daty paska po przeciągnięciu: move zachowuje dni robocze, l/r zmienia krawędź) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-przesun |
+| ui-stan | przesun (przesunięcie okna: tygodnie w 14 dniach, miesiące w zakresie Miesiąc) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-przesun-okna |
+| ui-stan | wow (gałęzie pracujące w weekendy i święta, stan sesji) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-praca-w-wolne |
+| ui-stan | szerOsi (dostępna szerokość osi — dzień rozciąga się do pełnej szerokości) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-szerokosc |
+| ui-funkcja | okno osi (start, ileDni, dzienPx dla zakresu) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-okno |
+| ui-stan | drag (ciągnięty pasek: tryb move/l/r, delta dni) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-drag |
+| ui-funkcja | getExcelData (dane arkusza „Harmonogram” — kształt jak dawny Gantt) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-excel-data |
+| ui-funkcja | getHtml (statyczny HTML harmonogramu do PDF) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-html |
+| ui-sekcja | HarmonogramPlanowanie (sekcja Harmonogram w Planowaniu, zastępuje GanttSection) | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie |
+| ui-stan | projectStart / projectEnd + pola (start/koniec projektu, markery na osi) | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-start |
+| ui-stan | overrides (zapisane daty pasków: baza + zmiany sesji) | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-overrides |
+| ui-funkcja | zmienStart (zmiana Startu przesuwa zapisane paski, zapis z opóźnieniem) | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-przesun-start |
+| ui-funkcja | opisPaskaRobot / czyDostawa (kolor i podpis paska wg osi wykonania, dostawy FORECAST) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-opis-paska |
+| ui-funkcja | ganttDatesByNode (daty pasków harmonogramu: zapisane albo domyślne; do = ostatni dzień) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor gantt-daty-wezlow |
 | ui-funkcja | planOd / planDo (daty robót pozycji w danych realizacji, z `ganttDatesByNode`) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-plan-od-do |
-| ui-funkcja | savePlanDates (zapis `ganttStart/ganttEnd` z Lookahead) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-save-plan-dates |
+| ui-funkcja | savePlanDates (zapis `ganttStart/ganttEnd` z Harmonogramu w Realizacji) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-save-plan-dates |
 | ui-sekcja | Tablica | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tablica |
 | ui-stala | TABLICA_KOLUMNY | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tablica-kolumny |
 | ui-stala | RODZAJE_BLOKERA | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor rodzaje-blokera |
@@ -548,13 +563,9 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-sekcja | nagłówek sekcji (rozwinięta = stonowana zieleń) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor section-head |
 | ui-sekcja | WbsMaterialsPanel | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-panel |
 | ui-sekcja | MaterialRequirementsPanel | apps/frontend/src/components/shared/wbs/MaterialRequirementsPanel.jsx | @anchor material-requirements-panel |
-| ui-sekcja | GanttSection | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor gantt-section |
-| ui-stala | COL_BRANCH | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor gantt-col-branch |
-| ui-funkcja | shiftProjectStart | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor shift-project-start |
-| ui-funkcja | nodeDurationMonths | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor node-duration-months |
-| ui-funkcja | addCalendarMonths | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor add-calendar-months |
-| ui-funkcja | isValidGanttDate | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor is-valid-gantt-date |
-| ui-stan | projectStartInput / projectEndInput | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor project-date-inputs |
+| ui-funkcja | nodeDurationMonths | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor node-duration-months |
+| ui-funkcja | addCalendarMonths | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor add-calendar-months |
+| ui-funkcja | isValidGanttDate | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor is-valid-gantt-date |
 | ui-sekcja | TasksCalendarSection | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-section |
 | ui-sekcja | ProjectItemsPanel | apps/frontend/src/components/shared/wbs/ProjectItemsPanel.jsx | @anchor project-items-panel |
 | ui-tabela | BudgetTable | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table |
@@ -787,7 +798,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | kwotaSlownie | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor kwota-slownie |
 | ui-funkcja | handleExportGanttExcel | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-export-gantt-excel |
 | ui-funkcja | appendGanttSheet | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor append-gantt-sheet |
-| ui-funkcja | buildExcelTimeline | apps/frontend/src/components/shared/wbs/GanttSection.jsx | @anchor build-excel-timeline |
+| ui-funkcja | buildExcelTimeline | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor build-excel-timeline |
 | ui-funkcja | handleGanttDateChange | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-gantt-date-change |
 | ui-funkcja | handleMaterialNodeCreated | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-material-node-created |
 | ui-funkcja | handleHybridNodesDeleted | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor handle-hybrid-nodes-deleted |

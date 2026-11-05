@@ -7,7 +7,7 @@ import { API_URL } from '../../../config';
 import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
-import GanttSection from './GanttSection';
+import HarmonogramPlanowanie from '../harmonogram/HarmonogramPlanowanie';
 import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, PRICED_LEAF_TYPES, orderDefaultsFrom, leafDefaultsMissing, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes, applyGroupMultipliers, groupQtyFactor } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { buildStrategyTasksQaPdfArtifact } from '../../../utils/strategyTasksQaPdfExport';
@@ -455,7 +455,6 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     }, [nodeId, loadOfferAiState]);
 
     const safeFileBase = () => String(orderName || projectName || 'projekt').trim().replace(/[\\/:*?"<>|\s]+/g, '_') || 'projekt';
-    const ganttExportRef = useRef(null);
     const ganttGetHtmlRef = useRef(null);
     const ganttExcelDataRef = useRef(null);
 
@@ -1862,7 +1861,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         const ganttZoom = ganttContentWidth > A3_LANDSCAPE_USABLE ? (A3_LANDSCAPE_USABLE / ganttContentWidth).toFixed(4) : '1';
         const ganttSectionHtml = ganttData ? `
             <div class="section">
-                <div class="section-header">Harmonogram (Gantt)</div>
+                <div class="section-header">Harmonogram</div>
                 <div class="gantt-wrap"><div class="gantt-scale-inner" style="zoom:${ganttZoom};transform-origin:top left">${ganttData.html}</div></div>
             </div>` : '';
 
@@ -1969,7 +1968,7 @@ ${ganttData ? ganttData.styles : ''}
           ${logoDataUrl ? `<img class="doc-header-logo" src="${logoDataUrl}" alt="Logo" />` : ''}
           <div class="doc-header-text">
             <h1>${esc(orderName || projectName || 'Zamówienie')}</h1>
-            <div class="sub">${{ strategy: 'Jak to chcemy zrobić', oferta: 'Oferta', budget: 'Budżet', 'wbs-hybrid': 'Struktura projektu', wbs: 'Struktura projektu', materials: 'Materiały', gantt: 'Harmonogram (Gantt)' }[sectionKey] || 'Planowanie'}</div>
+            <div class="sub">${{ strategy: 'Jak to chcemy zrobić', oferta: 'Oferta', budget: 'Budżet', 'wbs-hybrid': 'Struktura projektu', wbs: 'Struktura projektu', materials: 'Materiały', gantt: 'Harmonogram' }[sectionKey] || 'Planowanie'}</div>
             <div class="meta">Przygotowano: ${date}</div>
           </div>
         </div>
@@ -6763,13 +6762,12 @@ ${ganttSectionHtml}
                     ));
                 }
                 if (key === 'gantt') {
-                    return renderSection('gantt', 'Harmonogram (Gantt)', BarChart3, 'cyan', (
-                        <GanttSection
+                    return renderSection('gantt', 'Harmonogram', BarChart3, 'cyan', (
+                        <HarmonogramPlanowanie
                             wbsTree={wbsTree}
                             projectName={orderName || projectName || 'Projekt'}
                             onNodeDurationChange={handleGanttDurationChange}
                             onGanttDateChange={handleGanttDateChange}
-                            onExportReady={fn => { ganttExportRef.current = fn; }}
                             onGetHtmlReady={fn => { ganttGetHtmlRef.current = fn; }}
                             onExcelDataReady={fn => { ganttExcelDataRef.current = fn; }}
                             projectStartDate={ganttProjectStart}

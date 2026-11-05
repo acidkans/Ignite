@@ -16,7 +16,7 @@ import MyTasksModal from './components/shared/MyTasksModal';
 import DueTasksBell from './components/shared/DueTasksBell';
 import TaskReminderToast from './components/shared/TaskReminderToast';
 import SnapshotEditGuard from './components/shared/SnapshotEditGuard';
-import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink, Coins, ThumbsUp, Undo2, Play } from 'lucide-react';
+import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink, Coins, ThumbsUp, Undo2, Play, Pin, PinOff } from 'lucide-react';
 import { API_URL } from './config';
 import { APP_VERSION } from './version';
 import OneDriveBrowserModal from './components/shared/OneDriveBrowserModal';
@@ -107,6 +107,14 @@ export default function DashboardPage() {
         catch { return ALL_TABS; }
     });
     const [dragTabId, setDragTabId] = useState(null);
+    // @anchor tabs-bar-autohide — pasek zakładek chowa się do cienkiej listwy (desktop) i wysuwa nad treść
+    // po najechaniu; pinezka przypina go na stałe (localStorage). Na telefonie pasek zawsze widoczny.
+    const [tabsPinned, setTabsPinned] = useState(() => { try { return localStorage.getItem('tabsBarPinned') === '1'; } catch { return false; } });
+    const [tabsOpen, setTabsOpen] = useState(false);
+    const tabsCloseTimer = useRef(null);
+    const openTabs = () => { clearTimeout(tabsCloseTimer.current); setTabsOpen(true); };
+    const closeTabs = () => { clearTimeout(tabsCloseTimer.current); tabsCloseTimer.current = setTimeout(() => setTabsOpen(false), 250); };
+    const toggleTabsPinned = () => setTabsPinned(v => { const n = !v; try { localStorage.setItem('tabsBarPinned', n ? '1' : '0'); } catch { /* tryb prywatny */ } if (!n) setTabsOpen(false); return n; });
     const [searchQuery, setSearchQuery] = useState('');
     const [showComments, setShowComments] = useState(false);
     const [orderRequirements, setOrderRequirements] = useState([]);
@@ -1044,7 +1052,15 @@ export default function DashboardPage() {
                 </div>
             )}
 
-            {/* TAB SELECTOR */}
+            {/* TAB SELECTOR — chowany (tabs-bar-autohide) */}
+            <div className={`relative flex-shrink-0 z-30 ${tabsPinned ? '' : 'md:h-2'}`} onMouseEnter={openTabs} onMouseLeave={closeTabs}>
+            {!tabsPinned && (
+                <div className={`hidden md:block absolute inset-x-0 top-0 h-2 border-b border-white/10 cursor-pointer transition-colors ${tabsOpen ? 'bg-white/[0.06]' : 'bg-white/[0.03] hover:bg-white/[0.06]'}`}
+                    title="Najedź, aby pokazać zakładki" onClick={openTabs}>
+                    <div className="mx-auto mt-[3px] w-10 h-0.5 rounded-full bg-white/25" />
+                </div>
+            )}
+            <div className={tabsPinned ? '' : `md:absolute md:inset-x-0 md:top-0 md:bg-[#0b0f17]/95 md:backdrop-blur-sm md:shadow-[0_8px_24px_rgba(0,0,0,0.5)] md:transition-all md:duration-150 ${tabsOpen ? 'md:opacity-100 md:translate-y-0' : 'md:opacity-0 md:-translate-y-2 md:pointer-events-none'}`}>
             <div className="px-4 flex border-b border-white/5 bg-white/[0.01] flex-shrink-0 z-10 overflow-x-auto scrollbar-none">
                 {/* Zakładki obszaru Logistyka */}
                 {isLogistykaArea && (
@@ -1149,6 +1165,13 @@ export default function DashboardPage() {
                         </button>
                     );
                 })}
+                <button onClick={toggleTabsPinned}
+                    title={tabsPinned ? 'Odepnij — pasek zakładek chowa się i wysuwa po najechaniu' : 'Przypnij pasek zakładek na stałe'}
+                    className={`hidden md:flex ml-auto self-center p-1.5 rounded-lg transition-colors ${tabsPinned ? 'text-cyan-400 hover:bg-white/5' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}>
+                    {tabsPinned ? <PinOff size={13} /> : <Pin size={13} />}
+                </button>
+            </div>
+            </div>
             </div>
 
 

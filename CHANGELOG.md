@@ -1,3 +1,22 @@
+## 2026-11-05 — feat(harmonogram): jeden Harmonogram zamiast Gantta i Lookahead — wygląd Lookahead, zakresy 14 dni / miesiąc / całość, dni wolne, edycja dat, eksporty
+
+### architektura / API
+- dodano `ui-sekcja` `Harmonogram` (`components/shared/harmonogram/Harmonogram.jsx`) — wspólny widok robót dla Planowania i Realizacji, zbudowany na Lookahead (ten sam wygląd: pasek nawigacji, nagłówki dni, paski, romby dostaw, chipy gotowości, legenda). Nowe: zakres osi 14 dni / Miesiąc / Całość, tło dni wolnych (weekendy + polskie święta), przerwy w pasku na dni wolne, linia „dziś”, markery startu/końca projektu, przełącznik „praca w dni wolne” per gałąź, edycja dat z pól przy nazwie, rok przy datach spoza bieżącego roku, oś rozciągnięta do pełnej szerokości
+- przesunięcie paska zachowuje liczbę dni roboczych (zasada dawnego Gantta) także w Realizacji; rozciągnięcie zmienia jedną krawędź
+- dodano `ui-sekcja` `HarmonogramPlanowanie` — zastępuje `GanttSection` w sekcji „Harmonogram” Planowania; Start/Koniec projektu, zmiana Startu przesuwa zapisane paski; rozciągnięcie paska pracy w dniach nadal zmienia ilość pozycji (`handleGanttDurationChange`); eksport Excel (`appendGanttSheet`) i PDF dostają dane z `getExcelData` / `getHtml` w tym samym kształcie co z Gantta
+- `ui-sekcja` `RealizacjaPanel` — widok „Lookahead” zastąpiony „Harmonogramem” (zapamiętany widok `lookahead` przechodzi na `harmonogram`); w Realizacji ilość pozycji się nie zmienia (bez `onDurationChange`)
+- dodano `ui-funkcja` moduł `harmonogramCzas.js` — logika dat przeniesiona z `GanttSection` (święta, dni robocze, `buildTasksFromTree`, `ganttDatesByNode`, `buildExcelTimeline`); `useRealizationData` importuje stąd
+- usunięto `GanttSection.jsx`, zależność `gantt-task-react` i jej nadpisania w `index.css`
+
+### słownik
+- dodano `harmonogram`, `harmonogram-dni-robocze`, `harmonogram-przesun`, `harmonogram-przesun-okna`, `harmonogram-praca-w-wolne`, `harmonogram-szerokosc`, `harmonogram-okno`, `harmonogram-drag`, `harmonogram-excel-data`, `harmonogram-html`, `harmonogram-planowanie`, `harmonogram-planowanie-start`, `harmonogram-planowanie-overrides`, `harmonogram-planowanie-przesun-start`, `realizacja-opis-paska`
+- zmieniono ścieżkę `gantt-daty-wezlow`, `node-duration-months`, `add-calendar-months`, `is-valid-gantt-date`, `build-excel-timeline` → `harmonogram/harmonogramCzas.js`; skrót `GANTT` → `HARMONOGRAM`
+- usunięto `realizacja-lookahead`, `realizacja-lookahead-okno`, `realizacja-lookahead-drag`, `gantt-section`, `gantt-col-branch`, `shift-project-start`, `project-date-inputs`
+
+### wytyczne
+- `ui-sekcja` `Harmonogram` — jedyny widok harmonogramu w aplikacji; nowe warstwy (np. milestone'y) dodaje się tutaj, nie w osobnym komponencie
+- `ui-sekcja` `Harmonogram` — daty zawsze przez `savePlanDates` → `WbsNode.ganttStart/ganttEnd` (koniec wyłączny); `onDurationChange` (zmiana ilości) podaje tylko Planowanie
+
 ## 2026-11-03 — fix(materialy): panel Materiały pokazuje tylko materiał i sprzęt, także managerowi
 
 ### architektura / API

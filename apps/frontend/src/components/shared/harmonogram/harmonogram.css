@@ -1,0 +1,67 @@
+/* Harmonogram — wygląd 1:1 z Lookahead (realizacja.css: .lahead, .la-nav, .bar, .diam, .legend, .ready),
+   tu tylko siatka osi czasu o zmiennej szerokości dnia (14 dni / miesiąc / całość).
+   Wymaga przodka `.rz` (zmienne kolorów) — w Planowaniu komponent jest owinięty w `.rz`. */
+.rz .hg { display: flex; flex-direction: column; min-height: 0; }
+.rz .hg .la-nav { flex-wrap: wrap; }
+.rz .hg-scroll { overflow: auto; border: 1px solid var(--line); border-radius: 8px; max-height: calc(100vh - 260px); font-size: 12px; }
+.rz .hg-scroll.ciagnie, .rz .hg-scroll.ciagnie * { cursor: grabbing !important; user-select: none; }
+.rz .hg-grid { display: grid; min-width: max-content; }
+
+/* lewa kolumna — przyklejona przy przewijaniu w poziomie */
+.rz .hg-lewa { position: sticky; left: 0; z-index: 4; background: var(--surface); border-right: 1px solid var(--line); }
+.rz .hg-head-l { position: sticky; top: 0; z-index: 5; background: var(--sunk); font: 500 10.5px var(--f-mono); color: var(--muted); display: flex; align-items: flex-end; padding: 0 8px 6px; border-bottom: 1px solid var(--line); }
+.rz .hg-grp { background: var(--sunk); padding: 0 8px; font-weight: 600; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; }
+.rz .hg-grp .n { background: none; border: 0; padding: 0; color: inherit; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.rz .hg-grp button.n { cursor: pointer; }
+.rz .hg-grp button.n:hover { color: var(--info); }
+.rz .hg-grp .mono { font-weight: 400; }
+.rz .hg-grp .wow { margin-left: auto; flex: none; background: none; border: 1px solid var(--line); border-radius: 10px; padding: 0 7px; font: 500 10px var(--f-mono); color: var(--muted); cursor: pointer; }
+.rz .hg-grp .wow.on { border-color: var(--warn); color: var(--warn); }
+.rz .hg-lbl { padding: 5px 8px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; justify-content: center; gap: 3px; min-width: 0; overflow: hidden; }
+.rz .hg-lbl:hover { background: var(--sunk); }
+.rz .hg-lbl .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rz .hg-lbl .t.klik { cursor: pointer; }
+.rz .hg-lbl .t.klik:hover { color: var(--info); }
+.rz .hg-lbl .m { display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+.rz .hg-lbl .daty { font: 500 10.5px var(--f-mono); color: var(--muted); }
+.rz .hg-lbl .daty.ed { cursor: pointer; border-bottom: 1px dashed var(--line); }
+.rz .hg-lbl .daty.ed:hover { color: var(--accent); border-color: var(--accent); }
+.rz .hg-lbl .daty-in { display: flex; gap: 4px; }
+.rz .hg-lbl .daty-in input { background: var(--sunk); border: 1px solid var(--line); border-radius: 4px; color: var(--ink); font: 500 10.5px var(--f-mono); padding: 1px 3px; color-scheme: dark; }
+
+/* prawa kolumna — oś czasu */
+.rz .hg-prawa { position: relative; }
+.rz .hg-head { position: sticky; top: 0; z-index: 3; background: var(--sunk); border-bottom: 1px solid var(--line); }
+.rz .hg-head .mies { position: absolute; top: 0; height: 16px; font: 500 10px var(--f-mono); color: var(--muted); padding: 2px 5px; border-left: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
+.rz .hg-head .dz { position: absolute; top: 16px; bottom: 0; font: 500 10.5px var(--f-mono); color: var(--muted); text-align: center; padding-top: 5px; border-left: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
+.rz .hg-head .dz.we { color: var(--bad); }
+.rz .hg-head .dz.today { background: var(--accent); color: #fff; }
+.rz .hg-head .dz.tyg { text-align: left; padding-left: 3px; }
+.rz .hg-cialo { position: relative; }
+.rz .hg-tlo { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+.rz .hg-tlo .wolny { position: absolute; top: 0; bottom: 0; background: var(--sunk); }
+.rz .hg-tlo .tydz { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); }
+.rz .hg-tlo .dzis { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--accent); opacity: .7; }
+.rz .hg-tlo .mark { position: absolute; top: 0; bottom: 0; border-left: 1.5px dashed; }
+.rz .hg-tlo .mark.ps { border-color: #22c55e; }
+.rz .hg-tlo .mark.pe { border-color: #ef4444; }
+.rz .hg-grp-t { background: color-mix(in srgb, var(--sunk) 70%, transparent); border-bottom: 1px solid var(--line); position: relative; z-index: 1; }
+.rz .hg-tor { position: relative; border-bottom: 1px solid var(--line); z-index: 1; }
+.rz .hg-tor.plan { cursor: copy; }
+.rz .hg-tor.plan:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.rz .hg-tor .bar { top: 13px; }
+.rz .hg-tor .bar .tx { position: relative; z-index: 1; }
+.rz .hg-tor .bar .przerwa { position: absolute; top: 0; bottom: 0; background: rgba(15, 21, 28, .45); pointer-events: none; }
+.rz .hg-tor .diam { top: 15px; }
+.rz .hg-tor .poza { position: absolute; top: 14px; font: 500 10px var(--f-mono); color: var(--muted); white-space: nowrap; }
+.rz .hg-tor .poza.l { left: 3px; }
+.rz .hg-tor .poza.r { right: 3px; }
+.rz .hg .bar .uchwyt { z-index: 2; }
+
+/* legenda — próbki nowych warstw */
+.rz .hg .legend .sw-wolny { display: inline-block; width: 14px; height: 10px; background: var(--sunk); border: 1px solid var(--line); }
+.rz .hg .legend .sw-mark { display: inline-block; width: 0; height: 12px; border-left: 2px dashed; }
+.rz .hg .legend .sw-mark.ps { border-color: #22c55e; }
+.rz .hg .legend .sw-mark.pe { border-color: #ef4444; }
+.rz .hg-info { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 1000; background: var(--surface); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 14px; font-size: 12.5px; max-width: 420px; box-shadow: 0 10px 30px rgba(0,0,0,.4); cursor: pointer; }
+.rz .hg-data { background: var(--sunk); border: 1px solid var(--line); border-radius: 4px; color: var(--ink); font: 500 11px var(--f-mono); padding: 2px 4px; color-scheme: dark; }

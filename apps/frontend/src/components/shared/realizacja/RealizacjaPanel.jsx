@@ -1,6 +1,6 @@
 // Zakładka „Realizacja" — nowy UI (docs/REALIZACJA-MVP-PLAN.md, mockup w artefakcie
 // „Ignite Realizacja"; wygląd 1:1 z mockupu, style w `realizacja.css` pod `.rz`). Środek ma cztery
-// widoki na całą szerokość: KOKPIT gałęzi, MACIERZ pozycji, TABLICA statusów i LOOKAHEAD 14 dni (z Gantta).
+// widoki na całą szerokość: KOKPIT gałęzi, MACIERZ pozycji, TABLICA statusów i HARMONOGRAM (wspólny z Planowaniem).
 // Drzewo gałęzi NIE siedzi tutaj — panel publikuje je przez `setBranchNav` do lewego panelu
 // aplikacji (`SidebarBranchTree` pod aktywnym zamówieniem). Klik w gałąź tam = zoom tutaj.
 //
@@ -24,6 +24,7 @@ import {
     nazwaWyswietlana, WATEK_RODZAJE, RODZAJE_BLOKERA, zbudujWatek, sygnalyWezlow, sumaSygnalow, kiedyTekst,
     dniOkna, indeksDnia, gotowoscPozycji, wykryjKolizje, BUFOR_DOSTAWY_DNI,
 } from './realizacjaShared';
+import Harmonogram from '../harmonogram/Harmonogram';
 import './realizacja.css';
 
 const FOCUS_KEY = (nodeId) => `realizacja-focus-${nodeId}`;
@@ -34,9 +35,21 @@ const czytaj = (k, d) => { try { return sessionStorage.getItem(k) ?? d; } catch 
 const zapisz = (k, v) => { try { sessionStorage.setItem(k, v); } catch { /* tryb prywatny */ } };
 
 // @anchor realizacja-widoki — przełącznik widoków w nagłówku zoomu.
-const WIDOKI = [['kokpit', 'Kokpit'], ['macierz', 'Macierz'], ['tablica', 'Tablica'], ['lookahead', 'Lookahead']];
+const WIDOKI = [['kokpit', 'Kokpit'], ['macierz', 'Macierz'], ['tablica', 'Tablica'], ['harmonogram', 'Harmonogram']];
 const OS_KEY = 'realizacja-tablica-os';
 const LOOKAHEAD_DNI = 14;
+// @anchor realizacja-opis-paska — kolor i podpis paska robót w Harmonogramie wg osi wykonania;
+// pozycje wykonane nie dają się przesuwać (plan po fakcie się nie zmienia).
+const ZROBIONE_EXEC = ['DONE', 'HANDED_OVER', 'INVOICED'];
+const opisPaskaRobot = (l) => {
+    const wstrzymane = l.execStatus === 'ON_HOLD';
+    const zrobione = ZROBIONE_EXEC.includes(l.execStatus);
+    const status = execStatusLabel(l.type, l.execStatus || DEFAULT_EXEC_STATUS);
+    return { klasa: wstrzymane ? 'b-hold' : zrobione ? 'b-done' : 'b-work', tekst: wstrzymane ? 'wstrzymane' : String(status || '').toLowerCase(), zablokowany: zrobione };
+};
+const maPasekRobot = (l) => hasExecAxis(l.type);
+// Dostawa = prognozowany wpis zakupu (FORECAST) pozycji z osią zakupu.
+const czyDostawa = (l, e) => hasPurchaseAxis(l.type) && entryStatusOf(e) === 'FORECAST';
 const DNI_TYG = ['nd', 'pn', 'wt', 'śr', 'cz', 'pt', 'sb'];
 const dzienMies = (d) => `${new Date(d).getDate()}.${String(new Date(d).getMonth() + 1).padStart(2, '0')}`;
 
@@ -108,11 +121,13 @@ export default function RealizacjaPanel({
     const focusId = idx.nodeById[focus] && !LEAF_TYPES.includes(idx.nodeById[focus]?.type) ? focus : SYNTHETIC_ROOT;
 
     const [widok, setWidokState] = useState(() => {
-        const v = czytaj(WIDOK_KEY, 'macierz');
+        let v = czytaj(WIDOK_KEY, 'macierz');
+        if (v === 'lookahead') v = 'harmonogram'; // dawny widok Lookahead = Harmonogram
         return WIDOKI.some(([k]) => k === v) ? v : 'macierz';
     });
     const setWidok = (v) => { setWidokState(v); zapisz(WIDOK_KEY, v); setPodglad(null); };
     const [pelne, setPelneState] = useState(() => czytaj(PELNE_KEY, '0') === '1');
+    const nazwaPel = useCallback((n) => nazwaWyswietlana(n, pelne), [pelne]);
     // @anchor realizacja-tylko-sygnaly — filtr drzewa w sidebarze: tylko węzły z sygnałami.
     const [tylkoSygnaly, setTylkoSygnaly] = useState(() => czytaj(SYGNALY_KEY, '0') === '1');
     const setSygnaly = useCallback((v) => { setTylkoSygnaly(v); zapisz(SYGNALY_KEY, v ? '1' : '0'); }, []);
@@ -315,9 +330,13 @@ export default function RealizacjaPanel({
                     <div className="mtools">
                         <label><input type="checkbox" checked={pelne} onChange={e => setPelne(e.target.checked)} /> pełne nazwy</label>
                         <span className="seg">
+                            {/* @anchor realizacja-segment-pozycja — gdy otwarte są szczegóły pozycji, przełącznik pokazuje
+                                aktywny segment „Pozycja”; klik w widok (np. Harmonogram) wraca do niego. */}
                             {WIDOKI.map(([k, l]) => (
-                                <button key={k} onClick={() => setWidok(k)} className={widok === k ? 'on' : ''}>{l}</button>
+                                <button key={k} onClick={() => setWidok(k)} className={!pozPodgladu && widok === k ? 'on' : ''}
+                                    title={pozPodgladu && widok === k ? `Wróć do: ${l}` : undefined}>{l}</button>
                             ))}
+                            {pozPodgladu && <button className="on" title="Szczegóły pozycji">Pozycja</button>}
                         </span>
                     </div>
                 </div>
@@ -329,6 +348,9 @@ export default function RealizacjaPanel({
                     return (
                         <div className="podglad">
                             <div className="podglad-head">
+                                <button className="wroc" onClick={() => setPodglad(null)} title="Wróć do poprzedniego widoku">
+                                    ‹ {WIDOKI.find(([k]) => k === widok)?.[1] || 'Wróć'}
+                                </button>
                                 <span className="t" title={pozPodgladu.name}>{nazwaWyswietlana(pozPodgladu, pelne)}</span>
                                 <span className="typ">{TYPE_META[pozPodgladu.type]?.label || pozPodgladu.type}{pozPodgladu.owner ? ` · ${pozPodgladu.owner}` : ''}</span>
                                 <DrogaPasek node={pozPodgladu} />
@@ -367,11 +389,13 @@ export default function RealizacjaPanel({
                         saveAxis={saveAxis} onZoom={setFocus} onOtworz={otworzPozycje}
                     />
                 )}
-                {!pozPodgladu && widok === 'lookahead' && (
-                    <Lookahead
-                        grupy={grupy} actualsOf={actualsOf} pelne={pelne}
-                        gotowosc={gotowosc} onZoom={setFocus} onOtworz={otworzPozycje} kolizje={kolizje}
-                        canEdit={canEdit} savePlanDates={savePlanDates}
+                {!pozPodgladu && widok === 'harmonogram' && (
+                    <Harmonogram
+                        grupy={grupy} nazwa={nazwaPel} maPasek={maPasekRobot} opisPaska={opisPaskaRobot}
+                        actualsOf={actualsOf} czyDostawa={czyDostawa} gotowosc={gotowosc} GotowoscChipy={GotowoscChipy}
+                        kolizje={kolizje} canEdit={canEdit} savePlanDates={savePlanDates}
+                        onZoom={setFocus} onOtworz={otworzPozycje}
+                        domyslnyZakres="14" zakresKey="realizacja-harmonogram-zakres"
                     />
                 )}
             </div>
@@ -1112,199 +1136,6 @@ function Tablica({ grupy, actualsOf, sygnaly, pelne, canEdit, saveAxis, onZoom, 
                         );
                     })}
                 </div>
-            </div>
-        </>
-    );
-}
-
-// ─── Lookahead ───────────────────────────────────────────────────────────────
-
-// @anchor realizacja-lookahead — tablica planowania robót = Gantt w oknie dni: paski robót
-// (`planOd/planDo` z `ganttDatesByNode`, czyli dokładnie to, co rysuje Gantt), romby dostaw z wpisów
-// prognozowanych (`LeafActual` FORECAST) materiału i sprzętu, gotowość przy każdej pozycji.
-// Pasek można przeciągnąć (przesunięcie) albo rozciągnąć za krawędź, a klik w pusty dzień
-// przenosi start pozycji na ten dzień — zapis do `WbsNode.ganttStart/End` (`savePlanDates`),
-// więc Gantt w Planowaniu pokazuje to samo. Okno przewijane o tydzień, 14 albo 28 dni.
-// Czerwony romb = kolizja dostawy (`wykryj-kolizje`): dostawa mniej niż `BUFOR_DOSTAWY_DNI`
-// przed startem robót w tej samej gałęzi, które w dniu dostawy jeszcze trwają.
-const ZROBIONE_EXEC = ['DONE', 'HANDED_OVER', 'INVOICED'];
-const dodajDni = (d, n) => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() + n); return x; };
-function Lookahead({ grupy, actualsOf, pelne, gotowosc, onZoom, onOtworz, kolizje = [], canEdit = false, savePlanDates }) {
-    // @anchor realizacja-lookahead-okno — przesunięcie okna (dni od dziś) i jego długość.
-    const [przesun, setPrzesun] = useState(0);
-    const [ileDni, setIleDni] = useState(LOOKAHEAD_DNI);
-    const [wszystkie, setWszystkie] = useState(true);
-    const dni = useMemo(() => dniOkna(ileDni, dodajDni(new Date(), przesun)), [przesun, ileDni]);
-    const start = dni[0];
-    const dzisIdx = indeksDnia(new Date(), start);
-
-    // @anchor realizacja-lookahead-drag — { l, id, tryb: 'move'|'l'|'r', x0, delta } podczas ciągnięcia.
-    const [drag, setDrag] = useState(null);
-    const dragRef = useRef(null);
-    dragRef.current = drag;
-    const siatkaRef = useRef(null);
-    const zapisz = useCallback(async (l, od, doDnia) => {
-        try { await savePlanDates(l.id, od, doDnia); } catch (e) {
-            console.error('[Lookahead] zapis dat:', e);
-            alert('Nie udało się zapisać dat robót');
-        }
-    }, [savePlanDates]);
-
-    const ciagnie = !!drag;
-    useEffect(() => {
-        if (!ciagnie) return;
-        const szerKol = () => siatkaRef.current?.querySelector('.hd.col')?.getBoundingClientRect().width || 44;
-        const ruch = (e) => {
-            const d = dragRef.current;
-            if (!d) return;
-            const delta = Math.round((e.clientX - d.x0) / szerKol());
-            if (delta !== d.delta) setDrag({ ...d, delta });
-        };
-        const pusc = () => {
-            const d = dragRef.current;
-            setDrag(null);
-            if (!d?.delta) return;
-            const od = d.tryb === 'r' ? dodajDni(d.l.planOd, 0) : dodajDni(d.l.planOd, d.delta);
-            let doDnia = d.tryb === 'l' ? dodajDni(d.l.planDo, 0) : dodajDni(d.l.planDo, d.delta);
-            if (doDnia < od) doDnia = od;
-            zapisz(d.l, od, doDnia);
-        };
-        window.addEventListener('pointermove', ruch);
-        window.addEventListener('pointerup', pusc);
-        return () => { window.removeEventListener('pointermove', ruch); window.removeEventListener('pointerup', pusc); };
-    }, [ciagnie, zapisz]);
-
-    const zacznij = (e, l, tryb) => {
-        if (e.button !== 0) return;
-        e.preventDefault(); e.stopPropagation();
-        setDrag({ l, id: l.id, tryb, x0: e.clientX, delta: 0 });
-    };
-    // Klik w pusty dzień = start robót tego dnia, długość bez zmian.
-    const ustawStart = (l, dzien) => {
-        const dl = Math.round((dodajDni(l.planDo, 0) - dodajDni(l.planOd, 0)) / 86400000);
-        zapisz(l, dzien, dodajDni(dzien, dl));
-    };
-
-    const wiersze = useMemo(() => {
-        const kolidujace = new Set(kolizje.map(k => k.id));
-        return grupy.map(({ galaz, liscie }) => {
-            const pozycje = liscie.map(l => {
-                const d0 = indeksDnia(l.planOd, start);
-                const d1 = indeksDnia(l.planDo, start);
-                const wOknie = d0 !== null && d1 >= 0 && d0 < ileDni;
-                const planowalna = hasExecAxis(l.type) && d0 !== null && !ZROBIONE_EXEC.includes(l.execStatus);
-                const dostawy = new Map();
-                const spoznione = new Set();
-                for (const e of actualsOf(l)) {
-                    if (!hasPurchaseAxis(l.type) || entryStatusOf(e) !== 'FORECAST') continue;
-                    const i = indeksDnia(e.entryDate, start);
-                    if (i === null || i < 0 || i >= ileDni) continue;
-                    dostawy.set(i, true);
-                    if (kolidujace.has(e.id)) spoznione.add(i);
-                }
-                return { l, d0, d1, planowalna, dostawy: [...dostawy.keys()], spoznione };
-            }).filter(p => (p.d0 !== null && p.d1 >= 0 && p.d0 < ileDni) || p.dostawy.length || (wszystkie && p.planowalna));
-            return { galaz, pozycje };
-        }).filter(g => g.pozycje.length);
-    }, [grupy, actualsOf, start, ileDni, kolizje, wszystkie]);
-
-    const siatka = { gridTemplateColumns: `240px repeat(${ileDni}, minmax(${ileDni > 14 ? 30 : 44}px, 1fr))` };
-    return (
-        <>
-            <div className="lahead">
-                <div className="la-nav">
-                    <button onClick={() => setPrzesun(p => p - 7)} title="Tydzień wcześniej">‹ tydz.</button>
-                    <button onClick={() => setPrzesun(0)} className={przesun === 0 ? 'on' : ''}>Dziś</button>
-                    <button onClick={() => setPrzesun(p => p + 7)} title="Tydzień później">tydz. ›</button>
-                    <button onClick={() => setIleDni(n => (n === 14 ? 28 : 14))} title="Długość okna">{ileDni} dni</button>
-                    <label><input type="checkbox" checked={wszystkie} onChange={e => setWszystkie(e.target.checked)} /> wszystkie roboty</label>
-                </div>
-                <span>Okno {dzienMies(dni[0])}–{dzienMies(dni[ileDni - 1])}. Te same daty co Gantt w Planowaniu{canEdit ? ' — przeciągnij pasek, rozciągnij za krawędź albo kliknij dzień, by przenieść start' : ''}. Klik w nazwę otwiera pozycję w Macierzy.</span>
-            </div>
-            {!wiersze.length ? <div className="empty">Brak robót i dostaw w tym oknie.</div> : (
-                <div className={`la${drag ? ' ciagnie' : ''}`} style={siatka} ref={siatkaRef}>
-                    <div className="hd first">Pozycja · gotowość</div>
-                    {dni.map((d, i) => {
-                        const we = d.getDay() === 0 || d.getDay() === 6;
-                        return <div key={i} className={`hd col${we ? ' we' : ''}${i === dzisIdx ? ' today' : ''}`}>{DNI_TYG[d.getDay()]} {d.getDate()}</div>;
-                    })}
-                    {wiersze.map(({ galaz, pozycje }) => (
-                        <React.Fragment key={galaz?.id || '_wprost'}>
-                            {galaz && (
-                                <div className="grpl" title={galaz.name}>
-                                    <button onClick={() => onZoom(galaz.id)}>{nazwaWyswietlana(galaz, pelne)}</button>
-                                    <span className="mono" style={{ fontWeight: 400 }}> · {pozycje.length} poz.</span>
-                                </div>
-                            )}
-                            {pozycje.map(({ l, d0: r0, d1: r1, planowalna, dostawy, spoznione }) => {
-                                // Podgląd ciągnięcia: przesunięte indeksy, zanim wróci zapis.
-                                const dd = drag?.id === l.id ? drag : null;
-                                let d0 = r0, d1 = r1;
-                                if (dd) {
-                                    if (dd.tryb !== 'r') d0 = r0 + dd.delta;
-                                    if (dd.tryb !== 'l') d1 = r1 + dd.delta;
-                                    if (d1 < d0) { if (dd.tryb === 'l') d0 = d1; else d1 = d0; }
-                                }
-                                const widoczne = d0 !== null && d1 >= 0 && d0 < ileDni;
-                                const wstrzymane = l.execStatus === 'ON_HOLD';
-                                const zrobione = ZROBIONE_EXEC.includes(l.execStatus);
-                                const edyt = canEdit && planowalna && !!savePlanDates;
-                                const od = widoczne ? Math.max(d0, 0) : -1;
-                                const status = execStatusLabel(l.type, l.execStatus || DEFAULT_EXEC_STATUS);
-                                return (
-                                    <React.Fragment key={l.id}>
-                                        <div className="lbl" onClick={() => onOtworz(l.id)} title={l.name}>
-                                            <span className="t">{nazwaWyswietlana(l, pelne)}</span>
-                                            <GotowoscChipy g={gotowosc(l)} />
-                                        </div>
-                                        {dni.map((d, i) => {
-                                            const we = d.getDay() === 0 || d.getDay() === 6;
-                                            const pasek = widoczne && i === od;
-                                            const dlug = pasek ? Math.min(d1, ileDni - 1) - od + 1 : 0;
-                                            const poza = !widoczne && d0 !== null && hasExecAxis(l.type)
-                                                ? (d1 < 0 && i === 0 ? 'l' : d0 >= ileDni && i === ileDni - 1 ? 'r' : null) : null;
-                                            return (
-                                                <div key={i} className={`cell${we ? ' we' : ''}${edyt ? ' plan' : ''}`}
-                                                    onClick={edyt && !drag ? () => ustawStart(l, d) : undefined}
-                                                    title={edyt ? `Start robót ${dzienMies(d)}` : undefined}>
-                                                    {pasek && (
-                                                        <div className={`bar ${wstrzymane ? 'b-hold' : zrobione ? 'b-done' : 'b-work'}${d0 < 0 ? ' cut-l' : ''}${d1 >= ileDni ? ' cut-r' : ''}${edyt ? ' drag' : ''}${dd ? ' ciagniety' : ''}`}
-                                                            style={{ left: 3, width: `calc(${dlug * 100}% + ${dlug - 1}px - 6px)` }}
-                                                            onPointerDown={edyt ? e => zacznij(e, l, 'move') : undefined}
-                                                            onClick={e => e.stopPropagation()}
-                                                            title={`Roboty ${dzienMies(l.planOd)}–${dzienMies(l.planDo)} · ${status}`}>
-                                                            {edyt && d0 >= 0 && <span className="uchwyt l" onPointerDown={e => zacznij(e, l, 'l')} />}
-                                                            {wstrzymane ? 'wstrzymane' : String(status || '').toLowerCase()}
-                                                            {edyt && d1 < ileDni && <span className="uchwyt r" onPointerDown={e => zacznij(e, l, 'r')} />}
-                                                        </div>
-                                                    )}
-                                                    {poza && (
-                                                        <span className={`poza ${poza}`} title={`Roboty ${dzienMies(l.planOd)}–${dzienMies(l.planDo)} — poza oknem`}>
-                                                            {poza === 'l' ? `‹ ${dzienMies(l.planDo)}` : `${dzienMies(l.planOd)} ›`}
-                                                        </span>
-                                                    )}
-                                                    {dostawy.includes(i) && (
-                                                        <span className={`diam${spoznione.has(i) ? ' late' : ''}`}
-                                                            title={`Dostawa ${dzienMies(d)}${spoznione.has(i) ? ` — mniej niż ${BUFOR_DOSTAWY_DNI} dni przed robotami w gałęzi` : ''}`} />
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </React.Fragment>
-                                );
-                            })}
-                        </React.Fragment>
-                    ))}
-                </div>
-            )}
-            <div className="legend">
-                <span><i className="bar b-work" />roboty</span>
-                <span><i className="bar b-done" />wykonane</span>
-                <span><i className="bar b-hold" />wstrzymane</span>
-                <span><i className="diam" />dostawa</span>
-                <span><i className="diam late" />dostawa za blisko robót</span>
-                <span className="ready"><span className="r-ok">MAT</span><span className="r-q">PYT</span><span className="r-no">BLK</span></span>
-                <span>gotowość: materiał, pytania, blokery (zielone = gotowe, żółte = czeka, czerwone = brak)</span>
             </div>
         </>
     );
