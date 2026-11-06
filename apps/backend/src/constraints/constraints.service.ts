@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditAction } from '../audit/audit.types';
+import { UserTasksService } from '../user-tasks/user-tasks.service';
 
 // @anchor constraints-user — kształt `req.user` z JwtStrategy
 export interface ConstraintsUser {
@@ -66,7 +67,7 @@ const intOf = (v: unknown) => {
 export class ConstraintsService {
     private readonly logger = new Logger(ConstraintsService.name);
 
-    constructor(private prisma: PrismaService) { }
+    constructor(private prisma: PrismaService, private userTasks: UserTasksService) { }
 
     private isManager(user?: ConstraintsUser) {
         return !!user?.roles?.some((r) => ['ADMIN', 'MANAGER'].includes(r));
@@ -116,8 +117,26 @@ export class ConstraintsService {
             select: SELECT,
         });
         await this.audit(AuditAction.CREATE, created.id, { wbsNodeId: node.id, node: node.name, title, kind: created.kind }, user);
+        await this.utworzZadanie(created, node.id, processNodeId, user);
         this.logger.log(`Bloker „${title}" na „${node.name}" (${processNodeId}) przez ${user?.email}`);
         return created;
+    }
+
+    // @anchor constraints-create-task — każdy nowy bloker dostaje zadanie (`UserTask.constraintId`) dla
+    // właściciela blokera (bez właściciela albo spoza zespołu zamówienia — dla autora); termin = termin usunięcia.
+    // Błąd zadania nie cofa blokera.
+    private async utworzZadanie(c: { id: string; title: string; note: string | null; dueAt: Date | null; ownerId: string | null }, wbsNodeId: string, processNodeId: string, user?: ConstraintsUser) {
+        if (!user?.userId) return;
+        const dto = {
+            title: `Bloker: ${c.title}`, description: c.note || undefined, plannedEnd: c.dueAt || undefined,
+            nodeId: processNodeId, wbsNodeId, constraintId: c.id,
+        };
+        try {
+            await this.userTasks.create(user.userId, { ...dto, assigneeUserId: c.ownerId || undefined });
+        } catch (e: any) {
+            if (!c.ownerId) { this.logger.warn(`Zadanie blokera ${c.id}: ${e?.message}`); return; }
+            try { await this.userTasks.create(user.userId, dto); } catch (e2: any) { this.logger.warn(`Zadanie blokera ${c.id}: ${e2?.message}`); }
+        }
     }
 
     // @anchor constraints-update — edycja pól i zamknięcie/otwarcie (status OPEN | CLOSED)
@@ -140,6 +159,16 @@ export class ConstraintsService {
         }
         const updated = await this.prisma.constraint.update({ where: { id }, data, select: SELECT });
         await this.audit(AuditAction.UPDATE, id, { input }, user);
+        // @anchor constraints-update-task — zmiana blokera idzie na jego zadanie (zamknięcie = zadanie wykonane).
+        const zad: any = {};
+        if (data.status) zad.status = data.status === 'CLOSED' ? 'DONE' : 'TO_DO';
+        if (data.title !== undefined) zad.title = `Bloker: ${updated.title}`;
+        if (data.note !== undefined) zad.description = updated.note;
+        if (data.dueAt !== undefined) zad.plannedEnd = updated.dueAt;
+        if (data.ownerId) zad.assigneeUserId = data.ownerId;
+        if (Object.keys(zad).length) {
+            try { await this.userTasks.updateForConstraint(id, zad); } catch (e: any) { this.logger.warn(`Zadanie blokera ${id}: ${e?.message}`); }
+        }
         return updated;
     }
 
@@ -150,6 +179,7 @@ export class ConstraintsService {
         if (existing.createdById && existing.createdById !== user?.userId && !this.isManager(user)) {
             throw new ForbiddenException('Cudzy bloker może usunąć tylko manager');
         }
+        try { await this.userTasks.deleteForConstraint(id); } catch (e: any) { this.logger.warn(`Zadanie blokera ${id}: ${e?.message}`); }
         await this.prisma.constraint.delete({ where: { id } });
         await this.audit(AuditAction.DELETE, id, { title: existing.title, wbsRootId: existing.wbsRootId }, user);
         return { ok: true };

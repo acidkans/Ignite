@@ -72,6 +72,9 @@ export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, con
     const qaZBlokerem = new Set((constraints || [])
         .filter(k => k.status === 'OPEN' && k.sourceType === 'QA' && k.sourceId).map(k => k.sourceId));
 
+    // @anchor watek-zadanie-blokera — zadanie blokera (`UserTask.constraintId`) nie jest osobnym wpisem:
+    // siedzi przy blokerze (`w.zadanie`), a w wątku i licznikach liczy się jak bloker.
+    const zadanieBlokera = new Map((tasks || []).filter(t => t.constraintId).map(t => [t.constraintId, t]));
     for (const k of constraints || []) {
         const nodeId = klucz.get(k.wbsRootId);
         if (!nodeId) continue;
@@ -84,6 +87,7 @@ export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, con
             ownerId: k.ownerId, otwarte, zamkniety: !otwarte,
             poTerminie: otwarte && termin && termin.getTime() < teraz,
             zPytania: k.sourceType === 'QA',
+            zadanie: zadanieBlokera.get(k.id) || null,
         });
     }
 
@@ -109,12 +113,13 @@ export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, con
         }
     }
     for (const t of tasks || []) {
+        if (t.constraintId) continue; // zadanie blokera — przy blokerze
         const nodeId = t.wbsNodeId ? klucz.get(t.wbsNodeId) : null;
         if (!nodeId) continue;
         const otwarte = !CLOSED_TASK.includes(t.status);
         const poTerminie = otwarte && t.plannedEnd && new Date(t.plannedEnd).getTime() < teraz;
         wpisy.push({
-            id: `t-${t.id}`, rodzaj: 'task', nodeId, kiedy: t.plannedEnd || t.createdAt,
+            id: `t-${t.id}`, rodzaj: 'task', zadanie: t, nodeId, kiedy: t.plannedEnd || t.createdAt,
             kto: osoba(t.user), tekst: t.title + (poTerminie ? ' — po terminie' : ''),
             otwarte, poTerminie,
         });

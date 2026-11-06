@@ -111,6 +111,8 @@ export interface CreateUserTaskDto extends TaskScheduleFields {
   wbsNodeId?: string;
   /** Odpowiedzialny — domyślnie autor. */
   assigneeUserId?: string;
+  /** Zadanie blokera (`Constraint`) — ustawia tylko ConstraintsService. */
+  constraintId?: string;
 }
 
 export interface UpdateUserTaskDto extends TaskScheduleFields {
@@ -324,6 +326,7 @@ export class UserTasksService {
         durationMinutes: dto.durationMinutes ?? null,
         nodeId: dto.nodeId ?? null,
         wbsNodeId: dto.wbsNodeId ?? null,
+        constraintId: dto.constraintId ?? null,
         source: 'IGNITE',
       },
     });
@@ -380,6 +383,7 @@ export class UserTasksService {
       const ownerId = assigneeUserId ? await this.resolveAssignee(assigneeUserId, task.userId, data.nodeId ?? task.nodeId) : task.userId;
       await this.prisma.userTask.update({ where: { id: taskId }, data: { ...data, userId: ownerId, source: 'IGNITE' } });
       await this.activateMigratedTask(taskId);
+      if ('status' in data) await this.syncConstraintFromTask(taskId, userId);
       return { count: 1 };
     }
 
@@ -401,6 +405,7 @@ export class UserTasksService {
       await this.syncReminderForTask(taskId, newOwnerId, taskStart(updated));
       await this.pushNewTaskToGraph(newOwnerId, updated);
       await this.syncCalendarEvent(taskId);
+      if ('status' in data) await this.syncConstraintFromTask(taskId, userId);
       return { count: 1 };
     }
 
@@ -412,7 +417,40 @@ export class UserTasksService {
     if (['title', 'description', 'plannedStart', 'plannedEnd', 'durationMinutes'].some(k => k in data)) {
       await this.syncCalendarEvent(taskId);
     }
+    if ('status' in data) await this.syncConstraintFromTask(taskId, userId);
     return { count: 1 };
+  }
+
+  // @anchor user-tasks-sync-constraint
+  // Zadanie blokera (`constraintId`): stan zadania przechodzi na bloker — zamknięte (DONE/CANCELLED)
+  // zamyka bloker, ponownie otwarte go otwiera. Bez zapisu, gdy bloker już ma ten stan (brak pętli).
+  async syncConstraintFromTask(taskId: string, byUserId?: string | null): Promise<void> {
+    const task = await this.prisma.userTask.findUnique({ where: { id: taskId }, select: { constraintId: true, status: true, deletedAt: true } });
+    if (!task?.constraintId || task.deletedAt) return;
+    const closed = (CLOSED_TASK_STATUSES as string[]).includes(task.status);
+    const target = closed ? 'CLOSED' : 'OPEN';
+    const c = await this.prisma.constraint.findUnique({ where: { id: task.constraintId }, select: { status: true } });
+    if (!c || c.status === target) return;
+    await this.prisma.constraint.update({
+      where: { id: task.constraintId },
+      data: { status: target, closedAt: closed ? new Date() : null, closedById: closed ? (byUserId ?? null) : null },
+    });
+  }
+
+  // @anchor user-tasks-update-for-constraint
+  // Zmiana blokera przenoszona na jego zadanie (tytuł, termin, status, odpowiedzialny) — w imieniu
+  // odpowiedzialnego zadania, bo bloker może edytować ktoś spoza pary odpowiedzialny/autor.
+  async updateForConstraint(constraintId: string, dto: UpdateUserTaskDto) {
+    const task = await this.prisma.userTask.findFirst({ where: { constraintId, deletedAt: null }, select: { id: true, userId: true } });
+    if (!task) return null;
+    return this.update(task.userId, task.id, dto);
+  }
+
+  // @anchor user-tasks-delete-for-constraint — usunięty bloker zabiera swoje zadanie
+  async deleteForConstraint(constraintId: string) {
+    const task = await this.prisma.userTask.findFirst({ where: { constraintId, deletedAt: null }, select: { id: true, userId: true } });
+    if (!task) return null;
+    return this.softDelete(task.userId, task.id);
   }
 
   // @anchor user-tasks-activate-migrated-task
