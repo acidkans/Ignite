@@ -1619,6 +1619,8 @@ model Constraint {
   processNode ProcessNode @relation(fields: [processNodeId], references: [id], onDelete: Cascade)
   /// @anchor constraint-owner
   owner       User?       @relation("ConstraintOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  /// @anchor constraint-task
+  task        UserTask?
 
   @@index([processNodeId])
   @@index([wbsRootId])
@@ -1815,6 +1817,9 @@ model UserTask {
   createdById    String?
   /// @anchor user-task-wbs-node-id
   /// Liść/gałąź WBS, do której zadanie jest przypięte (szuflada „Zadania" w Planowanie/WBS).
+  /// @anchor user-task-constraint-id
+  /// zadanie blokera: bloker tworzy je przy zapisie, zamknięcie zadania zamyka bloker (i odwrotnie)
+  constraintId   String?        @unique
   wbsNodeId      String?
   /// @anchor user-task-version-id
   versionId      String?
@@ -1880,6 +1885,7 @@ model UserTask {
   node      ProcessNode?  @relation(fields: [nodeId], references: [id], onDelete: SetNull)
   /// @anchor user-task-wbs-node
   wbsNode   WbsNode?      @relation(fields: [wbsNodeId], references: [id], onDelete: SetNull)
+  constraint Constraint?   @relation(fields: [constraintId], references: [id], onDelete: SetNull)
   /// @anchor user-task-reminders
   reminders TaskReminder[]
   /// @anchor user-task-budget-items

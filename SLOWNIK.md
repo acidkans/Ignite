@@ -255,7 +255,9 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-sekcja | szuflada zakupów pozycji | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szuflada-zakupow |
 | ui-hook | useSzerokosciKolumn | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szerokosci-kolumn |
 | ui-stala | boczne karty Kokpitu do krawędzi (margines -24px wątku i blokerów, środek bez zmian) | apps/frontend/src/components/shared/realizacja/realizacja.css | @anchor realizacja-kolumny-do-krawedzi |
-| ui-sekcja | TrzyKolumny | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-trzy-kolumny |
+| ui-sekcja | DwieKolumny | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-dwie-kolumny |
+| ui-przycisk | NowyBloker — „+ Bloker” pod wątkiem | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-nowy-bloker |
+| ui-stala | style Q&A w wątku: naprzemienne akapity P/O | apps/frontend/src/components/shared/realizacja/realizacja.css | @anchor realizacja-qa-akapity |
 | ui-funkcja | Kokpit — przychód i zysk | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit-wynik |
 | ui-input | PoleCzatu | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-pole-czatu |
 | ui-sekcja | DrogaPasek | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-droga-pasek |
@@ -315,7 +317,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | gotowosc | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-gotowosc |
 | ui-sekcja | GotowoscChipy | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-gotowosc-chipy |
 | ui-formularz | BlokerForm | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-bloker-form |
-| ui-funkcja | decyzje (sortowanie blokerów) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolejnosc-blokerow |
+| ui-funkcja | kolejnoscDecyzji (sortowanie blokerów i Q&A w wątku) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolejnosc-blokerow |
 | ui-sekcja | Harmonogram (wspólny widok robót Planowanie + Realizacja, wygląd Lookahead; zakres 14 dni / miesiąc / całość) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram |
 | ui-funkcja | dniRobocze (dni robocze od..ost włącznie, opcjonalnie z dniami wolnymi) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-dni-robocze |
 | ui-funkcja | przesunPasek (nowe daty paska po przeciągnięciu: move zachowuje dni robocze, l/r zmienia krawędź) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-przesun |
@@ -828,6 +830,22 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stala | grupyHarmonogramu (milestone'y jako własne wiersze Harmonogramu w Realizacji) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-grupy-harmonogramu |
 | ui-stan | duzyEkran (≥1600 px — Kokpit dokleja harmonogram pod spodem) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-duzy-ekran |
 | ui-sekcja | harmonogram pod Kokpitem (duże ekrany, węzeł z fokusa) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit-harmonogram |
+| ui-input | pole czatu gałęzi w wątku Kokpitu | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit-czat |
+| ui-przycisk | „+ Bloker” gałęzi pod wątkiem Kokpitu | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit-bloker |
+| ui-stala | kontekst otwierania formularza zadania z wpisów wątku Realizacji | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zadanie-ctx |
+| ui-stan | otwarty formularz zadania (TaskModal) w Realizacji | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zadanie-modal |
+| ui-przycisk | „+ Zadanie” w nagłówku wątku gałęzi / pozycji / milestone'a | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-dodaj-zadanie |
+| ui-funkcja | wpisAktywny — który wpis wątku liczy się w chipach filtrów | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-aktywny |
+| ui-funkcja | statusWpisu — status wpisu wątku w nagłówku | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-status-wpisu |
+| ui-sekcja | nagłówek wpisu wątku: status · WBS · termin · osoba | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-naglowek |
+| ui-funkcja | zadanie blokera przypięte do wpisu blokera w wątku | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor watek-zadanie-blokera |
+| schema-pole | UserTask.constraintId — zadanie blokera | apps/backend/prisma/schema.prisma | @anchor user-task-constraint-id |
+| schema-relacja | Constraint.task — zadanie blokera | apps/backend/prisma/schema.prisma | @anchor constraint-task |
+| back-funkcja | syncConstraintFromTask — stan zadania na bloker | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-sync-constraint |
+| back-funkcja | updateForConstraint — zmiana blokera na zadanie | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-update-for-constraint |
+| back-funkcja | deleteForConstraint — usunięcie zadania blokera | apps/backend/src/user-tasks/user-tasks.service.ts | @anchor user-tasks-delete-for-constraint |
+| back-funkcja | utworzZadanie — zadanie dla nowego blokera | apps/backend/src/constraints/constraints.service.ts | @anchor constraints-create-task |
+| back-funkcja | przeniesienie zmian blokera na zadanie | apps/backend/src/constraints/constraints.service.ts | @anchor constraints-update-task |
 | ui-stan | qaOverrides (pary Q&A zapisane z Kokpitu w tej sesji) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-qa-overrides |
 | ui-funkcja | zapiszQa (edycja pary Q&A z wątku Kokpitu, PATCH /wbs-nodes/:id { qa }) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zapisz-qa |
 | ui-stala | edycjaWatku (handlery edycji wpisu w Kokpicie) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-edycja-watku |

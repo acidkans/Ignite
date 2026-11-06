@@ -18,7 +18,7 @@ export function useWatekRealizacji(nodeId) {
         };
         const [c, t, p, k] = await Promise.all([
             json(`${API_URL}/comments/order/${nodeId}`),
-            json(`${API_URL}/user-tasks/project/${nodeId}?status=ALL`),
+            json(`${API_URL}/my-tasks/project/${nodeId}?status=ALL`),
             json(`${API_URL}/acceptance-protocols/${nodeId}`),
             json(`${API_URL}/constraints/order/${nodeId}`),
         ]);

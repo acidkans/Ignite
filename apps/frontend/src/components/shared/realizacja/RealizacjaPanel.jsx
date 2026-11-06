@@ -26,6 +26,7 @@ import {
 } from './realizacjaShared';
 import Harmonogram from '../harmonogram/Harmonogram';
 import AutoResizeTextarea from '../wbs/AutoResizeTextarea';
+import TaskModal from '../wbs/TaskModal';
 import {
     zaleznyOdMilestone, pierwszyDozwolonyDzien, przesunORobocze, roznicaDniRoboczych, DAY_MS,
 } from '../harmonogram/harmonogramCzas';
@@ -56,6 +57,9 @@ const maPasekRobot = (l) => hasExecAxis(l.type) || isMilestoneNode(l);
 const NIERUCHOME_EXEC = ['IN_PROGRESS', 'DONE', 'HANDED_OVER', 'INVOICED'];
 // Dostawa = prognozowany wpis zakupu (FORECAST) pozycji z osią zakupu.
 const czyDostawa = (l, e) => hasPurchaseAxis(l.type) && entryStatusOf(e) === 'FORECAST';
+// @anchor realizacja-zadanie-ctx — otwiera formularz zadania (`TaskModal`): `otworz(task)` = edycja,
+// `otworz(null, wbsNodeId)` = nowe zadanie przypięte do węzła. Dostępne w każdym wpisie wątku bez przekazywania propsów.
+const ZadanieCtx = React.createContext(null);
 const DNI_TYG = ['nd', 'pn', 'wt', 'śr', 'cz', 'pt', 'sb'];
 const dzienMies = (d) => `${new Date(d).getDate()}.${String(new Date(d).getMonth() + 1).padStart(2, '0')}`;
 
@@ -111,7 +115,7 @@ export default function RealizacjaPanel({
     // @anchor realizacja-zakupy-api — dodawanie/edycja/usuwanie wpisów zakupu (`LeafActual`), te same
     // funkcje co szuflada w „Realizacja (tabela)" (`realization-new-purchase-drawer`).
     const zakupyApi = useMemo(() => ({ add: addActual, update: updateActual, remove: deleteActual }), [addActual, updateActual, deleteActual]);
-    const { comments, tasks, protocols, constraints, wyslij, zamknijBloker, dodajBloker, zmienBloker } = useWatekRealizacji(nodeId);
+    const { comments, tasks, protocols, constraints, odswiez: odswiezWatek, wyslij, zamknijBloker, dodajBloker, zmienBloker } = useWatekRealizacji(nodeId);
 
     // @anchor realizacja-short-overrides — krótkie nazwy zapisane w tej sesji (bez przeładowania drzewa).
     const [shortOverrides, setShortOverrides] = useState({});
@@ -165,9 +169,9 @@ export default function RealizacjaPanel({
     const focusId = idx.nodeById[focus] && !LEAF_TYPES.includes(idx.nodeById[focus]?.type) ? focus : SYNTHETIC_ROOT;
 
     const [widok, setWidokState] = useState(() => {
-        let v = czytaj(WIDOK_KEY, 'macierz');
+        let v = czytaj(WIDOK_KEY, 'kokpit');
         if (v === 'lookahead') v = 'harmonogram'; // dawny widok Lookahead = Harmonogram
-        return WIDOKI.some(([k]) => k === v) ? v : 'macierz';
+        return WIDOKI.some(([k]) => k === v) ? v : 'kokpit';
     });
     const setWidok = (v) => { setWidokState(v); zapisz(WIDOK_KEY, v); setPodglad(null); };
     const [pelne, setPelneState] = useState(() => czytaj(PELNE_KEY, '0') === '1');
@@ -180,6 +184,9 @@ export default function RealizacjaPanel({
     // zamiast widoku gałęzi. Klik w gałąź albo w przełącznik widoku czyści podgląd.
     const [podglad, setPodglad] = useState(null);
     const [filtr, setFiltr] = useState('all');
+    // @anchor realizacja-zadanie-modal — { task, wbsNodeId } otwartego formularza zadania albo null.
+    const [zadanieModal, setZadanieModal] = useState(null);
+    const zadanieCtx = useMemo(() => ({ otworz: (task, wbsNodeId) => setZadanieModal({ task: task || null, wbsNodeId: wbsNodeId || task?.wbsNodeId || null }) }), []);
 
     const wpisy = useMemo(() => zbudujWatek({ wbsNodes: nodes, comments, tasks, actuals, protocols, constraints }),
         [nodes, comments, tasks, actuals, protocols, constraints]);
@@ -447,6 +454,7 @@ export default function RealizacjaPanel({
     };
 
     return (
+        <ZadanieCtx.Provider value={zadanieCtx}>
         <div className={`rz${pelne ? ' full' : ''}`}>
             {/* ── Nagłówek zoomu ── */}
             <div className="mhead">
@@ -539,6 +547,7 @@ export default function RealizacjaPanel({
                         kolizje={kolizje.filter(k => idsPoddrzewa(focusId).has(k.materialId))}
                         milestony={milestonyPoddrzewa(focusId).map(m => ({ m, ...(msAnaliza.info[m.id] || {}) }))}
                         kolizjeMs={msAnaliza.kolizjeMs.filter(k => idsPoddrzewa(focusId).has(k.id) || idsPoddrzewa(focusId).has(k.msId))}
+                        galazId={focusId !== SYNTHETIC_ROOT ? focusId : null} wyslij={wyslij} dodajBloker={dodajBloker} ownerUsers={ownerUsers}
                     />
                 )}
                 {/* @anchor realizacja-kokpit-harmonogram — na dużych ekranach pod Kokpitem harmonogram
@@ -579,8 +588,24 @@ export default function RealizacjaPanel({
                     />
                 )}
             </div>
+            {zadanieModal && (
+                <TaskModal
+                    task={zadanieModal.task} processNodeId={nodeId}
+                    defaults={{ wbsNodeId: zadanieModal.wbsNodeId }} lockNode={!zadanieModal.task}
+                    onClose={() => setZadanieModal(null)}
+                    onSaved={() => { setZadanieModal(null); odswiezWatek(); window.dispatchEvent(new CustomEvent('user-tasks-changed')); }}
+                />
+            )}
         </div>
+        </ZadanieCtx.Provider>
     );
+}
+
+// @anchor realizacja-dodaj-zadanie — przycisk „+ Zadanie” w nagłówku karty: nowe zadanie przypięte do węzła.
+function DodajZadanie({ wbsNodeId }) {
+    const ctx = React.useContext(ZadanieCtx);
+    if (!ctx || !wbsNodeId) return null;
+    return <button className="mini-btn" onClick={() => ctx.otworz(null, wbsNodeId)} title="Nowe zadanie przypięte do tego węzła">+ Zadanie</button>;
 }
 
 // ─── Wspólne ─────────────────────────────────────────────────────────────────
@@ -629,50 +654,66 @@ function GotowoscChipy({ g }) {
     );
 }
 
+// @anchor realizacja-status-wpisu — status w nagłówku wpisu; zamknięte wpisy są przygaszone (`ev-zamk`).
+function statusWpisu(w) {
+    if (w.rodzaj === 'block') return w.otwarte ? { l: 'otwarty', cls: 'p-bad', otwarty: true } : { l: 'zamknięty', cls: 'p-ok' };
+    if (w.rodzaj === 'qa') return w.otwarte ? { l: 'bez odpowiedzi', cls: 'p-org', otwarty: true } : { l: 'odpowiedziane', cls: 'p-ok' };
+    if (w.rodzaj === 'task') return w.otwarte ? { l: w.poTerminie ? 'po terminie' : 'otwarte', cls: w.poTerminie ? 'p-bad' : 'p-warn', otwarty: true } : { l: 'wykonane', cls: 'p-ok' };
+    if (w.rodzaj === 'chat' && w.zamkniety) return { l: 'rozwiązany', cls: 'p-ok' };
+    return null;
+}
+
 // @anchor realizacja-wpis — jeden wpis wątku (czat, bloker, pytanie, zakup, zadanie, odbiór).
 // `edycja` (Kokpit) = klik w treść rozwija wpis: odpowiedź do czatu pozycji, edycja pary Q&A, edycja blokera.
 function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
     const r = WATEK_RODZAJE[w.rodzaj];
     const blokerKonstr = w.rodzaj === 'block' && w.constraintId;
     const [rozwiniety, setRozwiniety] = useState(false);
-    const rozwijalny = !!edycja && !!w.nodeId;
+    const zadCtx = React.useContext(ZadanieCtx);
+    const rozwijalny = !!edycja && !!w.nodeId && w.rodzaj !== 'task';
+    const st = statusWpisu(w);
+    const termin = blokerKonstr ? w.termin : w.rodzaj === 'task' ? w.zadanie?.plannedEnd : null;
+    const zamkniety = st && !st.otwarty;
     return (
-        <div className={`ev${rozwijalny ? ' ev-rozw' : ''}${rozwiniety ? ' on' : ''}`}>
+        <div className={`ev${rozwijalny ? ' ev-rozw' : ''}${rozwiniety ? ' on' : ''}${zamkniety ? ' ev-zamk' : ''}`}>
             <span className={`ik ${r.cls}`}>{r.znak}</span>
             <div style={{ minWidth: 0 }}>
+                {/* @anchor realizacja-wpis-naglowek — nagłówek wpisu: status · gałąź › pozycja (2 najniższe poziomy WBS)
+                    · rodzaj i termin · na końcu osoba i kiedy (wyszarzone); akcje po prawej. */}
                 <div className="who">
-                    {w.kto && <b>{w.kto}</b>}
-                    {w.kiedy && <span>{kiedyTekst(w.kiedy)}</span>}
-                    {nazwaPozycji && <button className="lnk" onClick={onPozycja}>{nazwaPozycji}</button>}
+                    {st && <span className={`pill ${st.cls}`} style={{ padding: '0 6px' }}>{st.l}</span>}
+                    {nazwaPozycji && <button className="lnk" onClick={onPozycja} title={nazwaPozycji}>{nazwaPozycji}</button>}
                     {blokerKonstr && <span className="cnt c-mut">{RODZAJE_BLOKERA[w.rodzajBlokera]?.label || w.rodzajBlokera}</span>}
-                    {blokerKonstr && w.termin && <span className={w.poTerminie ? 'dpos' : ''}>termin {dzienMies(w.termin)}{w.poTerminie ? ' — minął' : ''}</span>}
+                    {termin && <span className={w.poTerminie ? 'dpos' : ''}>termin {dzienMies(termin)}{w.poTerminie ? ' — minął' : ''}</span>}
                     {blokerKonstr && w.wplywDni ? <span>wpływ +{w.wplywDni} dni</span> : null}
                     {w.mail && <span className="mono">{w.mail}</span>}
                     {w.prognoza && <span className="p-info">prognoza</span>}
-                    {w.otwarte && (w.rodzaj === 'block' || w.rodzaj === 'qa') && <span className={`pill ${w.rodzaj === 'qa' ? 'p-org' : 'p-bad'}`} style={{ padding: '0 6px' }}>otwarte</span>}
-                    {w.zamkniety && <span className="p-ok">zamknięty</span>}
                     {w.blokerem && <span className="cnt c-bad">bloker</span>}
-                    {akcje && (
-                        <span className="act">
-                            {w.rodzaj === 'block' && w.otwarte && (
-                                <button className="mini-btn ok" onClick={() => akcje.zamknij(w)} title="Przeszkoda usunięta — czerwony licznik zgaśnie">rozwiązane</button>
-                            )}
-                            {blokerKonstr && !w.otwarte && (
-                                <button className="mini-btn" onClick={() => akcje.otworz(w)}>otwórz ponownie</button>
-                            )}
-                            {w.rodzaj === 'qa' && w.otwarte && !w.blokerem && w.qaId && (
-                                <button className="mini-btn bad" onClick={() => akcje.zPytania(w)} title="Bez odpowiedzi nie ruszymy — pytanie staje się blokerem „decyzja klienta”">Ustaw bloker</button>
-                            )}
-                        </span>
-                    )}
-                    {rozwijalny && (
-                        <button className="mini-btn" style={akcje ? undefined : { marginLeft: 'auto' }} onClick={() => setRozwiniety(v => !v)}
-                            title={rozwiniety ? 'Zwiń' : 'Rozwiń — odpowiedz albo edytuj bez wchodzenia w pozycję'}>{rozwiniety ? 'zwiń' : 'rozwiń'}</button>
-                    )}
+                    {w.kto && <span className="os">{w.kto}</span>}
+                    {w.kiedy && w.rodzaj !== 'task' && <span className="os">{kiedyTekst(w.kiedy)}</span>}
+                    <span className="act">
+                        {akcje && w.rodzaj === 'block' && w.otwarte && (
+                            <button className="mini-btn ok" onClick={() => akcje.zamknij(w)} title="Przeszkoda usunięta — czerwony licznik zgaśnie">rozwiązane</button>
+                        )}
+                        {akcje && blokerKonstr && !w.otwarte && (
+                            <button className="mini-btn" onClick={() => akcje.otworz(w)}>otwórz ponownie</button>
+                        )}
+                        {akcje && w.rodzaj === 'qa' && w.otwarte && !w.blokerem && w.qaId && (
+                            <button className="mini-btn bad" onClick={() => akcje.zPytania(w)} title="Bez odpowiedzi nie ruszymy — pytanie staje się blokerem „decyzja klienta”">Ustaw bloker</button>
+                        )}
+                        {w.zadanie && zadCtx && (
+                            <button className="mini-btn" onClick={() => zadCtx.otworz(w.zadanie)}
+                                title={w.rodzaj === 'task' ? 'Otwórz zadanie — termin, status, odpowiedzialny' : 'Zadanie blokera — jego zamknięcie zamyka bloker'}>{w.rodzaj === 'task' ? 'edytuj' : 'zadanie'}</button>
+                        )}
+                        {rozwijalny && (
+                            <button className="mini-btn" onClick={() => setRozwiniety(v => !v)}
+                                title={rozwiniety ? 'Zwiń' : 'Rozwiń — odpowiedz albo edytuj bez wchodzenia w pozycję'}>{rozwiniety ? 'zwiń' : 'rozwiń'}</button>
+                        )}
+                    </span>
                 </div>
-                <div className="txt" onClick={rozwijalny && !rozwiniety ? () => setRozwiniety(true) : undefined}>{w.tekst}</div>
+                <div className={`txt${w.rodzaj === 'qa' ? ' qa-p' : ''}`} onClick={rozwijalny && !rozwiniety ? () => setRozwiniety(true) : w.rodzaj === 'task' && w.zadanie && zadCtx ? () => zadCtx.otworz(w.zadanie) : undefined}>{w.tekst}</div>
                 {w.notatka && <div className="muted" style={{ fontSize: 12 }}>{w.notatka}</div>}
-                {w.odpowiedz && !(rozwiniety && w.rodzaj === 'qa') && <div className="ans">{w.odpowiedz}</div>}
+                {w.odpowiedz && !(rozwiniety && w.rodzaj === 'qa') && <div className={`ans${w.rodzaj === 'qa' ? ' qa-o' : ''}`}>{w.odpowiedz}</div>}
                 {rozwiniety && <WpisEdycja w={w} edycja={edycja} onZamknij={() => setRozwiniety(false)} />}
             </div>
         </div>
@@ -741,14 +782,20 @@ function WpisEdycja({ w, edycja, onZamknij }) {
 }
 
 // @anchor realizacja-filtry-watku — chipy rodzajów nad wątkiem.
+// @anchor realizacja-wpis-aktywny — wpis liczony w chipach: bloker, pytanie i zadanie tylko otwarte,
+// czat bez rozwiązanych; zakupy i odbiory zawsze.
+const wpisAktywny = (w) => (['block', 'qa', 'task'].includes(w.rodzaj) ? !!w.otwarte : !w.zamkniety);
 function FiltryWatku({ wpisy, filtr, setFiltr }) {
     const klucze = ['all', ...Object.keys(WATEK_RODZAJE)];
     return (
         <div className="chips">
             {klucze.map(k => {
-                const n = k === 'all' ? wpisy.length : wpisy.filter(w => w.rodzaj === k).length;
+                // Licznik = tylko aktywne wpisy (`wpisAktywny`); lista pod chipem nadal pokazuje wszystkie.
+                const wszystkie = k === 'all' ? wpisy : wpisy.filter(w => w.rodzaj === k);
+                const n = wszystkie.filter(wpisAktywny).length;
                 return (
-                    <button key={k} onClick={() => setFiltr(k)} className={`chip${filtr === k ? ' on' : ''}`}>
+                    <button key={k} onClick={() => setFiltr(k)} className={`chip${filtr === k ? ' on' : ''}`}
+                        title={`aktywne: ${n} · wszystkie: ${wszystkie.length}`}>
                         {k === 'all' ? 'Wszystko' : WATEK_RODZAJE[k].label} <span className="mono">{n}</span>
                     </button>
                 );
@@ -764,16 +811,16 @@ const Karta = ({ tytul, prawa, children, style }) => (
     </div>
 );
 
-// @anchor realizacja-szerokosci-kolumn — szerokości trzech kart szczegółów pozycji (wątek · zakupy ·
-// blokery) w procentach; przeciągane uchwytem między kartami, zapamiętane w localStorage przeglądarki.
-const KOLUMNY_KEY = 'realizacja-szczegoly-kolumny';
-const KOLUMNY_DOMYSLNE = [28, 47, 25];
-const KOLUMNA_MIN = 12;
+// @anchor realizacja-szerokosci-kolumn — szerokości dwóch kolumn (wątek · szczegóły) w procentach,
+// domyślnie po połowie; przeciągane uchwytem, zapamiętane w localStorage przeglądarki.
+const KOLUMNY_KEY = 'realizacja-kolumny-2';
+const KOLUMNY_DOMYSLNE = [50, 50];
+const KOLUMNA_MIN = 20;
 function useSzerokosciKolumn() {
     const [k, setK] = useState(() => {
         try {
             const v = JSON.parse(localStorage.getItem(KOLUMNY_KEY));
-            if (Array.isArray(v) && v.length === 3 && v.every(x => Number.isFinite(x) && x >= KOLUMNA_MIN)) return v;
+            if (Array.isArray(v) && v.length === 2 && v.every(x => Number.isFinite(x) && x >= KOLUMNA_MIN)) return v;
         } catch { /* brak albo zepsuty wpis */ }
         return KOLUMNY_DOMYSLNE;
     });
@@ -810,22 +857,17 @@ function useSzerokosciKolumn() {
     return { k, zacznij, resetuj };
 }
 
-// @anchor realizacja-trzy-kolumny — stały układ szczegółów gałęzi i pozycji: wątek (lewa) · środek ·
-// blokery (prawa). Te same zapamiętane szerokości w Kokpicie i w szczegółach pozycji.
-function TrzyKolumny({ lewa, srodek, prawa }) {
+// @anchor realizacja-dwie-kolumny — układ Kokpitu, pozycji i milestone'a: wątek (lewa) · szczegóły (prawa).
+// Blokery są w wątku (filtr „Blokery”), nowy bloker dodaje się pod wątkiem (`realizacja-nowy-bloker`).
+function DwieKolumny({ lewa, prawa }) {
     const { k, zacznij, resetuj } = useSzerokosciKolumn();
     const ref = useRef(null);
-    const uchwyt = (i) => (
-        <div className="kol-uchwyt" title="Przeciągnij, by zmienić szerokość · dwuklik = domyślne"
-            onPointerDown={e => zacznij(e, i, ref.current)} onDoubleClick={resetuj} />
-    );
     return (
         <div className="expin rs" ref={ref}
-            style={{ gridTemplateColumns: `minmax(0, ${k[0]}fr) 8px minmax(0, ${k[1]}fr) 8px minmax(0, ${k[2]}fr)` }}>
+            style={{ gridTemplateColumns: `minmax(0, ${k[0]}fr) 8px minmax(0, ${k[1]}fr)` }}>
             <div className="stack">{lewa}</div>
-            {uchwyt(0)}
-            <div className="stack">{srodek}</div>
-            {uchwyt(1)}
+            <div className="kol-uchwyt" title="Przeciągnij, by zmienić szerokość · dwuklik = po połowie"
+                onPointerDown={e => zacznij(e, 0, ref.current)} onDoubleClick={resetuj} />
             <div className="stack">{prawa}</div>
         </div>
     );
@@ -906,7 +948,7 @@ const Pusto = ({ children }) => <div className="ev"><span /><div className="mute
 
 // @anchor realizacja-bloker-form — nowy bloker na pozycji: opis, rodzaj, termin usunięcia,
 // wpływ w dniach i właściciel (konto z zespołu zamówienia).
-function BlokerForm({ wbsNodeId, dodajBloker, ownerUsers = [] }) {
+function BlokerForm({ wbsNodeId, dodajBloker, ownerUsers = [], onDodano, onAnuluj }) {
     const pusty = { title: '', kind: 'MATERIAL', dueAt: '', impactDays: '', ownerId: '' };
     const [f, setF] = useState(pusty);
     const [zapis, setZapis] = useState(false);
@@ -920,6 +962,7 @@ function BlokerForm({ wbsNodeId, dodajBloker, ownerUsers = [] }) {
                 impactDays: f.impactDays === '' ? null : Number(f.impactDays), ownerId: f.ownerId || null,
             });
             setF(pusty);
+            onDodano?.();
         } catch { alert('Nie udało się dodać blokera'); }
         finally { setZapis(false); }
     };
@@ -938,9 +981,23 @@ function BlokerForm({ wbsNodeId, dodajBloker, ownerUsers = [] }) {
                 </select>
                 <input className="in" type="number" min="0" value={f.impactDays} onChange={ustaw('impactDays')} placeholder="wpływ, dni" title="O ile dni przesunie roboty" style={{ width: 96, flex: 'none' }} />
                 <button className="btn acc" onClick={dodaj} disabled={!f.title.trim() || zapis}>Dodaj bloker</button>
+                {onAnuluj && <button className="btn" onClick={onAnuluj}>Anuluj</button>}
             </div>
         </div>
     );
+}
+
+// @anchor realizacja-nowy-bloker — „+ Bloker” pod wątkiem: rozwija formularz blokera węzła (gałęzi, pozycji
+// albo milestone'a); po dodaniu zwija się, a bloker pojawia się w wątku.
+function NowyBloker({ wbsNodeId, dodajBloker, ownerUsers }) {
+    const [otwarty, setOtwarty] = useState(false);
+    if (!wbsNodeId) return null;
+    if (!otwarty) return (
+        <div style={{ padding: '6px 12px 0' }}>
+            <button className="mini-btn bad" onClick={() => setOtwarty(true)} title="Co blokuje roboty — z terminem, wpływem i właścicielem (powstaje też zadanie)">+ Bloker</button>
+        </div>
+    );
+    return <BlokerForm wbsNodeId={wbsNodeId} dodajBloker={dodajBloker} ownerUsers={ownerUsers} onDodano={() => setOtwarty(false)} onAnuluj={() => setOtwarty(false)} />;
 }
 
 // ─── Milestone'y ─────────────────────────────────────────────────────────────
@@ -968,43 +1025,32 @@ function MilestonyChipy({ milestony = [], pelne, onOtworz }) {
 // @anchor realizacja-szczegoly-milestone — szczegóły milestone'a: wątek (czat z @wzmiankami) · termin,
 // status i pytania Q&A · blokery z formularzem. Daty zmienia się na Harmonogramie.
 function SzczegolyMilestone({ node, canEdit, wpisy, wyslij, dodajBloker, akcje, ownerUsers }) {
-    const pytania = wpisy.filter(w => w.rodzaj === 'qa');
-    const blokery = wpisy.filter(w => w.rodzaj === 'block' && w.otwarte);
-    const watek = wpisy.filter(w => !(w.rodzaj === 'block' && w.constraintId) && w.rodzaj !== 'qa');
     const zadania = wpisy.filter(w => w.rodzaj === 'task');
     const status = PLAN_STATUS_META[planStatusFromAny(node.status)]?.label || '—';
     return (
-        <TrzyKolumny
+        <DwieKolumny
             lewa={
-                <Karta tytul="Wątek milestone'a" prawa={`${watek.length} wpisów`}>
-                    <div className="feed scroll" style={{ maxHeight: 320 }}>
-                        {watek.length ? watek.map(w => <Wpis key={w.id} w={w} akcje={akcje} />)
+                <Karta tytul="Wątek milestone'a" prawa={<>{wpisy.length} wpisów <DodajZadanie wbsNodeId={node.id} /></>}>
+                    <div className="feed scroll" style={{ maxHeight: 420 }}>
+                        {wpisy.length ? wpisy.map(w => <Wpis key={w.id} w={w} akcje={akcje} />)
                             : <Pusto>Brak wpisów — pierwszy dodasz poniżej.</Pusto>}
                     </div>
+                    {canEdit && <NowyBloker wbsNodeId={node.id} dodajBloker={dodajBloker} ownerUsers={ownerUsers} />}
                     <PoleCzatu uzytkownicy={ownerUsers} placeholder="Napisz do czatu milestone'a… (@ oznacza osobę)"
                         onWyslij={(t, ids) => wyslij(node.id, t, false, ids)} />
                 </Karta>
             }
-            srodek={
+            prawa={
                 <Karta tytul="Milestone" prawa={zakresMs(node)}>
                     <div className="mini">
                         <Wiersz l="Termin" v={zakresMs(node)} />
                         <Wiersz l="Status" v={status} />
                         <Wiersz l="Zadania otwarte" v={zadania.filter(z => z.otwarte).length + (zadania.some(z => z.poTerminie) ? ' · po terminie' : '')} />
+                        <Wiersz l="Pytania bez odpowiedzi" v={wpisy.filter(w => w.rodzaj === 'qa' && w.otwarte).length} />
+                        <Wiersz l="Blokery otwarte" v={wpisy.filter(w => w.rodzaj === 'block' && w.otwarte).length} />
                         <Wiersz l="Odpowiedzialny" v={node.owner || '—'} />
                         <div className="muted" style={{ fontSize: 12 }}>Termin zmieniasz na Harmonogramie (przeciągnij romb) albo w strukturze WBS.</div>
                     </div>
-                    <div className="feed" style={{ borderTop: '1px solid var(--line)' }}>
-                        {pytania.length ? pytania.map(w => <Wpis key={w.id} w={w} akcje={akcje} />) : <Pusto>Brak pytań Q&A przy tym milestonie.</Pusto>}
-                    </div>
-                </Karta>
-            }
-            prawa={
-                <Karta tytul="Blokery" prawa={blokery.length ? `${blokery.length} otwarte` : null}>
-                    <div className="feed">
-                        {blokery.length ? blokery.map(w => <Wpis key={w.id} w={w} akcje={akcje} />) : <Pusto>Nic nie blokuje tego milestone'a.</Pusto>}
-                    </div>
-                    {canEdit && <BlokerForm wbsNodeId={node.id} dodajBloker={dodajBloker} ownerUsers={ownerUsers} />}
                 </Karta>
             }
         />
@@ -1094,22 +1140,22 @@ function RozwinietaPozycja({ node, r, planValue, card, zakupyApi, canEdit, canSe
     const zadania = wpisy.filter(w => w.rodzaj === 'task');
     const pytania = wpisy.filter(w => w.rodzaj === 'qa');
     const blokery = wpisy.filter(w => w.rodzaj === 'block' && w.otwarte);
-    const watek = wpisy.filter(w => !(w.rodzaj === 'block' && w.constraintId));
 
     return (
-        <TrzyKolumny
+        <DwieKolumny
             lewa={
-            <Karta tytul="Wątek pozycji" prawa={`${watek.length} wpisów`}>
-                <div className="feed scroll" style={{ maxHeight: 320 }}>
-                    {watek.length ? watek.map(w => <Wpis key={w.id} w={w} akcje={akcje} />)
+            <Karta tytul="Wątek pozycji" prawa={<>{wpisy.length} wpisów <DodajZadanie wbsNodeId={node.id} /></>}>
+                <div className="feed scroll" style={{ maxHeight: 420 }}>
+                    {wpisy.length ? wpisy.map(w => <Wpis key={w.id} w={w} akcje={akcje} />)
                         : <Pusto>Brak wpisów — pierwszy dodasz poniżej.</Pusto>}
                 </div>
+                {canEdit && <NowyBloker wbsNodeId={node.id} dodajBloker={dodajBloker} ownerUsers={ownerUsers} />}
                 <PoleCzatu uzytkownicy={ownerUsers} placeholder="Napisz do czatu pozycji… (@ oznacza osobę)"
                     onWyslij={(t, ids) => wyslij(node.id, t, false, ids)} />
             </Karta>
 
             }
-            srodek={
+            prawa={
             <Karta tytul={hasPurchaseAxis(node.type) ? 'Zakupy' : 'Wykonanie'}>
                 <div className="mini">
                     {hasPurchaseAxis(node.type) && <OsWybor node={node} axis="purchase" readOnly={!canEdit} saveAxis={saveAxis} />}
@@ -1124,8 +1170,19 @@ function RozwinietaPozycja({ node, r, planValue, card, zakupyApi, canEdit, canSe
                     )}
                     <Wiersz l="Ilość" v={`${r.qty} z ${r.plan} ${node.unit || ''}`} />
                     <div className="r"><span>Gotowość do robót</span><GotowoscChipy g={gotowosc} /></div>
+                    <Wiersz l="Blokery otwarte" v={blokery.length} />
+                    <Wiersz l="Zadania otwarte" v={zadania.filter(z => z.otwarte).length + (zadania.some(z => z.poTerminie) ? ' · po terminie' : '')} />
+                    <Wiersz l="Pytania bez odpowiedzi" v={pytania.filter(p => p.otwarte).length} />
+                    <Wiersz l="Odpowiedzialny" v={node.owner || '—'} />
                     <div className="r"><span>Pełna nazwa</span></div>
                     <div className="muted" style={{ fontSize: 12 }}>{node.name}</div>
+                    <div>
+                        <div className="lab">Krótka nazwa</div>
+                        <input className="in" style={{ width: '100%' }} value={short} onChange={e => setShort(e.target.value)} disabled={!canEdit}
+                            onBlur={() => { if ((short.trim() || null) !== (node.shortName || null)) zapiszShort(node.id, short); }}
+                            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                            placeholder={nazwaWyswietlana({ name: node.name })} />
+                    </div>
                 </div>
                 {/* @anchor realizacja-szuflada-zakupow — wpisy zakupu/wykonania pozycji: lista edytowalna
                     w miejscu + przycisk dodania, ten sam komponent co w „Realizacja (tabela)". */}
@@ -1136,27 +1193,6 @@ function RozwinietaPozycja({ node, r, planValue, card, zakupyApi, canEdit, canSe
                             onUpdate={zakupyApi.update} onDelete={zakupyApi.remove} />
                     </div>
                 )}
-            </Karta>
-            }
-            prawa={
-
-            <Karta tytul="Blokery i powiązania" prawa={blokery.length ? `${blokery.length} otwarte` : null}>
-                <div className="feed">
-                    {blokery.length ? blokery.map(w => <Wpis key={w.id} w={w} akcje={akcje} />) : <Pusto>Nic nie blokuje tej pozycji.</Pusto>}
-                </div>
-                {canEdit && <BlokerForm wbsNodeId={node.id} dodajBloker={dodajBloker} ownerUsers={ownerUsers} />}
-                <div className="mini" style={{ borderTop: '1px solid var(--line)' }}>
-                    <Wiersz l="Zadania otwarte" v={zadania.filter(z => z.otwarte).length + (zadania.some(z => z.poTerminie) ? ' · po terminie' : '')} />
-                    <Wiersz l="Pytania bez odpowiedzi" v={pytania.filter(p => p.otwarte).length} />
-                    <Wiersz l="Odpowiedzialny" v={node.owner || '—'} />
-                    <div>
-                        <div className="lab">Krótka nazwa</div>
-                        <input className="in" style={{ width: '100%' }} value={short} onChange={e => setShort(e.target.value)} disabled={!canEdit}
-                            onBlur={() => { if ((short.trim() || null) !== (node.shortName || null)) zapiszShort(node.id, short); }}
-                            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                            placeholder={nazwaWyswietlana({ name: node.name })} />
-                    </div>
-                </div>
             </Karta>
             }
         />
@@ -1190,7 +1226,7 @@ function OsWybor({ node, axis, readOnly, saveAxis }) {
 // ─── Kokpit ──────────────────────────────────────────────────────────────────
 
 // @anchor realizacja-kokpit — KPI gałęzi, blokery i decyzje, najbliższe 14 dni z gotowością, wątek gałęzi.
-function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMoney, canEdit, nodeById, pelne, filtr, setFiltr, onOtworz, akcje, gotowosc, edycja, kolizje = [], milestony = [], kolizjeMs = [] }) {
+function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMoney, canEdit, nodeById, pelne, filtr, setFiltr, onOtworz, akcje, gotowosc, edycja, kolizje = [], milestony = [], kolizjeMs = [], galazId = null, wyslij, dodajBloker, ownerUsers = [] }) {
     const k = useMemo(() => {
         // @anchor realizacja-kokpit-wynik — przychód z oferty (`offerPriceOf`, ta sama formuła co Budżet),
         // zysk planowany = przychód − koszt planowany; prognoza zysku liczy koszt każdej pozycji jako
@@ -1218,17 +1254,22 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
         };
     }, [liscie, rowOf, protocols]);
 
-    const nazwa = (id) => nodeById[id] ? nazwaWyswietlana(nodeById[id], pelne) : '';
-    // @anchor realizacja-kolejnosc-blokerow — najpierw blokery po terminie, potem wg terminu i wpływu
-    // w dniach (bez terminu na końcu), dalej pytania bez odpowiedzi.
-    const decyzje = wpisy.filter(w => w.otwarte && (w.rodzaj === 'block' || w.rodzaj === 'qa')).sort((a, b) => {
-        const ra = a.rodzaj === 'block' ? 0 : 1, rb = b.rodzaj === 'block' ? 0 : 1;
-        if (ra !== rb) return ra - rb;
+    // Ścieżka wpisu: dwa najniższe poziomy WBS („gałąź › pozycja”).
+    const nazwa = (id) => {
+        const n = nodeById[id];
+        if (!n) return '';
+        const p = n.parentId && nodeById[n.parentId];
+        return p ? `${nazwaWyswietlana(p, pelne)} › ${nazwaWyswietlana(n, pelne)}` : nazwaWyswietlana(n, pelne);
+    };
+    // @anchor realizacja-kolejnosc-blokerow — filtr Blokery / Q&A: najpierw otwarte, wśród nich po terminie,
+    // potem wg terminu i wpływu w dniach (bez terminu na końcu); zamknięte na końcu.
+    const kolejnoscDecyzji = (a, b) => {
+        if (!!a.otwarte !== !!b.otwarte) return a.otwarte ? -1 : 1;
         if (!!a.poTerminie !== !!b.poTerminie) return a.poTerminie ? -1 : 1;
         const ta = a.termin ? new Date(a.termin).getTime() : Infinity, tb = b.termin ? new Date(b.termin).getTime() : Infinity;
         if (ta !== tb) return ta - tb;
         return (b.wplywDni || 0) - (a.wplywDni || 0);
-    });
+    };
     const dni = dniOkna(LOOKAHEAD_DNI);
     const najblizsze = liscie.map(l => {
         const d0 = indeksDnia(l.planOd, dni[0]);
@@ -1240,6 +1281,7 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
         return { l, d0, d1, dost, rob, klucz: Math.min(rob ? Math.max(d0, 0) : 99, dost ?? 99) };
     }).filter(x => x.rob || x.dost !== undefined).sort((a, b) => a.klucz - b.klucz);
     const widoczne = wpisy.filter(w => filtr === 'all' || w.rodzaj === filtr);
+    if (filtr === 'block' || filtr === 'qa') widoczne.sort(kolejnoscDecyzji);
 
     return (
         <>
@@ -1257,18 +1299,26 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
                 <Kafel l="Zadania" v={sygFokus.zad} s={`${sygFokus.poTerminie} po terminie`} alarmS={sygFokus.poTerminie > 0} />
             </div>
             <div style={{ marginTop: 16 }}>
-            <TrzyKolumny
+            <DwieKolumny
                 lewa={<>
-                <Karta tytul="Wątek gałęzi" prawa={`wszystko z ${liscie.length} pozycji`}>
+                <Karta tytul="Wątek gałęzi" prawa={<>wszystko z {liscie.length} pozycji <DodajZadanie wbsNodeId={galazId} /></>}>
                     <FiltryWatku wpisy={wpisy} filtr={filtr} setFiltr={setFiltr} />
                     <div className="feed scroll" style={{ maxHeight: 560 }}>
                         {widoczne.length ? widoczne.map(w => (
                             <Wpis key={w.id} w={w} nazwaPozycji={nazwa(w.nodeId)} onPozycja={() => onOtworz(w.nodeId)} akcje={canEdit ? akcje : null} edycja={edycja} />
                         )) : <Pusto>Brak wpisów tego rodzaju.</Pusto>}
                     </div>
+                    {/* @anchor realizacja-kokpit-czat — wpis do czatu gałęzi wprost z Kokpitu (`Comment.wbsNodeId` = gałąź);
+                        na całym zamówieniu nie ma węzła, do którego przypiąć wpis — wtedy podpowiedź. */}
+                    {/* @anchor realizacja-kokpit-bloker — nowy bloker na gałęzi z Kokpitu (liczy się w gotowości jej pozycji). */}
+                    {canEdit && <NowyBloker wbsNodeId={galazId} dodajBloker={dodajBloker} ownerUsers={ownerUsers} />}
+                    {galazId
+                        ? <PoleCzatu uzytkownicy={ownerUsers} placeholder="Napisz do czatu gałęzi… (@ oznacza osobę)"
+                            onWyslij={(t, ids) => wyslij(galazId, t, false, ids)} />
+                        : <div className="muted" style={{ fontSize: 12, padding: '8px 12px' }}>Wybierz gałąź w drzewie, by pisać w jej czacie.</div>}
                 </Karta>
                 </>}
-                srodek={<>
+                prawa={<>
                     {milestony.length > 0 && <NajblizszeMilestony milestony={milestony} pelne={pelne} onOtworz={onOtworz} />}
                     {kolizjeMs.length > 0 && <KolizjeMilestone kolizje={kolizjeMs} pelne={pelne} onOtworz={onOtworz} akcje={canEdit ? akcje : null} />}
                     {kolizje.length > 0 && <KolizjeDostaw kolizje={kolizje} pelne={pelne} onOtworz={onOtworz} akcje={canEdit ? akcje : null} />}
@@ -1288,15 +1338,6 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
                                 )) : <tr><td colSpan={3} className="muted">Brak robót i dostaw w oknie.</td></tr>}
                             </tbody>
                         </table>
-                    </Karta>
-                </>}
-                prawa={<>
-                    <Karta tytul="Blokery i decyzje" prawa="po terminie i wpływie na roboty">
-                        <div className="feed">
-                            {decyzje.length ? decyzje.map(w => (
-                                <Wpis key={w.id} w={w} nazwaPozycji={nazwa(w.nodeId)} onPozycja={() => onOtworz(w.nodeId)} akcje={canEdit ? akcje : null} edycja={edycja} />
-                            )) : <Pusto>Nic nie blokuje tej gałęzi.</Pusto>}
-                        </div>
                     </Karta>
                 </>}
             />

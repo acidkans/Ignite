@@ -1,3 +1,23 @@
+## 2026-11-06 — feat(realizacja): bloker jako zadanie, zadania w Realizacji, czat i bloker w Kokpicie, dwie kolumny bez panelu blokerów, Kokpit domyślnym widokiem (v2026.11.06.1244)
+
+### schema.prisma
+- dodano pole `schema-pole` `constraintId String? @unique` w modelu `UserTask` (relacja `schema-relacja` `UserTask.constraint` ↔ `Constraint.task`, onDelete SetNull) — zadanie blokera; migracja `20261106120000_user_task_constraint`
+
+### architektura / API
+- `back-serwis` `ConstraintsService.create` tworzy zadanie blokera („Bloker: …”, odpowiedzialny = właściciel blokera albo autor, termin = `dueAt`); `update` przenosi status/tytuł/opis/termin/właściciela na zadanie; `remove` usuwa zadanie
+- `back-serwis` `UserTasksService.update` i sync MS To Do: zamknięcie zadania blokera (DONE/CANCELLED) zamyka bloker, ponowne otwarcie go otwiera (`syncConstraintFromTask`)
+- `ui-hook` `useWatekRealizacji` pobiera zadania z `GET /my-tasks/project/:id` (było `/user-tasks/...` — 404, zadania nigdy nie dochodziły)
+- Kokpit: pole czatu gałęzi, formularz blokera gałęzi, „+ Zadanie” (TaskModal) w wątkach; Kokpit domyślnym widokiem Realizacji
+- Kokpit / Pozycja / Milestone: układ dwóch kolumn (wątek · szczegóły), bez panelu blokerów — blokery w wątku (filtr Blokery sortuje po terminie i wpływie), „+ Bloker” pod wątkiem; nagłówek wpisu: status · gałąź › pozycja · termin · osoba; Q&A jako akapity P/O; chipy liczą tylko aktywne wpisy
+
+### słownik
+- dodano `realizacja-kokpit-czat`, `realizacja-kokpit-bloker`, `realizacja-zadanie-ctx`, `realizacja-zadanie-modal`, `realizacja-dodaj-zadanie`, `realizacja-wpis-aktywny`, `realizacja-status-wpisu`, `realizacja-wpis-naglowek`, `realizacja-nowy-bloker`, `realizacja-qa-akapity`, `watek-zadanie-blokera`, `user-task-constraint-id`, `constraint-task`, `user-tasks-sync-constraint`, `user-tasks-update-for-constraint`, `user-tasks-delete-for-constraint`, `constraints-create-task`, `constraints-update-task`
+- zmieniono `realizacja-trzy-kolumny` → `realizacja-dwie-kolumny` (`DwieKolumny`)
+
+### wytyczne
+- `schema-pole` `UserTask.constraintId` — zadanie blokera nie jest osobnym wpisem wątku Realizacji; status synchronizuje się w obie strony, bez pętli (zapis tylko gdy stan się różni)
+- `back-serwis` `ConstraintsService` — błąd tworzenia/aktualizacji zadania nie cofa operacji na blokerze (tylko log)
+
 ## 2026-11-05 — feat(mail): eksport strategii tylko do zespołu — odbiorcy z Ignite, bez kopii na OneDrive, podpowiedzi PM z użytkowników (v2026.11.05.2224)
 
 ### architektura / API

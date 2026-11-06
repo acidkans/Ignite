@@ -134,6 +134,8 @@ export class TaskSyncService {
             },
           });
           await this.userTasks.syncReminderForTask(updated.id, userId, taskStart(updated));
+          // Zadanie blokera odhaczone w To Do zamyka bloker (`user-tasks-sync-constraint`).
+          if (status !== existing.status) await this.userTasks.syncConstraintFromTask(updated.id, userId);
           const moved = (existing.plannedEnd?.getTime() ?? null) !== (plannedEnd?.getTime() ?? null) || existing.title !== task.title || (existing.description ?? null) !== description;
           if (moved && (existing.msEventId || existing.durationMinutes)) {
             await this.userTasks.syncCalendarEvent(updated.id);
