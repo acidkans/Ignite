@@ -1,3 +1,16 @@
+## 2026-11-07 — feat(realizacja): maile w wątku jako rozmowy — odpowiedź wcięta pod pierwotnym mailem, osobne rozmowy, treść bez podpisu, formularz nowego maila po rozwinięciu (v2026.11.07.2227)
+
+### architektura / API
+- `back-endpoint` `GET /watek-mail/order/:processNodeId` zwraca `replyToReplyId` (mail wysłany jako odpowiedź na odpowiedź klienta) — front składa z tego rozmowy
+- `ui-funkcja` rozmowy w `zbudujWatek`: jeden wpis „mail” na rozmowę (pierwszy mail na górze, pod nim odpowiedzi i kolejne maile po czasie, wcięte); nagłówek „odebrano odpowiedź (n)” / „czeka na odpowiedź”, „odpowiedz mailem” odpowiada na ostatnią odpowiedź
+- `back-funkcja` / `ui-funkcja` `bezPodpisu` — z odpowiedzi wycinany podpis (formuły pożegnalne PL/EN/DE, „-- ”, „Sent from…”, końcowy blok kontaktowy); przy nowych odpowiedziach już przy imporcie, istniejące na froncie; „cały mail” pokazuje oryginał
+- odpowiedzi w rozmowie bez pól adresatów i tematu — tylko kto, kiedy i treść (pełne dane pod „cały mail”); pierwszy mail rozmowy pokazuje tylko datę wysłania (Od/Do/DW w podpowiedzi po najechaniu); w Q&A usunięte pole „Źródło”
+- `ui-przycisk` `NowyMail` — formularz zwinięty do „+ Nowy mail”, po wysyłce / Anuluj zwija się
+
+### słownik
+- dodano `watek-mail-rozmowy`, `watek-bez-podpisu`, `mail-bez-podpisu`, `realizacja-rozmowa-maila`
+- usunięto `watek-mail-po-komentarzu`, `watek-mail-info`
+
 ## 2026-11-07 — feat(realizacja): jeden czytelny układ każdego wpisu wątku — rodzaj, gałąź, status, temat, szczegóły (właściciel, termin), treść; Zadanie na szaro (v2026.11.07.2211)
 
 ### architektura / API

@@ -78,13 +78,17 @@ export class WatekMailService {
   async list(processNodeId: string) {
     const rows = await this.prisma.watekMail.findMany({
       where: { processNodeId }, orderBy: { sentAt: 'desc' }, take: 300,
-      include: { replies: { orderBy: { receivedAt: 'asc' }, select: { id: true, commentId: true, fromEmail: true, fromName: true, subject: true, text: true, receivedAt: true } } },
+      include: { replies: { orderBy: { receivedAt: 'asc' }, select: { id: true, commentId: true, fromEmail: true, fromName: true, subject: true, text: true, receivedAt: true, messageId: true } } },
     });
+    // `replyToReplyId` — mail wysłany jako odpowiedź na odpowiedź klienta (`inReplyTo` = jej Message-ID):
+    // front składa z tego rozmowę (pierwszy mail → odpowiedzi → kolejne maile) w jednym wpisie wątku.
+    const replyByMsgId = new Map(rows.flatMap(m => m.replies.map(r => [r.messageId, r.id] as [string, string])));
     return rows.map(m => ({
       id: m.id, key: m.key, wbsNodeId: m.wbsNodeId, commentId: m.commentId, fromEmail: m.fromEmail, sentById: m.sentById,
       toEmails: parseJson(m.toEmails, []), ccEmails: parseJson(m.ccEmails, []),
       subject: m.subject, temat: tematBezKlucza(m.subject), body: m.body, sentAt: m.sentAt, sentCopyError: m.sentCopyError,
-      replies: m.replies,
+      replyToReplyId: m.inReplyTo ? replyByMsgId.get(m.inReplyTo) || null : null,
+      replies: m.replies.map(({ messageId: _m, ...r }) => r),
     }));
   }
 

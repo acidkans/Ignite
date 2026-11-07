@@ -3710,8 +3710,10 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-stan | mailCtx | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-mail-ctx |
 | ui-sekcja | NowyMail (Kokpit) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit-mail |
 | ui-wiersz | Wpis — rodzaj mail | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-mail |
-| ui-funkcja | mailPoKomentarzu | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor watek-mail-po-komentarzu |
-| ui-funkcja | mailInfo (od, do, DW, kiedy) | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor watek-mail-info |
+| ui-funkcja | rozmowy mailowe w zbudujWatek (pierwszy mail → odpowiedzi → kolejne maile) | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor watek-mail-rozmowy |
+| ui-funkcja | bezPodpisu (front) | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor watek-bez-podpisu |
+| back-funkcja | bezPodpisu | apps/backend/src/common/mail-podpis.util.ts | @anchor mail-bez-podpisu |
+| ui-sekcja | RozmowaMaila / WiadomoscMaila | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-rozmowa-maila |
 | ui-funkcja | dataPelna | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-data-pelna |
 | ui-funkcja | ukladWpisu — temat / szczegóły / treść wpisu wątku | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-uklad-wpisu |
 | ui-sekcja | blok wpisu wątku (temat → szczegóły → treść) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-blok |
