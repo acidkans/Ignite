@@ -20,6 +20,7 @@ import {
     DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS, PLAN_STATUS_META, planStatusFromAny, isMilestoneNode,
 } from '../wbs/wbsConstants';
 import { useWatekRealizacji } from './useWatekRealizacji';
+import { MailCtx, NowyMail, MailForm } from './MailWatku';
 import {
     nazwaWyswietlana, WATEK_RODZAJE, RODZAJE_BLOKERA, zbudujWatek, sygnalyWezlow, sumaSygnalow, kiedyTekst,
     dniOkna, indeksDnia, gotowoscPozycji, wykryjKolizje, BUFOR_DOSTAWY_DNI, parseQa,
@@ -115,7 +116,7 @@ export default function RealizacjaPanel({
     // @anchor realizacja-zakupy-api — dodawanie/edycja/usuwanie wpisów zakupu (`LeafActual`), te same
     // funkcje co szuflada w „Realizacja (tabela)" (`realization-new-purchase-drawer`).
     const zakupyApi = useMemo(() => ({ add: addActual, update: updateActual, remove: deleteActual }), [addActual, updateActual, deleteActual]);
-    const { comments, tasks, protocols, constraints, odswiez: odswiezWatek, wyslij, zamknijBloker, dodajBloker, zmienBloker } = useWatekRealizacji(nodeId);
+    const { comments, tasks, protocols, constraints, maile, odswiez: odswiezWatek, wyslij, zamknijBloker, dodajBloker, zmienBloker } = useWatekRealizacji(nodeId);
 
     // @anchor realizacja-short-overrides — krótkie nazwy zapisane w tej sesji (bez przeładowania drzewa).
     const [shortOverrides, setShortOverrides] = useState({});
@@ -188,8 +189,10 @@ export default function RealizacjaPanel({
     const [zadanieModal, setZadanieModal] = useState(null);
     const zadanieCtx = useMemo(() => ({ otworz: (task, wbsNodeId) => setZadanieModal({ task: task || null, wbsNodeId: wbsNodeId || task?.wbsNodeId || null }) }), []);
 
-    const wpisy = useMemo(() => zbudujWatek({ wbsNodes: nodes, comments, tasks, actuals, protocols, constraints }),
-        [nodes, comments, tasks, actuals, protocols, constraints]);
+    const wpisy = useMemo(() => zbudujWatek({ wbsNodes: nodes, comments, tasks, actuals, protocols, constraints, maile }),
+        [nodes, comments, tasks, actuals, protocols, constraints, maile]);
+    // @anchor realizacja-mail-ctx — zamówienie i odświeżenie wątku dla „+ Mail” i „odpowiedz mailem”.
+    const mailCtx = useMemo(() => ({ orderId: nodeId, odswiez: odswiezWatek }), [nodeId, odswiezWatek]);
     // @anchor realizacja-kolizje — kolizje dostaw całego zamówienia (zoom tylko filtruje).
     const kolizje = useMemo(() => wykryjKolizje({ liscie: idx.leavesOfSubtree(SYNTHETIC_ROOT), actualsOf, constraints }),
         [idx, actualsOf, constraints]);
@@ -455,6 +458,7 @@ export default function RealizacjaPanel({
 
     return (
         <ZadanieCtx.Provider value={zadanieCtx}>
+        <MailCtx.Provider value={mailCtx}>
         <div className={`rz${pelne ? ' full' : ''}`}>
             {/* ── Nagłówek zoomu ── */}
             <div className="mhead">
@@ -597,6 +601,7 @@ export default function RealizacjaPanel({
                 />
             )}
         </div>
+        </MailCtx.Provider>
         </ZadanieCtx.Provider>
     );
 }
@@ -670,26 +675,33 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
     const blokerKonstr = w.rodzaj === 'block' && w.constraintId;
     const [rozwiniety, setRozwiniety] = useState(false);
     const zadCtx = React.useContext(ZadanieCtx);
-    const rozwijalny = !!edycja && !!w.nodeId && w.rodzaj !== 'task';
+    const rozwijalny = !!edycja && !!w.nodeId && w.rodzaj !== 'task' && w.rodzaj !== 'mail';
+    // @anchor realizacja-wpis-mail — wpis „mail”: temat w nagłówku; odpowiedź klienta ma „cały mail”
+    // (z cytatem i stopką) i „odpowiedz mailem” (formularz pod wpisem, temat Re:, adresat = nadawca).
+    const mi = w.mailInfo;
+    const [calyMail, setCalyMail] = useState(false);
+    const [odpMail, setOdpMail] = useState(false);
+    const odpowiedzMail = useMemo(() => (mi?.replyId ? { replyId: mi.replyId, fromEmail: mi.fromEmail, temat: mi.temat } : null), [mi?.replyId, mi?.fromEmail, mi?.temat]);
     const st = statusWpisu(w);
     const termin = blokerKonstr ? w.termin : w.rodzaj === 'task' ? w.zadanie?.plannedEnd : null;
     const zamkniety = st && !st.otwarty;
     return (
         <div className={`ev${rozwijalny ? ' ev-rozw' : ''}${rozwiniety ? ' on' : ''}${zamkniety ? ' ev-zamk' : ''}`}>
-            <span className={`ik ${r.cls}`}>{r.znak}</span>
             <div style={{ minWidth: 0 }}>
-                {/* @anchor realizacja-wpis-naglowek — nagłówek wpisu: status · gałąź › pozycja (2 najniższe poziomy WBS)
-                    · rodzaj i termin · na końcu osoba i kiedy (wyszarzone); akcje po prawej. */}
+                {/* @anchor realizacja-wpis-naglowek — nagłówek wpisu: rodzaj (pełna nazwa, kapitaliki, kolor rodzaju)
+                    · osoba · status · gałąź › pozycja (2 najniższe poziomy WBS) · termin · kiedy; akcje po prawej. */}
                 <div className="who">
+                    <span className={`rodz ${r.cls}`}>{r.nazwa}</span>
+                    {w.kto && <span className="kto">{w.kto}</span>}
                     {st && <span className={`pill ${st.cls}`} style={{ padding: '0 6px' }}>{st.l}</span>}
                     {nazwaPozycji && <button className="lnk" onClick={onPozycja} title={nazwaPozycji}>{nazwaPozycji}</button>}
                     {blokerKonstr && <span className="cnt c-mut">{RODZAJE_BLOKERA[w.rodzajBlokera]?.label || w.rodzajBlokera}</span>}
                     {termin && <span className={w.poTerminie ? 'dpos' : ''}>termin {dzienMies(termin)}{w.poTerminie ? ' — minął' : ''}</span>}
                     {blokerKonstr && w.wplywDni ? <span>wpływ +{w.wplywDni} dni</span> : null}
                     {w.mail && <span className="mono">{w.mail}</span>}
+                    {mi && <span className="cnt c-mut" title={mi.kierunek === 'in' ? 'Odpowiedź mailem — zaimportowana do wątku' : `Wysłany mail${mi.doKogo ? ` do ${mi.doKogo}` : ''}`}>{mi.kierunek === 'in' ? '📨 przychodzący' : '✉️ wysłany'}</span>}
                     {w.prognoza && <span className="p-info">prognoza</span>}
                     {w.blokerem && <span className="cnt c-bad">bloker</span>}
-                    {w.kto && <span className="os">{w.kto}</span>}
                     {w.kiedy && w.rodzaj !== 'task' && <span className="os">{kiedyTekst(w.kiedy)}</span>}
                     <span className="act">
                         {akcje && w.rodzaj === 'block' && w.otwarte && (
@@ -705,6 +717,12 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
                             <button className="mini-btn" onClick={() => zadCtx.otworz(w.zadanie)}
                                 title={w.rodzaj === 'task' ? 'Otwórz zadanie — termin, status, odpowiedzialny' : 'Zadanie blokera — jego zamknięcie zamyka bloker'}>{w.rodzaj === 'task' ? 'edytuj' : 'zadanie'}</button>
                         )}
+                        {mi?.pelnaTresc && (
+                            <button className="mini-btn" onClick={() => setCalyMail(v => !v)} title="Pokaż mail razem z cytatem i stopką">{calyMail ? 'skrót' : 'cały mail'}</button>
+                        )}
+                        {mi?.replyId && (
+                            <button className="mini-btn" onClick={() => setOdpMail(v => !v)} title="Odpowiedz mailem nadawcy — w tym samym wątku poczty">{odpMail ? 'anuluj' : 'odpowiedz mailem'}</button>
+                        )}
                         {rozwijalny && (
                             <button className="mini-btn" onClick={() => setRozwiniety(v => !v)}
                                 title={rozwiniety ? 'Zwiń' : 'Rozwiń — odpowiedz albo edytuj bez wchodzenia w pozycję'}>{rozwiniety ? 'zwiń' : 'rozwiń'}</button>
@@ -712,6 +730,9 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
                     </span>
                 </div>
                 <div className={`txt${w.rodzaj === 'qa' ? ' qa-p' : ''}`} onClick={rozwijalny && !rozwiniety ? () => setRozwiniety(true) : w.rodzaj === 'task' && w.zadanie && zadCtx ? () => zadCtx.otworz(w.zadanie) : undefined}>{w.tekst}</div>
+                {mi?.temat && <div className="muted" style={{ fontSize: 11 }}>Temat: {mi.temat}</div>}
+                {calyMail && mi?.pelnaTresc && <div className="mail-caly">{mi.pelnaTresc}</div>}
+                {odpMail && odpowiedzMail && <MailForm wbsNodeId={w.nodeId} odpowiedz={odpowiedzMail} onWyslano={() => setOdpMail(false)} onAnuluj={() => setOdpMail(false)} />}
                 {w.notatka && <div className="muted" style={{ fontSize: 12 }}>{w.notatka}</div>}
                 {w.odpowiedz && !(rozwiniety && w.rodzaj === 'qa') && <div className={`ans${w.rodzaj === 'qa' ? ' qa-o' : ''}`}>{w.odpowiedz}</div>}
                 {rozwiniety && <WpisEdycja w={w} edycja={edycja} onZamknij={() => setRozwiniety(false)} />}
@@ -776,7 +797,7 @@ function WpisEdycja({ w, edycja, onZamknij }) {
                 </div>
             )}
             <PoleCzatu uzytkownicy={ownerUsers} placeholder="Odpowiedz w czacie pozycji… (@ oznacza osobę)"
-                onWyslij={(t, ids) => wyslij(w.nodeId, t, false, ids)} />
+                onWyslij={(t, ids) => wyslij(w.nodeId, t, false, ids, w.rodzaj === 'qa' ? w.tekst : null)} />
         </div>
     );
 }
@@ -1036,6 +1057,7 @@ function SzczegolyMilestone({ node, canEdit, wpisy, wyslij, dodajBloker, akcje, 
                             : <Pusto>Brak wpisów — pierwszy dodasz poniżej.</Pusto>}
                     </div>
                     {canEdit && <NowyBloker wbsNodeId={node.id} dodajBloker={dodajBloker} ownerUsers={ownerUsers} />}
+                    <NowyMail wbsNodeId={node.id} />
                     <PoleCzatu uzytkownicy={ownerUsers} placeholder="Napisz do czatu milestone'a… (@ oznacza osobę)"
                         onWyslij={(t, ids) => wyslij(node.id, t, false, ids)} />
                 </Karta>
@@ -1150,6 +1172,7 @@ function RozwinietaPozycja({ node, r, planValue, card, zakupyApi, canEdit, canSe
                         : <Pusto>Brak wpisów — pierwszy dodasz poniżej.</Pusto>}
                 </div>
                 {canEdit && <NowyBloker wbsNodeId={node.id} dodajBloker={dodajBloker} ownerUsers={ownerUsers} />}
+                <NowyMail wbsNodeId={node.id} />
                 <PoleCzatu uzytkownicy={ownerUsers} placeholder="Napisz do czatu pozycji… (@ oznacza osobę)"
                     onWyslij={(t, ids) => wyslij(node.id, t, false, ids)} />
             </Karta>
@@ -1312,6 +1335,8 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
                         na całym zamówieniu nie ma węzła, do którego przypiąć wpis — wtedy podpowiedź. */}
                     {/* @anchor realizacja-kokpit-bloker — nowy bloker na gałęzi z Kokpitu (liczy się w gotowości jej pozycji). */}
                     {canEdit && <NowyBloker wbsNodeId={galazId} dodajBloker={dodajBloker} ownerUsers={ownerUsers} />}
+                    {/* @anchor realizacja-kokpit-mail — mail z wątku gałęzi do zaznaczonych adresatów; odpowiedzi wracają do wątku. */}
+                    <NowyMail wbsNodeId={galazId} />
                     {galazId
                         ? <PoleCzatu uzytkownicy={ownerUsers} placeholder="Napisz do czatu gałęzi… (@ oznacza osobę)"
                             onWyslij={(t, ids) => wyslij(galazId, t, false, ids)} />

@@ -27,12 +27,14 @@ export const nazwaWyswietlana = (node, full = false) =>
 
 // @anchor watek-rodzaje — rodzaje wpisów wątku pozycji: znak w kafelku, etykieta filtra, klasa koloru (realizacja.css).
 export const WATEK_RODZAJE = {
-    chat:  { znak: 'CZ', label: 'Czat',    cls: 'k-chat' },
-    block: { znak: '!',  label: 'Blokery', cls: 'k-block' },
-    qa:    { znak: 'Q',  label: 'Q&A',     cls: 'k-qa' },
-    buy:   { znak: 'ZK', label: 'Zakupy',  cls: 'k-buy' },
-    task:  { znak: 'ZD', label: 'Zadania', cls: 'k-task' },
-    proto: { znak: 'PO', label: 'Odbiory', cls: 'k-proto' },
+    // `label` = filtr (liczba mnoga), `nazwa` = rodzaj pojedynczego wpisu w jego nagłówku.
+    chat:  { znak: 'CZ', label: 'Czat',    nazwa: 'Czat',    cls: 'k-chat' },
+    block: { znak: '!',  label: 'Blokery', nazwa: 'Bloker',  cls: 'k-block' },
+    qa:    { znak: 'Q',  label: 'Q&A',     nazwa: 'Q&A',     cls: 'k-qa' },
+    buy:   { znak: 'ZK', label: 'Zakupy',  nazwa: 'Zakup',   cls: 'k-buy' },
+    task:  { znak: 'ZD', label: 'Zadania', nazwa: 'Zadanie', cls: 'k-task' },
+    proto: { znak: 'PO', label: 'Odbiory', nazwa: 'Odbiór',  cls: 'k-proto' },
+    mail:  { znak: '@',  label: 'Maile',   nazwa: 'Mail',    cls: 'k-mail' },
 };
 
 // @anchor rodzaje-blokera — `Constraint.kind`: etykieta i znak do listy blokerów.
@@ -58,7 +60,9 @@ export const parseQa = (qa) => {
 // `wbsRootId` — oba klucze rozwiązuje ta sama mapa, więc wpis z innej wersji nie ginie.
 // Zwraca { wpisy, wezelWpisu } — `wezelWpisu` to id węzła z bieżącej wersji (albo null).
 // Blokery (`Constraint`) wchodzą jako rodzaj „block” obok dawnych pilnych wpisów czatu (URGENT).
-export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, constraints }) {
+// Maile wątków (`maile` z GET /watek-mail/order) — wpisy czatu MAIL_OUT / MAIL_IN dostają rodzaj „mail”
+// i `mailInfo` (adresaci / nadawca, temat, pełna treść odpowiedzi, id odpowiedzi do „odpowiedz mailem”).
+export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, constraints, maile }) {
     const klucz = new Map();
     for (const n of wbsNodes || []) {
         klucz.set(n.id, n.id);
@@ -91,9 +95,35 @@ export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, con
         });
     }
 
+    // @anchor watek-mail-po-komentarzu — commentId → { kierunek, mail, reply } z maili wątków.
+    const mailPoKomentarzu = new Map();
+    for (const m of maile || []) {
+        if (m.commentId) mailPoKomentarzu.set(m.commentId, { kierunek: 'out', mail: m });
+        for (const r of m.replies || []) if (r.commentId) mailPoKomentarzu.set(r.commentId, { kierunek: 'in', mail: m, reply: r });
+    }
     for (const c of comments || []) {
         const nodeId = c.wbsNodeId ? klucz.get(c.wbsNodeId) : null;
         if (!nodeId) continue;
+        if (c.type === 'MAIL_OUT' || c.type === 'MAIL_IN') {
+            const mi = mailPoKomentarzu.get(c.id);
+            // Treść wpisu bez nagłówka „✉️ Mail do / Temat” (pokazany w nagłówku wpisu).
+            const cialo = String(c.text || '').split('\n\n').slice(1).join('\n\n') || c.text;
+            const doKogo = mi?.mail?.toEmails?.join(', ') || '';
+            wpisy.push({
+                id: `c-${c.id}`, commentId: c.id, rodzaj: 'mail', nodeId, kiedy: c.createdAt,
+                kto: c.type === 'MAIL_IN'
+                    ? (mi?.reply ? (mi.reply.fromName || mi.reply.fromEmail) : 'odpowiedź mailem')
+                    : `${osoba(c.user)}${doKogo ? ` → ${doKogo}` : ''}`,
+                tekst: cialo,
+                mailInfo: {
+                    kierunek: c.type === 'MAIL_IN' ? 'in' : 'out',
+                    temat: mi?.reply ? String(mi.reply.subject || '').replace(/\s*Ref number \[IGW-[A-Z0-9]{6}\]\s*/g, ' ').trim() : mi?.mail?.temat || '',
+                    fromEmail: mi?.reply?.fromEmail || null, replyId: mi?.reply?.id || null,
+                    pelnaTresc: mi?.reply?.text || null, doKogo,
+                },
+            });
+            continue;
+        }
         wpisy.push({
             id: `c-${c.id}`, commentId: c.id, rodzaj: c.type === 'URGENT' ? 'block' : 'chat', nodeId,
             kiedy: c.createdAt, kto: osoba(c.user), tekst: c.text,

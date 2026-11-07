@@ -1,3 +1,33 @@
+## 2026-11-07 — feat(realizacja): maile z wątku gałęzi / pozycji — wybór adresatów, wysyłka ze skrzynki firmowej, odbiór odpowiedzi i import do wątku (v2026.11.07.2042)
+
+### schema.prisma
+- dodano model `schema-model` `WatekMail` (`watek_mails`) — mail z wątku Realizacji: `key` (IGW-…), `messageId`, `wbsNodeId` węzła wątku, adresaci, `body`, `commentId` wpisu MAIL_OUT, `inReplyTo`
+- dodano model `schema-model` `WatekMailReply` (`watek_mail_replies`) — odpowiedź z INBOX, pełna treść `text`, `commentId` wpisu MAIL_IN
+- dodano pola `schema-pole` `UserMailbox.watekImapLastUid` / `watekImapUidValidity` — osobny kursor IMAP dla maili wątków (niezależny od Q&A)
+- migracja `20261107120000_watek_mail`
+
+### architektura / API
+- nowy `back-modul` `WatekMailModule` (osobno od `QaMailModule`): `GET /watek-mail/order/:id/context?wbsNodeId=` (nadawca, adresaci klient + zespół, domyślny temat), `GET /watek-mail/order/:id` (maile z odpowiedziami), `POST /watek-mail/send`, `POST /watek-mail/check`
+- cron co 5 min (`WATEK_MAIL_REPLY_CRON=false` wyłącza — ustawione w `docker-compose.override.yml` na dev); odpowiedź dopasowana po In-Reply-To/References albo `[IGW-…]` w temacie trafia do wątku jako `Comment` typu `MAIL_IN` (bez cytatu i stopki) + powiadomienie zespołu
+- `back-funkcja` `MailboxesService.sendFromMailbox` przyjmuje `inReplyTo` / `references` („odpowiedz mailem” w tym samym wątku poczty)
+- frontend: `MailWatku.jsx` (`MailForm`, `NowyMail`, `MailCtx`) — „+ Mail” i „sprawdź pocztę” pod wątkiem Kokpitu gałęzi, pozycji i milestone'a; rodzaj wpisu „Mail” z tematem, „cały mail” i „odpowiedz mailem”
+
+### słownik
+- dodano `watek-mail*`, `watek-mail-reply*`, `user-mailbox-watek-*`, `process-node-watek-mails`, `temat-bez-klucza`, `mail-ctx`, `mail-form`, `nowy-mail`, `realizacja-mail-ctx`, `realizacja-kokpit-mail`, `realizacja-wpis-mail`, `watek-mail-po-komentarzu`, endpointy `get-/post-watek-mail-*`
+
+### wytyczne
+- `schema-model` `WatekMail` — klucz w temacie ma prefiks `IGW-` (Q&A: `IGN-`), a odbiór ma własny kursor `UserMailbox.watekImapLastUid`; nie łączyć kursorów, bo jeden odbiornik przesuwałby UID drugiemu
+- `schema-pole` `Comment.type` — `MAIL_OUT` / `MAIL_IN` = wpisy maila w czacie gałęzi; autor MAIL_IN w bazie to nadawca oryginału, prawdziwy nadawca jest w `WatekMailReply`
+
+## 2026-11-07 — feat(realizacja): pytanie Q&A w powiadomieniu o odpowiedzi, pełna nazwa rodzaju i osoba w nagłówku wpisu wątku, układ kolumn szuflady zakupów
+
+### architektura / API
+- `back-endpoint` `POST /comments/order/:orderId` przyjmuje opcjonalne `qaQuestion` (nie zapisywane w bazie) — powiadomienie (push + `Notification`) dostaje tytuł „odpowiedź na pytanie” i treść `❓ pytanie ↳ odpowiedź`
+- `ui-funkcja` `wyslij` (`useWatekRealizacji`) — piąty parametr `qaQuestion`; odpowiedź z rozwiniętego wpisu Q&A przekazuje treść pytania
+
+### słownik
+- dodano `comment-push-qa-question`, `realizacja-wpis-rodzaj`, `realization-new-drawer-cols`
+
 ## 2026-11-06 — feat(realizacja): bloker jako zadanie, zadania w Realizacji, czat i bloker w Kokpicie, dwie kolumny bez panelu blokerów, Kokpit domyślnym widokiem (v2026.11.06.1244)
 
 ### schema.prisma

@@ -2,13 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { API_URL } from '../../../config';
 
 // @anchor use-watek-realizacji — dane wątku pozycji, których nie niesie `useRealizationData`:
-// czat zamówienia (z wpisami pilnymi), zadania (wszystkie statusy), protokoły odbioru i blokery (`Constraint`).
+// czat zamówienia (z wpisami pilnymi), zadania (wszystkie statusy), protokoły odbioru, blokery (`Constraint`)
+// i maile wątków (`WatekMail` z odpowiedziami — łączone z wpisami czatu MAIL_OUT/MAIL_IN po `commentId`).
 // Każde źródło jest opcjonalne — błąd jednego nie zeruje pozostałych.
 export function useWatekRealizacji(nodeId) {
     const [comments, setComments] = useState([]);
     const [tasks, setTasks] = useState([]);
     const [protocols, setProtocols] = useState([]);
     const [constraints, setConstraints] = useState([]);
+    const [maile, setMaile] = useState([]);
 
     const pobierz = useCallback(async () => {
         if (!nodeId) return;
@@ -16,16 +18,18 @@ export function useWatekRealizacji(nodeId) {
         const json = async (url) => {
             try { const r = await fetch(url, { headers }); return r.ok ? await r.json() : null; } catch { return null; }
         };
-        const [c, t, p, k] = await Promise.all([
+        const [c, t, p, k, m] = await Promise.all([
             json(`${API_URL}/comments/order/${nodeId}`),
             json(`${API_URL}/my-tasks/project/${nodeId}?status=ALL`),
             json(`${API_URL}/acceptance-protocols/${nodeId}`),
             json(`${API_URL}/constraints/order/${nodeId}`),
+            json(`${API_URL}/watek-mail/order/${nodeId}`),
         ]);
         setComments(Array.isArray(c) ? c : []);
         setTasks(Array.isArray(t) ? t : []);
         setProtocols(Array.isArray(p) ? p : []);
         setConstraints(Array.isArray(k) ? k : []);
+        setMaile(Array.isArray(m) ? m : []);
     }, [nodeId]);
 
     useEffect(() => { pobierz(); }, [pobierz]);
@@ -33,11 +37,12 @@ export function useWatekRealizacji(nodeId) {
     // @anchor watek-wyslij — odpowiedź z wątku idzie do czatu pozycji (`Comment.wbsNodeId`).
     // `pilne` = wpis typu URGENT, czyli bloker w MVP. `mentionedUserIds` = osoby oznaczone „@" —
     // backend wysyła im powiadomienie NEW_MENTION (`comments.controller.ts`).
-    const wyslij = useCallback(async (wbsNodeId, text, pilne = false, mentionedUserIds = []) => {
+    // `qaQuestion` = pytanie Q&A, na które odpowiada wiadomość — backend dokleja je do powiadomienia.
+    const wyslij = useCallback(async (wbsNodeId, text, pilne = false, mentionedUserIds = [], qaQuestion = null) => {
         const res = await fetch(`${API_URL}/comments/order/${nodeId}`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, wbsNodeId, type: pilne ? 'URGENT' : 'NOTE', mentionedUserIds }),
+            body: JSON.stringify({ text, wbsNodeId, type: pilne ? 'URGENT' : 'NOTE', mentionedUserIds, ...(qaQuestion ? { qaQuestion } : {}) }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         await pobierz();
@@ -77,5 +82,5 @@ export function useWatekRealizacji(nodeId) {
         await pobierz();
     }, [pobierz]);
 
-    return { comments, tasks, protocols, constraints, odswiez: pobierz, wyslij, zamknijBloker, dodajBloker, zmienBloker };
+    return { comments, tasks, protocols, constraints, maile, odswiez: pobierz, wyslij, zamknijBloker, dodajBloker, zmienBloker };
 }
