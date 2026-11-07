@@ -1,0 +1,5 @@
+-- Druga część danych testowych rozmów (DEV): nasza odpowiedź na odpowiedź + osobna rozmowa. Sprzątanie: test/watek-mail-fake-cleanup.sql
+INSERT INTO watek_mails (id,key,"messageId","processNodeId","wbsNodeId","sentById","fromEmail","toEmails",subject,body,"inReplyTo","sentAt")
+SELECT 'fake-m2','IGW-TESTX2','fake-m2@test','b2f98d11-2d35-47db-ac3a-96803637973f','ce37ea79-dfdd-42b0-8a72-8d84532454ba',id,'claude@gigatel.app','["aromanowicz@europrim.com.pl"]','Re: DURR — BIURKA Ref number [IGW-TESTX2]','OK, to zamawiamy w DE — proszę o ofertę do środy.','fake-r@test', now()-interval '5 minutes' FROM users WHERE email='claude-test@ignite.test';
+INSERT INTO watek_mails (id,key,"messageId","processNodeId","wbsNodeId","sentById","fromEmail","toEmails",subject,body,"sentAt")
+SELECT 'fake-m3','IGW-TESTX3','fake-m3@test','b2f98d11-2d35-47db-ac3a-96803637973f','ce37ea79-dfdd-42b0-8a72-8d84532454ba',id,'claude@gigatel.app','["andrzej@gigatel.app"]','DURR — nocleg PM Ref number [IGW-TESTX3]','Czy hotel jest już zarezerwowany?', now()-interval '30 minutes' FROM users WHERE email='claude-test@ignite.test';

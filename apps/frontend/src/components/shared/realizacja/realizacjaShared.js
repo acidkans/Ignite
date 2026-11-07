@@ -60,8 +60,8 @@ export const parseQa = (qa) => {
 // `wbsRootId` — oba klucze rozwiązuje ta sama mapa, więc wpis z innej wersji nie ginie.
 // Zwraca { wpisy, wezelWpisu } — `wezelWpisu` to id węzła z bieżącej wersji (albo null).
 // Blokery (`Constraint`) wchodzą jako rodzaj „block” obok dawnych pilnych wpisów czatu (URGENT).
-// Maile wątków (`maile` z GET /watek-mail/order) — wpisy czatu MAIL_OUT / MAIL_IN dostają rodzaj „mail”
-// i `mailInfo` (adresaci / nadawca, temat, pełna treść odpowiedzi, id odpowiedzi do „odpowiedz mailem”).
+// Maile wątków (`maile` z GET /watek-mail/order) składają się w rozmowy — jeden wpis „mail” na rozmowę
+// (`rozmowa`: pierwszy mail, odpowiedzi i kolejne maile po kolei — `watek-mail-rozmowy`).
 export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, constraints, maile }) {
     const klucz = new Map();
     for (const n of wbsNodes || []) {
@@ -95,39 +95,66 @@ export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, con
         });
     }
 
-    // @anchor watek-mail-po-komentarzu — commentId → { kierunek, mail, reply } z maili wątków.
-    const mailPoKomentarzu = new Map();
+    // @anchor watek-mail-rozmowy — maile wątków składane w ROZMOWY: pierwszy wysłany mail, pod nim odpowiedzi
+    // i kolejne maile wysłane jako odpowiedź na odpowiedź (`replyToReplyId`), po kolei w czasie. Jedna rozmowa
+    // = jeden wpis „mail” w wątku, więc różne korespondencje się nie mieszają. Wpis sortuje się po ostatniej wiadomości.
+    const komentarzPoId = new Map((comments || []).map(c => [c.id, c]));
+    // Treść wpisu czatu bez nagłówka „✉️ Mail do / Temat” (backend zapisał ją już bez cytatu).
+    const cialoKomentarza = (id) => {
+        const c = id ? komentarzPoId.get(id) : null;
+        return c ? (String(c.text || '').split('\n\n').slice(1).join('\n\n') || c.text) : null;
+    };
+    const mailPoOdpowiedzi = new Map();
+    for (const m of maile || []) for (const r of m.replies || []) mailPoOdpowiedzi.set(r.id, m);
+    const korzen = (m) => {
+        let x = m;
+        for (let n = 0; n < 50 && x.replyToReplyId && mailPoOdpowiedzi.has(x.replyToReplyId); n++) x = mailPoOdpowiedzi.get(x.replyToReplyId);
+        return x;
+    };
+    const bezKlucza = (t) => String(t || '').replace(/\s*Ref number \[IGW-[A-Z0-9]{6}\]\s*/g, ' ').trim();
+    const rozmowy = new Map();
+    const komentarzeMaili = new Set();
     for (const m of maile || []) {
-        if (m.commentId) mailPoKomentarzu.set(m.commentId, { kierunek: 'out', mail: m });
-        for (const r of m.replies || []) if (r.commentId) mailPoKomentarzu.set(r.commentId, { kierunek: 'in', mail: m, reply: r });
+        const k = korzen(m);
+        if (!rozmowy.has(k.id)) rozmowy.set(k.id, { root: k, wiad: [] });
+        const roz = rozmowy.get(k.id);
+        const autor = osoba(komentarzPoId.get(m.commentId)?.user);
+        roz.wiad.push({
+            id: `o-${m.id}`, kierunek: 'out', temat: m.temat,
+            od: [autor, m.fromEmail ? `<${m.fromEmail}>` : ''].filter(Boolean).join(' '),
+            doKogo: (m.toEmails || []).join(', '), dw: (m.ccEmails || []).join(', '), kiedy: m.sentAt, tresc: m.body,
+        });
+        if (m.commentId) komentarzeMaili.add(m.commentId);
+        for (const r of m.replies || []) {
+            roz.wiad.push({
+                id: `i-${r.id}`, kierunek: 'in', replyId: r.id, fromEmail: r.fromEmail, temat: bezKlucza(r.subject),
+                od: r.fromName ? `${r.fromName} <${r.fromEmail}>` : r.fromEmail, doKogo: m.fromEmail, kiedy: r.receivedAt,
+                tresc: bezPodpisu(cialoKomentarza(r.commentId) ?? r.text), pelnaTresc: r.text,
+            });
+            if (r.commentId) komentarzeMaili.add(r.commentId);
+        }
+    }
+    for (const { root, wiad } of rozmowy.values()) {
+        const nodeId = klucz.get(root.wbsNodeId);
+        if (!nodeId) continue;
+        // Pierwszy mail rozmowy zawsze na górze (nawet przy rozjechanych zegarach), reszta po czasie.
+        const pierwszy = `o-${root.id}`;
+        wiad.sort((a, b) => (a.id === pierwszy ? -1 : b.id === pierwszy ? 1 : new Date(a.kiedy).getTime() - new Date(b.kiedy).getTime()));
+        const odp = wiad.filter(x => x.kierunek === 'in');
+        wpisy.push({
+            id: `m-${root.id}`, rodzaj: 'mail', nodeId, kiedy: wiad[wiad.length - 1].kiedy, tekst: root.temat,
+            rozmowa: wiad, odpowiedzi: odp.length, ostatniaOdp: odp[odp.length - 1] || null,
+        });
     }
     for (const c of comments || []) {
         const nodeId = c.wbsNodeId ? klucz.get(c.wbsNodeId) : null;
         if (!nodeId) continue;
         if (c.type === 'MAIL_OUT' || c.type === 'MAIL_IN') {
-            const mi = mailPoKomentarzu.get(c.id);
-            // Treść wpisu bez nagłówka „✉️ Mail do / Temat” (pokazany w nagłówku wpisu).
-            const cialo = String(c.text || '').split('\n\n').slice(1).join('\n\n') || c.text;
-            const doKogo = mi?.mail?.toEmails?.join(', ') || '';
+            if (komentarzeMaili.has(c.id)) continue; // jest w rozmowie mailowej
+            // Wpis maila bez danych `WatekMail` (np. usunięty) — sama treść jak wiadomość czatu.
             wpisy.push({
-                id: `c-${c.id}`, commentId: c.id, rodzaj: 'mail', nodeId, kiedy: c.createdAt,
-                kto: c.type === 'MAIL_IN'
-                    ? (mi?.reply ? (mi.reply.fromName || mi.reply.fromEmail) : 'odpowiedź mailem')
-                    : `${osoba(c.user)}${doKogo ? ` → ${doKogo}` : ''}`,
-                tekst: cialo,
-                // @anchor watek-mail-info — dane do układu maila w wątku: temat, od, do, DW, kiedy (wysłany / odebrany).
-                mailInfo: {
-                    kierunek: c.type === 'MAIL_IN' ? 'in' : 'out',
-                    temat: mi?.reply ? String(mi.reply.subject || '').replace(/\s*Ref number \[IGW-[A-Z0-9]{6}\]\s*/g, ' ').trim() : mi?.mail?.temat || '',
-                    fromEmail: mi?.reply?.fromEmail || null, replyId: mi?.reply?.id || null,
-                    pelnaTresc: mi?.reply?.text || null,
-                    od: c.type === 'MAIL_IN'
-                        ? (mi?.reply ? (mi.reply.fromName ? `${mi.reply.fromName} <${mi.reply.fromEmail}>` : mi.reply.fromEmail) : '')
-                        : [osoba(c.user), mi?.mail?.fromEmail ? `<${mi.mail.fromEmail}>` : ''].filter(Boolean).join(' '),
-                    doKogo: c.type === 'MAIL_IN' ? (mi?.mail?.fromEmail || '') : doKogo,
-                    dw: c.type === 'MAIL_IN' ? '' : (mi?.mail?.ccEmails || []).join(', '),
-                    kiedy: (c.type === 'MAIL_IN' ? mi?.reply?.receivedAt : mi?.mail?.sentAt) || c.createdAt,
-                },
+                id: `c-${c.id}`, commentId: c.id, rodzaj: 'mail', nodeId, kiedy: c.createdAt, kto: osoba(c.user),
+                tekst: c.type === 'MAIL_IN' ? bezPodpisu(cialoKomentarza(c.id)) : cialoKomentarza(c.id),
             });
             continue;
         }
@@ -314,4 +341,45 @@ export function wykryjKolizje({ liscie, actualsOf, constraints = [] }) {
         }
     }
     return out.sort((a, b) => a.zapasDni - b.zapasDni);
+}
+
+// @anchor watek-bez-podpisu
+// Treść maila w wątku bez podpisu — port `bezPodpisu` z backendu (apps/backend/src/common/mail-podpis.util.ts,
+// zmieniaj obie). Na froncie, bo odpowiedzi zaimportowane wcześniej mają podpis w treści wpisu.
+const PODPIS_ZAMKNIECIE = [
+  '(z\\s+)?(serdecznymi\\s+|najlepszymi\\s+)?pozdrowieniami', '(serdecznie\\s+|ciepło\\s+)?pozdrawiam', 'pozdrowienia', 'pozdro',
+  'z\\s+poważaniem', 'z\\s+wyrazami\\s+szacunku', 'łączę\\s+(wyrazy\\s+szacunku|pozdrowienia)', 'dziękuję', 'dzięki', 'dziekuje',
+  '(best|kind|warm|warmest|many)\\s+(regards|wishes|thanks)', 'regards', 'best', 'cheers', 'thanks', 'thank\\s+you', 'br', 'sincerely', 'yours\\s+(sincerely|truly|faithfully)',
+  'mit\\s+\\S+\\s+grü(ß|ss)en', '(viele|beste|liebe|freundliche|herzliche)\\s+grü(ß|ss)e', 'grü(ß|ss)e', 'gruß', 'gruss', 'mfg', 'lg', 'vg',
+].join('|');
+const PODPIS_ZAMKNIECIE_RE = new RegExp(`^(?:${PODPIS_ZAMKNIECIE})(?:[\\s,.!;:/|–-]+(?:${PODPIS_ZAMKNIECIE}))*[\\s,.!;:]*$`, 'i');
+const PODPIS_KONIEC_RE = /^(--\s*|sent from\b.*|wysłane z\b.*|wysłano z\b.*|gesendet von\b.*|get outlook for\b.*)$/i;
+const PODPIS_KONTAKT_RE = /(\+?\d[\d\s().\/-]{6,}\d|@|www\.|https?:|<mailto:|\b(tel|mob|mobile|phone|fax|e-?mail|nip|vat|ust|steuer|regon|krs|ul|street|str|iban|swift)\b\.?|\b\d{2}-\d{3}\b|\bsp\.\s*z\s*o\.?\s*o|\bgmbh\b|\bllc\b|\bs\.a\.|\bsp\.\s*k\.)/i;
+
+export function bezPodpisu(t) {
+  const lines = String(t || '').replace(/\r/g, '').split('\n').map(l => l.replace(/\s+$/, ''));
+  let koniec = lines.length;
+  let tresci = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (!l) continue;
+    if (PODPIS_KONIEC_RE.test(l) || (tresci > 0 && l.length <= 70 && PODPIS_ZAMKNIECIE_RE.test(l))) { koniec = i; break; }
+    tresci++;
+  }
+  let out = lines.slice(0, koniec);
+  if (koniec === lines.length) {
+    // Bez formuły — zdejmij blok kontaktowy z końca (co najmniej 2 linie kontaktowe, inaczej nic nie ruszaj).
+    let j = out.length;
+    let kontakt = 0;
+    while (j > 0 && (!out[j - 1].trim() || PODPIS_KONTAKT_RE.test(out[j - 1]))) { if (out[j - 1].trim()) kontakt++; j--; }
+    if (kontakt >= 2) {
+      out = out.slice(0, j);
+      // Nazwisko / firma tuż nad blokiem: krótka linia bez kropki na końcu.
+      while (out.length && !out[out.length - 1].trim()) out.pop();
+      const ost = out[out.length - 1]?.trim() || '';
+      if (out.length > 1 && ost.split(/\s+/).length <= 4 && !/[.?!:]$/.test(ost)) out.pop();
+    }
+  }
+  const s = out.join('\n').replace(/\n[ \t]*(?=\n)/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  return s || String(t || '').trim();
 }

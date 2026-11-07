@@ -297,3 +297,15 @@
 .rz .ev .wpis-temat.qa-p::before, .rz .ev .wpis-tresc.qa-o::before { font: 600 10px var(--f-mono); margin-right: 6px; padding: 0 4px; border-radius: 3px; }
 .rz .ev .wpis-temat.qa-p::before { content: 'P'; color: var(--warn); background: var(--warn-soft); }
 .rz .ev .wpis-tresc.qa-o::before { content: 'O'; color: var(--info); background: var(--info-soft); }
+
+/* Rozmowa mailowa (realizacja-rozmowa-maila): pierwszy mail, pod nim wcięte odpowiedzi i kolejne maile. */
+.rz .rozmowa { margin-top: 5px; display: flex; flex-direction: column; gap: 8px; }
+.rz .rozmowa .wpis-blok { margin-top: 0; }
+.rz .msg-gora { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.rz .msg-gora .mini-btn { margin-left: auto; }
+.rz .msg-dalej { margin-left: 18px; }
+.rz .wpis-blok.msg-in { border-left-color: var(--ok); }
+.rz .ev:has(.rozmowa) { border-bottom: 2px solid var(--line); padding-bottom: 12px; }
+.rz .msg-kto { font-weight: 600; color: #C9D3DC; font-size: 12px; }
+.rz .msg-gora .os { color: var(--muted); font-size: 11.5px; }
+.rz .msg-dalej .wpis-tresc { margin-top: 3px; }

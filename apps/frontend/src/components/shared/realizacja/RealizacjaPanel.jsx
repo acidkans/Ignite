@@ -681,11 +681,10 @@ function statusWpisu(w) {
 // @anchor realizacja-uklad-wpisu — { temat, meta: [[etykieta, wartość, klasa]], tresc } wpisu wątku. Temat = to,
 // czego wpis dotyczy (tytuł zadania, opis blokera, pytanie, temat maila); meta = kto i kiedy; treść = rozwinięcie
 // (opis zadania, notatka blokera, odpowiedź, wiadomość czatu, treść maila).
-function ukladWpisu(w, { termin, calyMail }) {
+function ukladWpisu(w, { termin }) {
     const z = w.zadanie;
     const terminTxt = termin ? `${dzienMies(termin)}${w.poTerminie ? ' — minął' : ''}` : null;
     const terminMeta = terminTxt ? [['Termin', terminTxt, w.poTerminie ? 'dpos' : '']] : [];
-    const mi = w.mailInfo;
     switch (w.rodzaj) {
         case 'task':
             return { temat: z?.title || w.tekst, meta: [...(w.kto ? [['Odpowiedzialny', w.kto]] : []), ...terminMeta], tresc: z?.description?.trim() || null };
@@ -701,21 +700,49 @@ function ukladWpisu(w, { termin, calyMail }) {
                 tresc: w.notatka || null,
             };
         case 'qa':
-            return { temat: w.tekst, meta: [['Źródło', w.kto], ...(w.mail ? [['Mail', w.mail]] : [])], tresc: w.odpowiedz || null };
-        case 'mail':
-            return {
-                temat: mi?.temat || null,
-                meta: [
-                    ...(mi?.od ? [['Od', mi.od]] : []),
-                    ...(mi?.doKogo ? [['Do', mi.doKogo]] : []),
-                    ...(mi?.dw ? [['DW', mi.dw]] : []),
-                    [mi?.kierunek === 'in' ? 'Odebrano' : 'Wysłano', dataPelna(mi?.kiedy)],
-                ],
-                tresc: calyMail && mi?.pelnaTresc ? mi.pelnaTresc : w.tekst,
-            };
+            return { temat: w.tekst, meta: w.mail ? [['Mail', w.mail]] : [], tresc: w.odpowiedz || null };
         default: // czat, zakup, odbiór
             return { temat: null, meta: w.kto ? [['Autor', w.kto]] : [], tresc: w.tekst };
     }
+}
+
+// @anchor realizacja-rozmowa-maila — rozmowa mailowa w jednym wpisie: pierwszy mail, pod nim (wcięte)
+// odpowiedzi i kolejne maile, po kolei. Każda wiadomość: temat, Od/Do/DW, data, treść (odpowiedź bez cytatu
+// i podpisu — „cały mail” pokazuje oryginał).
+function RozmowaMaila({ rozmowa }) {
+    return <div className="rozmowa">{rozmowa.map((m, i) => <WiadomoscMaila key={m.id} m={m} pierwsza={i === 0} />)}</div>;
+}
+// Kolejne wiadomości (odpowiedzi) bez pól adresatów i tematu — tylko kto, kiedy i treść.
+function WiadomoscMaila({ m, pierwsza }) {
+    const [caly, setCaly] = useState(false);
+    if (!pierwsza) {
+        const kto = String(m.od || '').replace(/\s*<[^>]*>\s*/g, ' ').trim() || m.od;
+        return (
+            <div className={`wpis-blok k-mail msg msg-${m.kierunek} msg-dalej`}>
+                <div className="msg-gora">
+                    <span className={`pill ${m.kierunek === 'in' ? 'p-ok' : 'p-info'}`} style={{ padding: '0 6px' }}>{m.kierunek === 'in' ? 'odpowiedź' : 'nasza odpowiedź'}</span>
+                    {kto && <span className="msg-kto" title={m.od}>{kto}</span>}
+                    <span className="os">{dataPelna(m.kiedy)}</span>
+                    {m.pelnaTresc && <button className="mini-btn" onClick={() => setCaly(v => !v)} title="Pokaż mail razem z cytatem, podpisem i adresatami">{caly ? 'skrót' : 'cały mail'}</button>}
+                </div>
+                <div className="wpis-tresc">{caly && m.pelnaTresc ? m.pelnaTresc : m.tresc}</div>
+            </div>
+        );
+    }
+    return (
+        <div className={`wpis-blok k-mail msg msg-${m.kierunek}${pierwsza ? '' : ' msg-dalej'}`}>
+            <div className="msg-gora">
+                {!pierwsza && <span className={`pill ${m.kierunek === 'in' ? 'p-ok' : 'p-info'}`} style={{ padding: '0 6px' }}>{m.kierunek === 'in' ? 'odpowiedź' : 'nasza odpowiedź'}</span>}
+                {m.temat && <span className="wpis-temat">{m.temat}</span>}
+                {m.pelnaTresc && <button className="mini-btn" onClick={() => setCaly(v => !v)} title="Pokaż mail razem z cytatem i podpisem">{caly ? 'skrót' : 'cały mail'}</button>}
+            </div>
+            {/* Pierwszy mail: tylko data — nadawca i adresaci są w tytule (podpowiedź) i pod „cały mail” odpowiedzi. */}
+            <div className="wpis-meta" title={[m.od && `Od: ${m.od}`, m.doKogo && `Do: ${m.doKogo}`, m.dw && `DW: ${m.dw}`].filter(Boolean).join('\n')}>
+                <span className="l">{m.kierunek === 'in' ? 'Odebrano' : 'Wysłano'}</span><span>{dataPelna(m.kiedy)}</span>
+            </div>
+            <div className="wpis-tresc">{caly && m.pelnaTresc ? m.pelnaTresc : m.tresc}</div>
+        </div>
+    );
 }
 
 // @anchor realizacja-wpis — jeden wpis wątku (czat, bloker, pytanie, zakup, zadanie, odbiór).
@@ -726,16 +753,16 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
     const [rozwiniety, setRozwiniety] = useState(false);
     const zadCtx = React.useContext(ZadanieCtx);
     const rozwijalny = !!edycja && !!w.nodeId && w.rodzaj !== 'task' && w.rodzaj !== 'mail';
-    // @anchor realizacja-wpis-mail — wpis „mail”: temat w nagłówku; odpowiedź klienta ma „cały mail”
-    // (z cytatem i stopką) i „odpowiedz mailem” (formularz pod wpisem, temat Re:, adresat = nadawca).
-    const mi = w.mailInfo;
-    const [calyMail, setCalyMail] = useState(false);
+    // @anchor realizacja-wpis-mail — wpis „mail” = rozmowa (`w.rozmowa`): status odpowiedzi w nagłówku,
+    // „odpowiedz mailem” odpowiada na OSTATNIĄ odpowiedź klienta (formularz pod rozmową, temat Re:, adresat = nadawca).
+    const roz = w.rozmowa;
     const [odpMail, setOdpMail] = useState(false);
-    const odpowiedzMail = useMemo(() => (mi?.replyId ? { replyId: mi.replyId, fromEmail: mi.fromEmail, temat: mi.temat } : null), [mi?.replyId, mi?.fromEmail, mi?.temat]);
+    const ost = w.ostatniaOdp;
+    const odpowiedzMail = useMemo(() => (ost ? { replyId: ost.replyId, fromEmail: ost.fromEmail, temat: ost.temat } : null), [ost?.replyId, ost?.fromEmail, ost?.temat]);
     const st = statusWpisu(w);
     const termin = blokerKonstr ? w.termin : w.rodzaj === 'task' ? w.zadanie?.plannedEnd : null;
     const zamkniety = st && !st.otwarty;
-    const uklad = ukladWpisu(w, { termin, calyMail });
+    const uklad = ukladWpisu(w, { termin });
     const klikTresci = rozwijalny && !rozwiniety ? () => setRozwiniety(true)
         : w.rodzaj === 'task' && w.zadanie && zadCtx ? () => zadCtx.otworz(w.zadanie) : undefined;
     return (
@@ -748,8 +775,9 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
                     <span className={`rodz ${r.cls}`}>{r.nazwa}</span>
                     {nazwaPozycji && <button className="lnk" onClick={onPozycja} title={nazwaPozycji}>{nazwaPozycji}</button>}
                     {st && <span className={`pill ${st.cls}`} style={{ padding: '0 6px' }}>{st.l}</span>}
-                    {mi && <span className={`pill ${mi.kierunek === 'in' ? 'p-ok' : 'p-info'}`} style={{ padding: '0 6px' }}
-                        title={mi.kierunek === 'in' ? 'Odpowiedź mailem — zaimportowana do wątku' : 'Mail wysłany z wątku'}>{mi.kierunek === 'in' ? 'odebrany' : 'wysłany'}</span>}
+                    {roz && <span className={`pill ${w.odpowiedzi ? 'p-ok' : 'p-info'}`} style={{ padding: '0 6px' }}>
+                        {w.odpowiedzi ? `odebrano odpowiedź${w.odpowiedzi > 1 ? ` (${w.odpowiedzi})` : ''}` : 'czeka na odpowiedź'}</span>}
+                    {roz && roz.length > 1 && <span className="os">{roz.length} wiadomości</span>}
                     {w.prognoza && <span className="p-info">prognoza</span>}
                     {w.blokerem && <span className="cnt c-bad">bloker</span>}
                     {w.kiedy && w.rodzaj !== 'task' && <span className="os">{kiedyTekst(w.kiedy)}</span>}
@@ -767,10 +795,7 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
                             <button className="mini-btn" onClick={() => zadCtx.otworz(w.zadanie)}
                                 title={w.rodzaj === 'task' ? 'Otwórz zadanie — termin, status, odpowiedzialny' : 'Zadanie blokera — jego zamknięcie zamyka bloker'}>{w.rodzaj === 'task' ? 'edytuj' : 'zadanie'}</button>
                         )}
-                        {mi?.pelnaTresc && (
-                            <button className="mini-btn" onClick={() => setCalyMail(v => !v)} title="Pokaż mail razem z cytatem i stopką">{calyMail ? 'skrót' : 'cały mail'}</button>
-                        )}
-                        {mi?.replyId && (
+                        {odpowiedzMail && (
                             <button className="mini-btn" onClick={() => setOdpMail(v => !v)} title="Odpowiedz mailem nadawcy — w tym samym wątku poczty">{odpMail ? 'anuluj' : 'odpowiedz mailem'}</button>
                         )}
                         {rozwijalny && (
@@ -781,7 +806,7 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
                 </div>
                 {/* @anchor realizacja-wpis-blok — treść wpisu w jednym układzie dla każdego rodzaju (jak mail):
                     temat (pogrubiony) → szczegóły „etykieta: wartość” (właściciel, termin, …) → treść pod spodem. */}
-                <div className={`wpis-blok ${r.cls}`} onClick={klikTresci}>
+                {roz ? <RozmowaMaila rozmowa={roz} /> : <div className={`wpis-blok ${r.cls}`} onClick={klikTresci}>
                     {uklad.temat && <div className={`wpis-temat${w.rodzaj === 'qa' ? ' qa-p' : ''}`}>{uklad.temat}</div>}
                     {uklad.meta.length > 0 && (
                         <div className="wpis-meta">
@@ -791,7 +816,7 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
                         </div>
                     )}
                     {uklad.tresc && !(rozwiniety && w.rodzaj === 'qa') && <div className={`wpis-tresc${w.rodzaj === 'qa' ? ' qa-o' : ''}`}>{uklad.tresc}</div>}
-                </div>
+                </div>}
                 {odpMail && odpowiedzMail && <MailForm wbsNodeId={w.nodeId} odpowiedz={odpowiedzMail} onWyslano={() => setOdpMail(false)} onAnuluj={() => setOdpMail(false)} />}
                 {rozwiniety && <WpisEdycja w={w} edycja={edycja} onZamknij={() => setRozwiniety(false)} />}
             </div>

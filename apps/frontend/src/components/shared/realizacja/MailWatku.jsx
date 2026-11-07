@@ -110,11 +110,12 @@ export function MailForm({ wbsNodeId, odpowiedz = null, onWyslano, onAnuluj }) {
     );
 }
 
-// @anchor nowy-mail — dół wątku przy filtrze „Maile”: formularz nowego maila (po wysyłce czysty, gotowy
-// na kolejny) i „sprawdź pocztę” — ręczny odbiór odpowiedzi (automat co 5 min robi to samo na serwerze).
+// @anchor nowy-mail — dół wątku przy filtrze „Maile”: „+ Nowy mail” rozwija formularz (po wysyłce i „Anuluj”
+// zwija się z powrotem) i „sprawdź pocztę” — ręczny odbiór odpowiedzi (automat co 5 min robi to samo na serwerze).
 export function NowyMail({ wbsNodeId }) {
     const ctxMail = React.useContext(MailCtx);
     const [wersja, setWersja] = useState(0);
+    const [otwarty, setOtwarty] = useState(false);
     const [sprawdzam, setSprawdzam] = useState(false);
     const [info, setInfo] = useState(null);
     if (!wbsNodeId || !ctxMail?.orderId) return null;
@@ -131,8 +132,10 @@ export function NowyMail({ wbsNodeId }) {
     };
     return (
         <>
-            <MailForm key={`${wbsNodeId}-${wersja}`} wbsNodeId={wbsNodeId} onWyslano={() => { setWersja(v => v + 1); setInfo('Mail wysłany — odpowiedź wróci do tego wątku.'); }} />
-            <div className="nowy-wpis" style={{ paddingTop: 0 }}>
+            {otwarty && <MailForm key={`${wbsNodeId}-${wersja}`} wbsNodeId={wbsNodeId} onAnuluj={() => setOtwarty(false)}
+                onWyslano={() => { setWersja(v => v + 1); setOtwarty(false); setInfo('Mail wysłany — odpowiedź wróci do tego wątku.'); }} />}
+            <div className="nowy-wpis">
+                {!otwarty && <button className="btn acc" onClick={() => { setOtwarty(true); setInfo(null); }} title="Nowa rozmowa mailowa z tego wątku — odpowiedzi wrócą pod nią">+ Nowy mail</button>}
                 <button className="mini-btn" onClick={sprawdz} disabled={sprawdzam} title="Pobierz odpowiedzi na maile z wątków tego zamówienia">{sprawdzam ? 'sprawdzam…' : 'sprawdź pocztę'}</button>
                 {info && <span className="muted" style={{ fontSize: 11 }}>{info}</span>}
             </div>

@@ -5,6 +5,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PushService } from '../push/push.service';
 import { decryptSecret } from '../common/secret-crypto.util';
 import { WATEK_KEY_RE, tematBezKlucza } from './watek-mail.service';
+import { bezPodpisu } from '../common/mail-podpis.util';
 
 // mailparser nie ma typów — tylko simpleParser.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -152,7 +153,7 @@ export class WatekMailRepliesService {
     const author = mail.sentById ? await this.prisma.user.findUnique({ where: { id: mail.sentById }, select: { id: true } }) : null;
     if (!author) return true;
     const kto = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
-    const tresc = bezCytatu(text);
+    const tresc = bezPodpisu(bezCytatu(text)); // do wątku sama treść — bez cytatu i podpisu
     const comment = await this.prisma.comment.create({
       data: {
         orderId: mail.processNodeId, userId: author.id, wbsNodeId: mail.wbsNodeId, type: 'MAIL_IN',
