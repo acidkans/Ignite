@@ -24,6 +24,33 @@ export function MailForm({ wbsNodeId, odpowiedz = null, onWyslano, onAnuluj }) {
     const [dw, setDw] = useState('');
     const [temat, setTemat] = useState('');
     const [tresc, setTresc] = useState('');
+    // @anchor mail-form-zalaczniki — pliki do maila: Ctrl+V zrzutu ekranu w formularzu, przeciągnięcie albo
+    // „+ Załącznik”. Każdy plik od razu wgrywany na serwer; do wysyłki idą { fileName, name, mime }.
+    const [zal, setZal] = useState([]);
+    const [wgrywam, setWgrywam] = useState(0);
+    const plikRef = React.useRef(null);
+    const dodajPliki = async (pliki) => {
+        const lista = [...pliki].filter(Boolean);
+        if (!lista.length) return;
+        setBlad(null);
+        setWgrywam(n => n + lista.length);
+        for (const [i, f] of lista.entries()) {
+            try {
+                if (f.size > 15 * 1024 * 1024) throw new Error(`${f.name || 'plik'} — ponad 15 MB`);
+                const fd = new FormData();
+                // Wklejka ze schowka nazywa się „image.png” — nadajemy czytelną nazwę.
+                const nazwa = !f.name || /^image\.\w+$/i.test(f.name) ? `zrzut-ekranu-${Date.now().toString(36)}${i}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}` : f.name;
+                fd.append('file', f, nazwa);
+                const r = await fetch(`${API_URL}/watek-mail/order/${orderId}/zalaczniki`, { method: 'POST', headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }, body: fd }).then(json);
+                setZal(prev => [...prev, { ...r, podglad: czyObrazek(r) ? URL.createObjectURL(f) : null }]);
+            } catch (e) { setBlad(`Nie dodano załącznika: ${e.message}`); }
+            finally { setWgrywam(n => n - 1); }
+        }
+    };
+    const naWklejenie = (e) => {
+        const pliki = [...(e.clipboardData?.files || [])];
+        if (pliki.length) { e.preventDefault(); dodajPliki(pliki); }
+    };
     const [wysylam, setWysylam] = useState(false);
 
     useEffect(() => {
@@ -51,13 +78,15 @@ export function MailForm({ wbsNodeId, odpowiedz = null, onWyslano, onAnuluj }) {
         if (wysylam) return;
         const to = [...wybrani, ...inne.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean)];
         if (!to.length) { setBlad('Zaznacz albo wpisz co najmniej jednego adresata.'); return; }
-        if (!tresc.trim()) { setBlad('Mail nie ma treści.'); return; }
+        if (!tresc.trim() && !zal.length) { setBlad('Mail nie ma treści.'); return; }
+        if (wgrywam) { setBlad('Poczekaj, aż załączniki się wgrają.'); return; }
         setBlad(null);
         setWysylam(true);
         try {
             await fetch(`${API_URL}/watek-mail/send`, {
                 method: 'POST', headers: naglowki(),
-                body: JSON.stringify({ processNodeId: orderId, wbsNodeId, to, cc: dw, subject: temat, body: tresc, replyToReplyId: odpowiedz?.replyId || undefined }),
+                body: JSON.stringify({ processNodeId: orderId, wbsNodeId, to, cc: dw, subject: temat, body: tresc, replyToReplyId: odpowiedz?.replyId || undefined,
+                    attachments: zal.map(({ fileName, name, mime }) => ({ fileName, name, mime })) }),
             }).then(json);
             await ctxMail?.odswiez?.();
             onWyslano?.();
@@ -97,13 +126,26 @@ export function MailForm({ wbsNodeId, odpowiedz = null, onWyslano, onAnuluj }) {
                     <div className="lab">Temat</div>
                     <input className="in" value={temat} onChange={e => setTemat(e.target.value)} />
                     <div className="lab">Treść</div>
-                    <AutoResizeTextarea className="in" value={tresc} onChange={e => setTresc(e.target.value)} placeholder="Dzień dobry, …" />
+                    <div onPaste={naWklejenie} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); dodajPliki(e.dataTransfer.files); }}>
+                        <AutoResizeTextarea className="in" value={tresc} onChange={e => setTresc(e.target.value)} placeholder="Dzień dobry, … (zrzut ekranu wklejasz Ctrl+V, pliki możesz przeciągnąć)" />
+                    </div>
+                    <div className="zal-lista">
+                        {zal.map((z, i) => (
+                            <span key={z.fileName} className={z.podglad ? 'zal-mini' : 'zal-plik'} title={z.name}>
+                                {z.podglad ? <img src={z.podglad} alt={z.name} /> : <><b>{z.name}</b> <span className="muted">{rozmiar(z.size)}</span></>}
+                                <button className="zal-usun" onClick={() => setZal(prev => prev.filter((_, j) => j !== i))} title="Usuń z maila">×</button>
+                            </span>
+                        ))}
+                        {wgrywam > 0 && <span className="muted" style={{ fontSize: 11 }}>wgrywam {wgrywam}…</span>}
+                        <button className="mini-btn" onClick={() => plikRef.current?.click()} title="Dołącz pliki — obrazki pójdą w treści maila">+ Załącznik</button>
+                        <input ref={plikRef} type="file" multiple hidden onChange={e => { dodajPliki(e.target.files); e.target.value = ''; }} />
+                    </div>
                     <div className="muted" style={{ fontSize: 11 }}>Do tematu dojdzie „Ref number [IGW-…]” — po nim odpowiedź wróci do tego wątku.{ctx.sender?.hasSignature ? ' Podpis skrzynki zostanie doklejony.' : ''}</div>
                 </>
             )}
             {blad && <div className="dpos">{blad}</div>}
             <div className="row2">
-                <button className="btn acc" onClick={wyslij} disabled={wysylam || !ctx?.sender || !tresc.trim()}>{wysylam ? 'Wysyłam…' : 'Wyślij mail'}</button>
+                <button className="btn acc" onClick={wyslij} disabled={wysylam || wgrywam > 0 || !ctx?.sender || (!tresc.trim() && !zal.length)}>{wysylam ? 'Wysyłam…' : 'Wyślij mail'}</button>
                 {onAnuluj && <button className="btn" onClick={onAnuluj}>Anuluj</button>}
             </div>
         </div>
@@ -140,5 +182,58 @@ export function NowyMail({ wbsNodeId }) {
                 {info && <span className="muted" style={{ fontSize: 11 }}>{info}</span>}
             </div>
         </>
+    );
+}
+
+// @anchor zalaczniki-maila — załączniki wiadomości w rozmowie: obrazki jako miniatury (klik = pełny rozmiar
+// w nowej karcie), pozostałe pliki jako chip z nazwą i rozmiarem (klik = pobranie). Pliki za JWT → fetch jako blob.
+const blobCache = new Map();
+const pobierzBlob = async (z) => {
+    if (blobCache.has(z.fileName)) return blobCache.get(z.fileName);
+    const r = await fetch(`${API_URL}/watek-mail/zalaczniki/${encodeURIComponent(z.fileName)}?name=${encodeURIComponent(z.name || '')}`,
+        { headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const url = URL.createObjectURL(await r.blob());
+    blobCache.set(z.fileName, url);
+    return url;
+};
+export const czyObrazek = (z) => /^image\//i.test(z?.mime || '') || /\.(png|jpe?g|gif|webp)$/i.test(z?.name || '');
+export const rozmiar = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round((b || 0) / 1024))} KB`);
+
+function Miniatura({ z }) {
+    const [url, setUrl] = useState(blobCache.get(z.fileName) || null);
+    const [blad, setBlad] = useState(false);
+    useEffect(() => {
+        if (url) return;
+        let zywy = true;
+        pobierzBlob(z).then(u => zywy && setUrl(u)).catch(() => zywy && setBlad(true));
+        return () => { zywy = false; };
+    }, [z, url]);
+    if (blad) return <span className="zal-plik muted">obrazek niedostępny</span>;
+    return (
+        <button className="zal-mini" title={`${z.name} — otwórz w pełnym rozmiarze`} onClick={() => url && window.open(url, '_blank')}>
+            {url ? <img src={url} alt={z.name} /> : <span className="muted">…</span>}
+        </button>
+    );
+}
+
+export function ZalacznikiMaila({ lista }) {
+    if (!lista?.length) return null;
+    const pobierz = async (z) => {
+        try {
+            const url = await pobierzBlob(z);
+            const a = document.createElement('a');
+            a.href = url; a.download = z.name || z.fileName; a.click();
+        } catch { alert('Nie udało się pobrać pliku'); }
+    };
+    return (
+        <div className="zal-lista">
+            {lista.filter(czyObrazek).map(z => <Miniatura key={z.fileName} z={z} />)}
+            {lista.filter(z => !czyObrazek(z)).map(z => (
+                <button key={z.fileName} className="zal-plik" onClick={() => pobierz(z)} title="Pobierz">
+                    <b>{z.name}</b> <span className="muted">{rozmiar(z.size)}</span>
+                </button>
+            ))}
+        </div>
     );
 }

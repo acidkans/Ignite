@@ -102,7 +102,7 @@ export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, con
     // Treść wpisu czatu bez nagłówka „✉️ Mail do / Temat” (backend zapisał ją już bez cytatu).
     const cialoKomentarza = (id) => {
         const c = id ? komentarzPoId.get(id) : null;
-        return c ? (String(c.text || '').split('\n\n').slice(1).join('\n\n') || c.text) : null;
+        return c ? (String(c.text || '').split('\n\n').slice(1).join('\n\n') || c.text).replace(/\n*📎 [^\n]*$/, '') : null;
     };
     const mailPoOdpowiedzi = new Map();
     for (const m of maile || []) for (const r of m.replies || []) mailPoOdpowiedzi.set(r.id, m);
@@ -123,13 +123,14 @@ export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, con
             id: `o-${m.id}`, kierunek: 'out', temat: m.temat,
             od: [autor, m.fromEmail ? `<${m.fromEmail}>` : ''].filter(Boolean).join(' '),
             doKogo: (m.toEmails || []).join(', '), dw: (m.ccEmails || []).join(', '), kiedy: m.sentAt, tresc: m.body,
+            zalaczniki: m.attachments || [],
         });
         if (m.commentId) komentarzeMaili.add(m.commentId);
         for (const r of m.replies || []) {
             roz.wiad.push({
                 id: `i-${r.id}`, kierunek: 'in', replyId: r.id, fromEmail: r.fromEmail, temat: bezKlucza(r.subject),
                 od: r.fromName ? `${r.fromName} <${r.fromEmail}>` : r.fromEmail, doKogo: m.fromEmail, kiedy: r.receivedAt,
-                tresc: bezPodpisu(cialoKomentarza(r.commentId) ?? r.text), pelnaTresc: r.text,
+                tresc: bezPodpisu(cialoKomentarza(r.commentId) ?? r.text), pelnaTresc: r.text, zalaczniki: r.attachments || [],
             });
             if (r.commentId) komentarzeMaili.add(r.commentId);
         }

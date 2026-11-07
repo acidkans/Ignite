@@ -309,3 +309,12 @@
 .rz .msg-kto { font-weight: 600; color: #C9D3DC; font-size: 12px; }
 .rz .msg-gora .os { color: var(--muted); font-size: 11.5px; }
 .rz .msg-dalej .wpis-tresc { margin-top: 3px; }
+
+/* Załączniki maili (zalaczniki-maila, mail-form-zalaczniki) */
+.rz .zal-lista { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.rz .zal-mini { position: relative; display: inline-flex; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--sunk); cursor: pointer; overflow: hidden; }
+.rz .zal-mini img { display: block; max-height: 110px; max-width: 220px; object-fit: contain; }
+.rz .zal-plik { position: relative; display: inline-flex; gap: 6px; align-items: center; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; background: var(--sunk); color: var(--ink); cursor: pointer; }
+.rz .zal-plik b { font-weight: 600; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rz .zal-usun { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; line-height: 16px; border-radius: 50%; border: 0; background: rgba(0,0,0,.65); color: #fff; cursor: pointer; font-size: 13px; padding: 0; }
+.rz .zal-plik .zal-usun { position: static; background: none; color: var(--muted); }

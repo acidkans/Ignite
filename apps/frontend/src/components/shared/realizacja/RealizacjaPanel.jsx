@@ -20,7 +20,7 @@ import {
     DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS, PLAN_STATUS_META, planStatusFromAny, isMilestoneNode,
 } from '../wbs/wbsConstants';
 import { useWatekRealizacji } from './useWatekRealizacji';
-import { MailCtx, NowyMail, MailForm } from './MailWatku';
+import { MailCtx, NowyMail, MailForm, ZalacznikiMaila } from './MailWatku';
 import {
     nazwaWyswietlana, WATEK_RODZAJE, RODZAJE_BLOKERA, zbudujWatek, sygnalyWezlow, sumaSygnalow, kiedyTekst,
     dniOkna, indeksDnia, gotowoscPozycji, wykryjKolizje, BUFOR_DOSTAWY_DNI, parseQa,
@@ -725,7 +725,8 @@ function WiadomoscMaila({ m, pierwsza }) {
                     <span className="os">{dataPelna(m.kiedy)}</span>
                     {m.pelnaTresc && <button className="mini-btn" onClick={() => setCaly(v => !v)} title="Pokaż mail razem z cytatem, podpisem i adresatami">{caly ? 'skrót' : 'cały mail'}</button>}
                 </div>
-                <div className="wpis-tresc">{caly && m.pelnaTresc ? m.pelnaTresc : m.tresc}</div>
+                {(caly && m.pelnaTresc ? m.pelnaTresc : m.tresc) && <div className="wpis-tresc">{caly && m.pelnaTresc ? m.pelnaTresc : m.tresc}</div>}
+                <ZalacznikiMaila lista={m.zalaczniki} />
             </div>
         );
     }
@@ -740,7 +741,8 @@ function WiadomoscMaila({ m, pierwsza }) {
             <div className="wpis-meta" title={[m.od && `Od: ${m.od}`, m.doKogo && `Do: ${m.doKogo}`, m.dw && `DW: ${m.dw}`].filter(Boolean).join('\n')}>
                 <span className="l">{m.kierunek === 'in' ? 'Odebrano' : 'Wysłano'}</span><span>{dataPelna(m.kiedy)}</span>
             </div>
-            <div className="wpis-tresc">{caly && m.pelnaTresc ? m.pelnaTresc : m.tresc}</div>
+            {m.tresc && <div className="wpis-tresc">{caly && m.pelnaTresc ? m.pelnaTresc : m.tresc}</div>}
+            <ZalacznikiMaila lista={m.zalaczniki} />
         </div>
     );
 }
