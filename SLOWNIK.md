@@ -3704,6 +3704,20 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-funkcja | WatekMailRepliesService.powiadom | apps/backend/src/watek-mail/watek-mail-replies.service.ts | @anchor watek-mail-replies-powiadom |
 | back-serwis | WatekMailRepliesCronService | apps/backend/src/watek-mail/watek-mail-replies-cron.service.ts | @anchor watek-mail-replies-cron-service |
 | back-funkcja | WatekMailRepliesCronService.tick | apps/backend/src/watek-mail/watek-mail-replies-cron.service.ts | @anchor watek-mail-replies-cron-run |
+| schema-pole | WatekMail.attachments | apps/backend/prisma/schema.prisma | @anchor watek-mail-attachments |
+| schema-pole | WatekMailReply.attachments | apps/backend/prisma/schema.prisma | @anchor watek-mail-reply-attachments |
+| back-stala | ZAL_DIR | apps/backend/src/watek-mail/zalaczniki.storage.ts | @anchor watek-mail-zal-dir |
+| back-stala | ZAL_MAX_BYTES | apps/backend/src/watek-mail/zalaczniki.storage.ts | @anchor watek-mail-zal-max-bytes |
+| back-stala | ZAL_NAME_RE | apps/backend/src/watek-mail/zalaczniki.storage.ts | @anchor watek-mail-zal-name-re |
+| back-stala | ZAKAZANE_RE | apps/backend/src/watek-mail/zalaczniki.storage.ts | @anchor watek-mail-zal-zakazane |
+| back-funkcja | rozszerzenie | apps/backend/src/watek-mail/zalaczniki.storage.ts | @anchor watek-mail-zal-rozszerzenie |
+| back-stala | zalUploadOptions | apps/backend/src/watek-mail/zalaczniki.storage.ts | @anchor watek-mail-zal-upload-options |
+| back-endpoint | POST /watek-mail/order/:processNodeId/zalaczniki | apps/backend/src/watek-mail/watek-mail.controller.ts | @anchor post-watek-mail-zalacznik |
+| back-endpoint | GET /watek-mail/zalaczniki/:fileName | apps/backend/src/watek-mail/watek-mail.controller.ts | @anchor get-watek-mail-zalacznik |
+| back-funkcja | WatekMailService.send — załączniki (obrazki CID w treści) | apps/backend/src/watek-mail/watek-mail.service.ts | @anchor watek-mail-send-zalaczniki |
+| back-funkcja | WatekMailRepliesService.zapiszZalaczniki | apps/backend/src/watek-mail/watek-mail-replies.service.ts | @anchor watek-mail-replies-zalaczniki |
+| ui-sekcja | ZalacznikiMaila / Miniatura | apps/frontend/src/components/shared/realizacja/MailWatku.jsx | @anchor zalaczniki-maila |
+| ui-stan | zal / wgrywam (załączniki formularza maila) | apps/frontend/src/components/shared/realizacja/MailWatku.jsx | @anchor mail-form-zalaczniki |
 | ui-stala | MailCtx | apps/frontend/src/components/shared/realizacja/MailWatku.jsx | @anchor mail-ctx |
 | ui-formularz | MailForm | apps/frontend/src/components/shared/realizacja/MailWatku.jsx | @anchor mail-form |
 | ui-przycisk | NowyMail | apps/frontend/src/components/shared/realizacja/MailWatku.jsx | @anchor nowy-mail |

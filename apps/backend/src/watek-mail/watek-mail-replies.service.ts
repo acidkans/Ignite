@@ -6,6 +6,7 @@ import { PushService } from '../push/push.service';
 import { decryptSecret } from '../common/secret-crypto.util';
 import { WATEK_KEY_RE, tematBezKlucza } from './watek-mail.service';
 import { bezPodpisu } from '../common/mail-podpis.util';
+import { ZAL_MAX_BYTES, czyZakazany, zapiszBufor } from './zalaczniki.storage';
 
 // mailparser nie ma typów — tylko simpleParser.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -144,10 +145,12 @@ export class WatekMailRepliesService {
     const text = String(parsed.text || '').slice(0, MAX_TEXT);
     const fromName: string | null = from.name || null;
     const fromEmail = String(from.address || '').toLowerCase();
+    const zal = this.zapiszZalaczniki(parsed.attachments || []);
     const reply = await this.prisma.watekMailReply.create({
       data: {
         watekMailId: mail.id, processNodeId: mail.processNodeId, wbsNodeId: mail.wbsNodeId, messageId, matchedBy,
         fromEmail, fromName, subject: String(parsed.subject || ''), text, receivedAt: parsed.date || new Date(),
+        attachments: zal.length ? JSON.stringify(zal) : null,
       },
     });
     const author = mail.sentById ? await this.prisma.user.findUnique({ where: { id: mail.sentById }, select: { id: true } }) : null;
@@ -157,13 +160,33 @@ export class WatekMailRepliesService {
     const comment = await this.prisma.comment.create({
       data: {
         orderId: mail.processNodeId, userId: author.id, wbsNodeId: mail.wbsNodeId, type: 'MAIL_IN',
-        text: `📨 Odpowiedź mailem od: ${kto}\nTemat: ${tematBezKlucza(reply.subject)}\n\n${tresc}`,
+        text: `📨 Odpowiedź mailem od: ${kto}\nTemat: ${tematBezKlucza(reply.subject)}\n\n${tresc}${zal.length ? `\n\n📎 ${zal.map(z => z.name).join(', ')}` : ''}`,
         createdAt: reply.receivedAt,
       },
     });
     await this.prisma.watekMailReply.update({ where: { id: reply.id }, data: { commentId: comment.id } });
     await this.powiadom(mail, fromName || fromEmail, tresc).catch((e: any) => this.logger.warn(`Powiadomienie o odpowiedzi ${reply.id}: ${e?.message || e}`));
     return true;
+  }
+
+  // @anchor watek-mail-replies-zalaczniki
+  // Załączniki odpowiedzi → uploads/watek-mail. Pomijane: obrazki osadzone w treści mniejsze niż 20 KB (logo,
+  // ikonki ze stopki), pliki ponad limit, pliki wykonywalne. Zrzut ekranu wklejony w treść waży więcej, więc zostaje.
+  private zapiszZalaczniki(atts: any[]): { fileName: string; name: string; mime: string; size: number }[] {
+    const out: { fileName: string; name: string; mime: string; size: number }[] = [];
+    let n = 0;
+    for (const a of atts) {
+      const buf: Buffer | undefined = a?.content;
+      if (!buf?.length || buf.length > ZAL_MAX_BYTES) continue;
+      const mime = String(a.contentType || '');
+      const inline = a.related || a.contentDisposition === 'inline' || !!a.cid;
+      if (/^image\//i.test(mime) && inline && buf.length < 20 * 1024) continue;
+      const name = String(a.filename || `obrazek-${++n}.${(mime.split('/')[1] || 'bin').replace('jpeg', 'jpg')}`).slice(0, 200);
+      if (czyZakazany(name)) continue;
+      try { out.push({ fileName: zapiszBufor(buf, name, mime), name, mime, size: buf.length }); }
+      catch (e: any) { this.logger.warn(`Zapis załącznika ${name}: ${e?.message || e}`); }
+    }
+    return out;
   }
 
   // @anchor watek-mail-replies-powiadom

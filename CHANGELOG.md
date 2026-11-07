@@ -1,3 +1,20 @@
+## 2026-11-07 — feat(realizacja): załączniki w mailach wątku — Ctrl+V zrzutu ekranu, przeciąganie i „+ Załącznik”, obrazki w treści maila, zapis obrazków i plików z odpowiedzi klienta (v2026.11.07.2245)
+
+### schema.prisma
+- dodano pole `schema-pole` `attachments String?` w `WatekMail` i `WatekMailReply` — JSON [{ fileName, name, mime, size }], pliki w uploads/watek-mail; migracja `20261107230000_watek_mail_attachments`
+
+### architektura / API
+- `back-endpoint` `POST /watek-mail/order/:processNodeId/zalaczniki` (jeden plik ≤ 15 MB, bez wykonywalnych) i `GET /watek-mail/zalaczniki/:fileName?name=` (za JWT)
+- `back-endpoint` `POST /watek-mail/send` przyjmuje `attachments` — obrazki idą w treści maila (CID pod tekstem), reszta jako zwykłe załączniki
+- odbiór odpowiedzi zapisuje załączniki i obrazki z treści; pomija obrazki osadzone < 20 KB (logo, ikonki stopki) i pliki wykonywalne
+- frontend: w formularzu maila Ctrl+V, przeciąganie i „+ Załącznik” z miniaturami i usuwaniem; w rozmowie miniatury obrazków (klik = pełny rozmiar) i pliki do pobrania
+
+### słownik
+- dodano `watek-mail-attachments`, `watek-mail-reply-attachments`, `watek-mail-zal-*`, `post-watek-mail-zalacznik`, `get-watek-mail-zalacznik`, `watek-mail-send-zalaczniki`, `watek-mail-replies-zalaczniki`, `zalaczniki-maila`, `mail-form-zalaczniki`
+
+### wytyczne
+- `schema-pole` `WatekMailReply.attachments` — małe obrazki osadzone w treści (< 20 KB) to zwykle logo ze stopki i są pomijane; zrzut ekranu jest większy
+
 ## 2026-11-07 — feat(realizacja): maile w wątku jako rozmowy — odpowiedź wcięta pod pierwotnym mailem, osobne rozmowy, treść bez podpisu, formularz nowego maila po rozwinięciu (v2026.11.07.2227)
 
 ### architektura / API

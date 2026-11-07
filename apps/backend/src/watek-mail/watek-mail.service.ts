@@ -3,6 +3,9 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { PrismaService } from '../prisma/prisma.service';
 import { MailboxesService } from '../mailboxes/mailboxes.service';
 import { normalizeMailList } from '../qa-mail/qa-mail.service';
+import * as fs from 'fs';
+import * as path from 'path';
+import { ZAL_DIR, ZAL_NAME_RE, czyZakazany } from './zalaczniki.storage';
 
 const EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
 const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -78,7 +81,7 @@ export class WatekMailService {
   async list(processNodeId: string) {
     const rows = await this.prisma.watekMail.findMany({
       where: { processNodeId }, orderBy: { sentAt: 'desc' }, take: 300,
-      include: { replies: { orderBy: { receivedAt: 'asc' }, select: { id: true, commentId: true, fromEmail: true, fromName: true, subject: true, text: true, receivedAt: true, messageId: true } } },
+      include: { replies: { orderBy: { receivedAt: 'asc' }, select: { id: true, commentId: true, fromEmail: true, fromName: true, subject: true, text: true, receivedAt: true, messageId: true, attachments: true } } },
     });
     // `replyToReplyId` — mail wysłany jako odpowiedź na odpowiedź klienta (`inReplyTo` = jej Message-ID):
     // front składa z tego rozmowę (pierwszy mail → odpowiedzi → kolejne maile) w jednym wpisie wątku.
@@ -88,12 +91,15 @@ export class WatekMailService {
       toEmails: parseJson(m.toEmails, []), ccEmails: parseJson(m.ccEmails, []),
       subject: m.subject, temat: tematBezKlucza(m.subject), body: m.body, sentAt: m.sentAt, sentCopyError: m.sentCopyError,
       replyToReplyId: m.inReplyTo ? replyByMsgId.get(m.inReplyTo) || null : null,
-      replies: m.replies.map(({ messageId: _m, ...r }) => r),
+      attachments: parseJson(m.attachments, []),
+      replies: m.replies.map(({ messageId: _m, ...r }) => ({ ...r, attachments: parseJson(r.attachments, []) })),
     }));
   }
 
   // @anchor watek-mail-send
-  // dto: { processNodeId, wbsNodeId, to, cc?, subject?, body, replyToReplyId? }. `replyToReplyId` = odpowiedź
+  // dto: { processNodeId, wbsNodeId, to, cc?, subject?, body, replyToReplyId?, attachments?: [{ fileName, name }] }.
+  // `attachments` = pliki wcześniej wgrane przez POST /watek-mail/order/:id/zalaczniki; obrazki idą w treści
+  // maila (CID — klient widzi je pod tekstem), pozostałe jako zwykłe załączniki. `replyToReplyId` = odpowiedź
   // na mail klienta: nagłówki In-Reply-To/References (klient widzi jeden wątek), domyślny temat „Re: …”.
   // Klucz `[IGW-…]` zawsze nowy — po nim i po Message-ID odbiornik dopasuje kolejną odpowiedź.
   async send(userId: string, dto: any) {
@@ -106,7 +112,6 @@ export class WatekMailService {
     const cc = normalizeMailList(dto?.cc).filter(e => !to.includes(e));
     if (!to.length) throw new BadRequestException('Zaznacz albo wpisz co najmniej jednego adresata.');
     const body = String(dto?.body || '').trim();
-    if (!body) throw new BadRequestException('Mail nie ma treści.');
 
     let inReplyTo: string | null = null;
     let references: string | undefined;
@@ -119,29 +124,47 @@ export class WatekMailService {
       const t = tematBezKlucza(r.subject || r.watekMail.subject);
       tematDomyslny = /^(re|odp|aw)\s*:/i.test(t) ? t : `Re: ${t}`;
     }
+    // @anchor watek-mail-send-zalaczniki
+    const zal: { fileName: string; name: string; mime: string; size: number }[] = [];
+    for (const a of Array.isArray(dto?.attachments) ? dto.attachments : []) {
+      const fileName = String(a?.fileName || '');
+      const name = String(a?.name || fileName).slice(0, 200);
+      if (!ZAL_NAME_RE.test(fileName) || czyZakazany(name)) throw new BadRequestException(`Niedozwolony załącznik: ${name}`);
+      const full = path.join(ZAL_DIR, fileName);
+      if (!fs.existsSync(full)) throw new BadRequestException(`Załącznik zniknął z serwera — dodaj go ponownie: ${name}`);
+      zal.push({ fileName, name, mime: String(a?.mime || ''), size: fs.statSync(full).size });
+    }
+    if (!body && !zal.length) throw new BadRequestException('Mail nie ma treści.');
     const temat = tematBezKlucza(String(dto?.subject || '').trim()) || tematDomyslny;
     const key = newWatekMailKey();
     const messageId = `${key.toLowerCase()}.${Date.now().toString(36)}@${m.domain.domain}`;
     const subject = `${temat} Ref number [${key}]`;
     const font = 'font-family:Calibri,Arial,sans-serif;font-size:11pt';
-    const html = `<div style="${font}">${body.split(/\n{2,}/).map(p => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('')}</div>`;
+    const obrazek = (z: { name: string; mime: string }) => /^image\/(png|jpe?g|gif|webp)$/i.test(z.mime) || /\.(png|jpe?g|gif|webp)$/i.test(z.name);
+    const obrazki = zal.filter(obrazek);
+    const html = `<div style="${font}">${body.split(/\n{2,}/).map(p => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('')}`
+      + obrazki.map((z, i) => `<p><img src="cid:zal${i}@ignite" alt="${esc(z.name)}" style="max-width:100%"></p>`).join('') + '</div>';
+    const attachments = zal.map(z => {
+      const i = obrazki.indexOf(z);
+      return { filename: z.name, path: path.join(ZAL_DIR, z.fileName), ...(i >= 0 ? { cid: `zal${i}@ignite` } : {}) };
+    });
 
     const { sentCopyError } = await this.mailboxes.sendFromMailbox(m, {
-      to, cc, subject, html, text: body, messageId: `<${messageId}>`,
+      to, cc, subject, html, text: body, messageId: `<${messageId}>`, attachments,
       ...(inReplyTo ? { inReplyTo: `<${inReplyTo}>`, references } : {}),
     });
 
     const comment = await this.prisma.comment.create({
       data: {
         orderId, userId, wbsNodeId, type: 'MAIL_OUT',
-        text: `✉️ Mail do: ${to.join(', ')}${cc.length ? ` (DW: ${cc.join(', ')})` : ''}\nTemat: ${temat}\n\n${body}`,
+        text: `✉️ Mail do: ${to.join(', ')}${cc.length ? ` (DW: ${cc.join(', ')})` : ''}\nTemat: ${temat}\n\n${body}${zal.length ? `\n\n📎 ${zal.map(z => z.name).join(', ')}` : ''}`,
       },
     });
     const mail = await this.prisma.watekMail.create({
       data: {
         key, messageId, processNodeId: orderId, wbsNodeId, mailboxId: m.id, sentById: userId, fromEmail: m.email,
         toEmails: JSON.stringify(to), ccEmails: cc.length ? JSON.stringify(cc) : null,
-        subject, body, commentId: comment.id, inReplyTo, sentCopyError,
+        subject, body, commentId: comment.id, inReplyTo, sentCopyError, attachments: zal.length ? JSON.stringify(zal) : null,
       },
     });
     this.logger.log(`Mail wątku ${key} z ${m.email} do ${to.join(', ')}${sentCopyError ? ` — bez kopii w Wysłanych: ${sentCopyError}` : ''}`);

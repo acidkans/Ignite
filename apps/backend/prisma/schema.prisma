@@ -739,6 +739,8 @@ model WatekMail {
   subject       String
   /// @anchor watek-mail-body
   body          String // treść wpisana przez użytkownika (bez podpisu)
+  /// @anchor watek-mail-attachments
+  attachments   String? // JSON: [{ fileName, name, mime, size }] — pliki z uploads/watek-mail; obrazki idą w treści (CID)
   /// @anchor watek-mail-comment-id
   commentId     String? // wpis MAIL_OUT w wątku
   /// @anchor watek-mail-in-reply-to
@@ -770,6 +772,8 @@ model WatekMailReply {
   subject       String
   /// @anchor watek-mail-reply-text
   text          String // pełna treść tekstowa
+  /// @anchor watek-mail-reply-attachments
+  attachments   String? // JSON jak WatekMail.attachments — załączniki i obrazki z odpowiedzi (bez drobnych logo ze stopki)
   /// @anchor watek-mail-reply-comment-id
   commentId     String? // wpis MAIL_IN w wątku
   receivedAt    DateTime
