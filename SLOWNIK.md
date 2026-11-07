@@ -278,6 +278,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | kiedyTekst | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor kiedy-tekst |
 | ui-hook | useWatekRealizacji | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor use-watek-realizacji |
 | ui-funkcja | wyslij | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-wyslij |
+| back-funkcja | push odpowiedzi Q&A — pytanie (`qaQuestion`) w treści powiadomienia | apps/backend/src/comments/comments.controller.ts | @anchor comment-push-qa-question |
 | ui-funkcja | zamknijBloker | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-zamknij-bloker |
 | schema-model | Constraint | apps/backend/prisma/schema.prisma | @anchor constraint |
 | schema-pole | Constraint.processNodeId | apps/backend/prisma/schema.prisma | @anchor constraint-process-node-id |
@@ -837,7 +838,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-przycisk | „+ Zadanie” w nagłówku wątku gałęzi / pozycji / milestone'a | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-dodaj-zadanie |
 | ui-funkcja | wpisAktywny — który wpis wątku liczy się w chipach filtrów | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-aktywny |
 | ui-funkcja | statusWpisu — status wpisu wątku w nagłówku | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-status-wpisu |
-| ui-sekcja | nagłówek wpisu wątku: status · WBS · termin · osoba | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-naglowek |
+| ui-sekcja | nagłówek wpisu wątku: rodzaj · osoba · status · WBS · termin · kiedy | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-naglowek |
+| ui-stala | .rodz — rodzaj wpisu wątku pełną nazwą (`WATEK_RODZAJE.nazwa`), kapitaliki, kolor `k-*` | apps/frontend/src/components/shared/realizacja/realizacja.css | @anchor realizacja-wpis-rodzaj |
 | ui-funkcja | zadanie blokera przypięte do wpisu blokera w wątku | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor watek-zadanie-blokera |
 | schema-pole | UserTask.constraintId — zadanie blokera | apps/backend/prisma/schema.prisma | @anchor user-task-constraint-id |
 | schema-relacja | Constraint.task — zadanie blokera | apps/backend/prisma/schema.prisma | @anchor constraint-task |
@@ -2339,6 +2341,7 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-tabela | PositionsTable (panel 2 — pozycje i zakupy) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-positions-table |
 | ui-funkcja | Cell (komórka wiersza pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-cell |
 | ui-sekcja | PurchaseDrawer (szuflada zakupów, kolumny LeafActual) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-purchase-drawer |
+| ui-stala | BASE / COLS szuflady zakupów — szerokości w em (0 = elastyczna), min. szerokość tabeli | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-drawer-cols |
 | ui-panel | LeafCard (panel 3 — karta pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-leaf-card |
 | ui-funkcja | CardField (wiersz „etykieta : wartość" karty pozycji) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-card-field |
 | ui-funkcja | CardLink (adres produktu / propozycji bez protokołu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-card-link |
@@ -3659,6 +3662,50 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-funkcja | QaMailRepliesService.resolve | apps/backend/src/qa-mail/qa-mail-replies.service.ts | @anchor qa-mail-replies-resolve |
 | back-serwis | QaMailRepliesCronService | apps/backend/src/qa-mail/qa-mail-replies-cron.service.ts | @anchor qa-mail-replies-cron-service |
 | back-funkcja | QaMailRepliesCronService.tick | apps/backend/src/qa-mail/qa-mail-replies-cron.service.ts | @anchor qa-mail-replies-cron-run |
+| schema-model | WatekMail | apps/backend/prisma/schema.prisma | @anchor watek-mail |
+| schema-pole | WatekMail.key | apps/backend/prisma/schema.prisma | @anchor watek-mail-key |
+| schema-pole | WatekMail.messageId | apps/backend/prisma/schema.prisma | @anchor watek-mail-message-id |
+| schema-pole | WatekMail.wbsNodeId | apps/backend/prisma/schema.prisma | @anchor watek-mail-wbs-node-id |
+| schema-pole | WatekMail.toEmails | apps/backend/prisma/schema.prisma | @anchor watek-mail-to-emails |
+| schema-pole | WatekMail.body | apps/backend/prisma/schema.prisma | @anchor watek-mail-body |
+| schema-pole | WatekMail.commentId | apps/backend/prisma/schema.prisma | @anchor watek-mail-comment-id |
+| schema-pole | WatekMail.inReplyTo | apps/backend/prisma/schema.prisma | @anchor watek-mail-in-reply-to |
+| schema-model | WatekMailReply | apps/backend/prisma/schema.prisma | @anchor watek-mail-reply |
+| schema-pole | WatekMailReply.messageId | apps/backend/prisma/schema.prisma | @anchor watek-mail-reply-message-id |
+| schema-pole | WatekMailReply.text | apps/backend/prisma/schema.prisma | @anchor watek-mail-reply-text |
+| schema-pole | WatekMailReply.commentId | apps/backend/prisma/schema.prisma | @anchor watek-mail-reply-comment-id |
+| schema-relacja | ProcessNode.watekMails | apps/backend/prisma/schema.prisma | @anchor process-node-watek-mails |
+| schema-relacja | UserMailbox.watekMails | apps/backend/prisma/schema.prisma | @anchor user-mailbox-watek-mails |
+| schema-pole | UserMailbox.watekImapLastUid | apps/backend/prisma/schema.prisma | @anchor user-mailbox-watek-imap-last-uid |
+| schema-pole | UserMailbox.watekImapUidValidity | apps/backend/prisma/schema.prisma | @anchor user-mailbox-watek-imap-uid-validity |
+| back-modul | WatekMailModule | apps/backend/src/watek-mail/watek-mail.module.ts | @anchor watek-mail-module |
+| back-controller | WatekMailController | apps/backend/src/watek-mail/watek-mail.controller.ts | @anchor watek-mail-controller |
+| back-endpoint | GET /watek-mail/order/:processNodeId/context | apps/backend/src/watek-mail/watek-mail.controller.ts | @anchor get-watek-mail-context |
+| back-endpoint | GET /watek-mail/order/:processNodeId | apps/backend/src/watek-mail/watek-mail.controller.ts | @anchor get-watek-mail-list |
+| back-endpoint | POST /watek-mail/send | apps/backend/src/watek-mail/watek-mail.controller.ts | @anchor post-watek-mail-send |
+| back-endpoint | POST /watek-mail/check | apps/backend/src/watek-mail/watek-mail.controller.ts | @anchor post-watek-mail-check |
+| back-serwis | WatekMailService | apps/backend/src/watek-mail/watek-mail.service.ts | @anchor watek-mail-service |
+| back-stala | WATEK_KEY_RE | apps/backend/src/watek-mail/watek-mail.service.ts | @anchor watek-mail-key-re |
+| back-funkcja | tematBezKlucza | apps/backend/src/watek-mail/watek-mail.service.ts | @anchor temat-bez-klucza |
+| back-funkcja | WatekMailService.context | apps/backend/src/watek-mail/watek-mail.service.ts | @anchor watek-mail-context |
+| back-funkcja | WatekMailService.list | apps/backend/src/watek-mail/watek-mail.service.ts | @anchor watek-mail-list |
+| back-funkcja | WatekMailService.send | apps/backend/src/watek-mail/watek-mail.service.ts | @anchor watek-mail-send |
+| back-serwis | WatekMailRepliesService | apps/backend/src/watek-mail/watek-mail-replies.service.ts | @anchor watek-mail-replies-service |
+| back-funkcja | bezCytatu | apps/backend/src/watek-mail/watek-mail-replies.service.ts | @anchor watek-mail-bez-cytatu |
+| back-funkcja | WatekMailRepliesService.pollActive | apps/backend/src/watek-mail/watek-mail-replies.service.ts | @anchor watek-mail-replies-poll-active |
+| back-funkcja | WatekMailRepliesService.checkOrder | apps/backend/src/watek-mail/watek-mail-replies.service.ts | @anchor watek-mail-replies-check-order |
+| back-funkcja | WatekMailRepliesService.pollMailbox | apps/backend/src/watek-mail/watek-mail-replies.service.ts | @anchor watek-mail-replies-poll-mailbox |
+| back-funkcja | WatekMailRepliesService.store | apps/backend/src/watek-mail/watek-mail-replies.service.ts | @anchor watek-mail-replies-store |
+| back-funkcja | WatekMailRepliesService.powiadom | apps/backend/src/watek-mail/watek-mail-replies.service.ts | @anchor watek-mail-replies-powiadom |
+| back-serwis | WatekMailRepliesCronService | apps/backend/src/watek-mail/watek-mail-replies-cron.service.ts | @anchor watek-mail-replies-cron-service |
+| back-funkcja | WatekMailRepliesCronService.tick | apps/backend/src/watek-mail/watek-mail-replies-cron.service.ts | @anchor watek-mail-replies-cron-run |
+| ui-stala | MailCtx | apps/frontend/src/components/shared/realizacja/MailWatku.jsx | @anchor mail-ctx |
+| ui-formularz | MailForm | apps/frontend/src/components/shared/realizacja/MailWatku.jsx | @anchor mail-form |
+| ui-przycisk | NowyMail | apps/frontend/src/components/shared/realizacja/MailWatku.jsx | @anchor nowy-mail |
+| ui-stan | mailCtx | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-mail-ctx |
+| ui-sekcja | NowyMail (Kokpit) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit-mail |
+| ui-wiersz | Wpis — rodzaj mail | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-mail |
+| ui-funkcja | mailPoKomentarzu | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor watek-mail-po-komentarzu |
 | ui-modal | QaMailModal | apps/frontend/src/components/shared/wbs/QaMailModal.jsx | @anchor qa-mail-modal |
 | ui-stala | MAIL_TEXTS | apps/frontend/src/components/shared/wbs/QaMailModal.jsx | @anchor qa-mail-lang-texts |
 | ui-stan | lang | apps/frontend/src/components/shared/wbs/QaMailModal.jsx | @anchor qa-mail-lang |

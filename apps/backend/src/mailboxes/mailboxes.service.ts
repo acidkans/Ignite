@@ -338,7 +338,8 @@ export class MailboxesService {
   // @anchor mailboxes-send-from-mailbox
   // Wysyłka ze skrzynki firmowej: MIME budowany raz (obrazki podpisu jako CID), SMTP skrzynki,
   // ten sam MIME do „Wysłane”. `html` to treść BEZ podpisu — podpis dokleja się tutaj.
-  async sendFromMailbox(m: any, mail: { to: string[]; cc?: string[]; subject: string; html: string; text?: string; attachments?: any[]; messageId?: string }) {
+  // `inReplyTo` / `references` (z <>) — odpowiedź w tym samym wątku poczty klienta.
+  async sendFromMailbox(m: any, mail: { to: string[]; cc?: string[]; subject: string; html: string; text?: string; attachments?: any[]; messageId?: string; inReplyTo?: string; references?: string }) {
     const font = 'font-family:Calibri,Arial,sans-serif;font-size:11pt';
     const html = mail.html + (m.signatureHtml ? `<br><div style="${font}">${m.signatureHtml}</div>` : '');
     const built = await nodemailer.createTransport({ streamTransport: true, buffer: true }).sendMail({
@@ -346,6 +347,7 @@ export class MailboxesService {
       to: mail.to, cc: mail.cc?.length ? mail.cc : undefined,
       subject: mail.subject, html, text: mail.text,
       attachments: mail.attachments, messageId: mail.messageId, attachDataUrls: true,
+      inReplyTo: mail.inReplyTo, references: mail.references,
     });
     const raw = built.message as Buffer;
     try {

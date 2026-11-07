@@ -293,6 +293,8 @@ model ProcessNode {
   orderRequirements         OrderRequirements[]
   /// @anchor process-node-qa-mails
   qaMails                   QaMail[]
+  /// @anchor process-node-watek-mails
+  watekMails                WatekMail[]
   ancestors                 ProcessNodeClosure[]       @relation("NodeAncestors")
   descendants               ProcessNodeClosure[]       @relation("NodeDescendants")
   owner                     User?                      @relation("OwnedProcessNodes", fields: [ownerId], references: [id])
@@ -664,12 +666,18 @@ model UserMailbox {
   imapLastUid     Int? // ostatni przeczytany UID skrzynki odbiorczej (odbiór odpowiedzi)
   /// @anchor user-mailbox-imap-uid-validity
   imapUidValidity String? // UIDVALIDITY jako tekst — zmiana = trzeba czytać od nowa
+  /// @anchor user-mailbox-watek-imap-last-uid
+  watekImapLastUid     Int? // osobny kursor INBOX dla maili wątków Realizacji (`WatekMail`) — niezależny od Q&A
+  /// @anchor user-mailbox-watek-imap-uid-validity
+  watekImapUidValidity String?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
   user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   domain          MailDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
   /// @anchor user-mailbox-qa-mails
   qaMails         QaMail[]
+  /// @anchor user-mailbox-watek-mails
+  watekMails      WatekMail[]
 
   @@unique([userId, domainId])
   @@index([domainId])
@@ -707,6 +715,70 @@ model QaMail {
   @@index([processNodeId])
   @@index([mailboxId])
   @@map("qa_mails")
+}
+
+/// @anchor watek-mail
+/// Mail z wątku gałęzi / pozycji Realizacji (osobny od pytań Q&A). Wysłany ze skrzynki firmowej użytkownika
+/// w domenie zamówienia; w wątku powstaje wpis czatu `Comment` typu MAIL_OUT. Klucz `[IGW-…]` w temacie
+/// i Message-ID służą do odbioru odpowiedzi (`WatekMailReply`), które wpadają do wątku jako MAIL_IN.
+model WatekMail {
+  id            String       @id @default(uuid())
+  /// @anchor watek-mail-key
+  key           String       @unique // „IGW-7K3QF2” — w temacie maila w nawiasie kwadratowym
+  /// @anchor watek-mail-message-id
+  messageId     String       @unique // nagłówek Message-ID bez nawiasów <>
+  processNodeId String // zamówienie
+  /// @anchor watek-mail-wbs-node-id
+  wbsNodeId     String // węzeł wątku (gałąź / pozycja / milestone) — UUID, nie FK (jak `Comment.wbsNodeId`)
+  mailboxId     String?
+  sentById      String? // bez relacji — zostaje po usunięciu konta
+  fromEmail     String
+  /// @anchor watek-mail-to-emails
+  toEmails      String // JSON: ["a@firma.pl", …]
+  ccEmails      String? // JSON jak toEmails
+  subject       String
+  /// @anchor watek-mail-body
+  body          String // treść wpisana przez użytkownika (bez podpisu)
+  /// @anchor watek-mail-comment-id
+  commentId     String? // wpis MAIL_OUT w wątku
+  /// @anchor watek-mail-in-reply-to
+  inReplyTo     String? // Message-ID odpowiedzi, na którą ten mail odpowiada (bez <>)
+  sentCopyError String?
+  sentAt        DateTime     @default(now())
+  processNode   ProcessNode  @relation(fields: [processNodeId], references: [id], onDelete: Cascade)
+  mailbox       UserMailbox? @relation(fields: [mailboxId], references: [id], onDelete: SetNull)
+  replies       WatekMailReply[]
+
+  @@index([processNodeId])
+  @@index([mailboxId])
+  @@map("watek_mails")
+}
+
+/// @anchor watek-mail-reply
+/// Odpowiedź na `WatekMail` odebrana z INBOX skrzynki nadawcy (cron IMAP albo „Sprawdź pocztę”).
+/// Od razu importowana do wątku jako `Comment` typu MAIL_IN (bez cytatu i stopki); pełna treść zostaje tutaj.
+model WatekMailReply {
+  id            String    @id @default(uuid())
+  watekMailId   String
+  processNodeId String
+  wbsNodeId     String
+  /// @anchor watek-mail-reply-message-id
+  messageId     String    @unique
+  matchedBy     String // 'header' | 'subject'
+  fromEmail     String
+  fromName      String?
+  subject       String
+  /// @anchor watek-mail-reply-text
+  text          String // pełna treść tekstowa
+  /// @anchor watek-mail-reply-comment-id
+  commentId     String? // wpis MAIL_IN w wątku
+  receivedAt    DateTime
+  createdAt     DateTime  @default(now())
+  watekMail     WatekMail @relation(fields: [watekMailId], references: [id], onDelete: Cascade)
+
+  @@index([processNodeId])
+  @@index([watekMailId])
+  @@map("watek_mail_replies")
 }
 
 /// @anchor qa-mail-reply

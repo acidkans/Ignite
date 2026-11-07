@@ -33,6 +33,7 @@ import { SmtpModule } from './smtp/smtp.module';
 import { MailModule } from './mail/mail.module';
 import { MailboxesModule } from './mailboxes/mailboxes.module';
 import { QaMailModule } from './qa-mail/qa-mail.module';
+import { WatekMailModule } from './watek-mail/watek-mail.module';
 import { PdfModule } from './pdf/pdf.module';
 import { OneDriveModule } from './onedrive/onedrive.module';
 import { ScopeDocumentsModule } from './scope-documents/scope-documents.module';
@@ -89,6 +90,7 @@ import { TrainingsModule } from './trainings/trainings.module';
     MailModule,
     MailboxesModule,
     QaMailModule,
+    WatekMailModule,
     PdfModule,
     OneDriveModule,
     ScopeDocumentsModule,

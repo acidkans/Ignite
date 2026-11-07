@@ -1358,18 +1358,24 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
     // podpowiedziana cena zapisywała się kwotą, której nikt nie przeczytał, a to rozliczenie.
     const brakujaco = Math.round(Math.max(0, r.plan - qtyWOfercie) * 1000) / 1000;
 
+    // @anchor realization-new-drawer-cols — [klucz, etykieta, szerokość w em (0 = elastyczna), liczbowa].
+    // Kolumny o stałej treści (data, ilość, kwoty, status) mają szerokość w `em`, więc rosną RAZEM
+    // z czcionką — procent sumy rozjeżdżał się przy powiększeniu (czcionka rosła, kolumna nie)
+    // i pola nachodziły na siebie. Tekstowe (zakres, komentarz, producent, model) dzielą resztę.
     const BASE = withCard
-        ? [['entryDate', 'Data', 160], ['docNumber', 'Dokument', 150], ['supplier', 'Oferent', 260],
-           ['manufacturer', 'Producent', 200], ['model', 'Model', 200], ['ean', 'EAN', 190],
-           ['qty', 'Ilość', 90, 1], ['unitCost', 'Koszt jedn.', 150, 1], ['wartosc', 'Wartość', 130, 1], ['surplus', 'Status', 140], ['comment', 'Komentarz', 420]]
-        : [['entryDate', 'Data', 160], ['docNumber', 'Dokument', 150], ['supplier', 'Oferent', 260],
-           ['scope', 'Zakres', 320],
-           ['qty', 'Ilość', 90, 1], ['unitCost', 'Koszt jedn.', 150, 1], ['wartosc', 'Wartość', 130, 1], ['surplus', 'Status', 140], ['comment', 'Komentarz', 420]];
-    const COLS = readOnly ? BASE : [...BASE, ['akcje', '', 100, 1]];
-    // Szerokości szuflady liczone tak samo jak w tabeli pozycji — jako procent sumy, żeby
-    // `table-fixed` nie rozepchnął jej do sumy pikseli i nie przywrócił poziomego suwaka.
-    const SUMA_COLS = COLS.reduce((a, c) => a + (c[2] || 0), 0);
-    const pctOf = (c) => `${((c[2] || 0) / SUMA_COLS * 100).toFixed(3)}%`;
+        ? [['entryDate', 'Data', 10.5], ['docNumber', 'Dokument', 8], ['supplier', 'Oferent', 12.5],
+           ['manufacturer', 'Producent', 0], ['model', 'Model', 0], ['ean', 'EAN', 10],
+           ['qty', 'Ilość', 4.5, 1], ['unitCost', 'Koszt jedn.', 8.5, 1], ['wartosc', 'Wartość', 7.5, 1], ['surplus', 'Status', 12.5], ['comment', 'Komentarz', 0]]
+        : [['entryDate', 'Data', 10.5], ['docNumber', 'Dokument', 8], ['supplier', 'Oferent', 12.5],
+           ['scope', 'Zakres', 0],
+           ['qty', 'Ilość', 4.5, 1], ['unitCost', 'Koszt jedn.', 8.5, 1], ['wartosc', 'Wartość', 7.5, 1], ['surplus', 'Status', 12.5], ['comment', 'Komentarz', 0]];
+    // Kolumna akcji: sam kosz w zapisanych wpisach, szerzej tylko przy „Zapisz" nowego wpisu.
+    const COLS = readOnly ? BASE : [...BASE, ['akcje', '', adding ? 6 : 2.5, 1]];
+    // Elastyczne kolumny nie schodzą poniżej 9em — przy dużym powiększeniu tabela woli wyjść
+    // poza kartę niż wcisnąć pole tekstowe pod sąsiednie.
+    const MIN_FLEX_EM = 9;
+    const minTableEm = COLS.reduce((a, c) => a + (c[2] || MIN_FLEX_EM), 0);
+    const widthOf = (c) => (c[2] ? `${c[2]}em` : undefined);
 
     const head = (
         <div className={DRAWER.cardHead}>
@@ -1436,13 +1442,16 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
             {head}
             {!r.entries.length && pusta()}
             {(r.entries.length > 0 || adding) && (
-                <table className="w-full table-fixed border-separate border-spacing-0 text-[length:var(--rn-lg)]">
+                <table className="w-full table-fixed border-separate border-spacing-0 text-[length:var(--rn-lg)]"
+                    style={{ minWidth: `${minTableEm}em` }}>
                     <thead>
                         <tr>
+                            {/* `!text-` — w zakładce „Realizacja" reguła `.rz th { text-align: left }`
+                                przebijała zwykłe `text-right` i nagłówki kwot stały nad pustym miejscem. */}
                             {COLS.map(c => (
-                                <th key={c[0]} style={{ width: pctOf(c) }}
+                                <th key={c[0]} style={{ width: widthOf(c) }}
                                     className={`border-y border-white/[.07] px-2 py-1 text-sm font-bold uppercase tracking-wider text-gray-500 ${
-                                        c[3] ? 'text-right' : 'text-left'}`}>{c[1]}</th>
+                                        c[3] ? '!text-right' : '!text-left'}`}>{c[1]}</th>
                             ))}
                         </tr>
                     </thead>
@@ -1601,7 +1610,7 @@ function EntryRow({ entry, cols, readOnly, onSave, onDelete }) {
             case 'akcje':        return (
                 <button onClick={() => onDelete(entry.id)} title="Usuń wpis realizacji"
                     className="text-gray-600 opacity-0 transition-all hover:text-red-400 group-hover/entry:opacity-100">
-                    <Trash2 size={20} />
+                    <Trash2 size={16} />
                 </button>
             );
             default: return null;
@@ -1611,7 +1620,7 @@ function EntryRow({ entry, cols, readOnly, onSave, onDelete }) {
     return (
         <tr className={`group/entry ${ENTRY_ROW_BG[entryStatusOf(entry)]}`}>
             {cols.map(c => (
-                <td key={c[0]} className={`border-b border-white/[.04] px-2 py-1 align-top ${c[3] ? 'text-right tabular-nums' : ''}`}>
+                <td key={c[0]} className={`border-b border-white/[.04] ${c[0] === 'akcje' ? 'px-1 pt-1.5' : 'px-2 py-1'} align-top ${c[3] ? 'text-right tabular-nums' : ''}`}>
                     {cellOf(c[0])}
                 </td>
             ))}

@@ -89,7 +89,9 @@ export class CommentsController {
     }
 
     @Post('order/:orderId')
-    async create(@Param('orderId') orderId: string, @Body() body: { text: string; requirementId?: string; type?: string; mentionedUserIds?: string[]; replyToId?: string; wbsNodeId?: string; images?: string[] }, @Request() req) {
+    // `qaQuestion` — treść pytania Q&A, gdy wiadomość jest odpowiedzią na nie (wątek Realizacji).
+    // Nie trafia do bazy: służy tylko powiadomieniu, żeby odbiorca wiedział, na co padła odpowiedź.
+    async create(@Param('orderId') orderId: string, @Body() body: { text: string; requirementId?: string; type?: string; mentionedUserIds?: string[]; replyToId?: string; wbsNodeId?: string; images?: string[]; qaQuestion?: string }, @Request() req) {
         // Obrazki tylko z nazwami nadanymi przez upload — nic spoza uploads/chat/.
         const images = (Array.isArray(body.images) ? body.images : []).filter(n => typeof n === 'string' && CHAT_IMAGE_NAME_RE.test(n));
         const text = (body.text ?? '').trim();
@@ -128,14 +130,21 @@ export class CommentsController {
         const wbsNodeName = isBranchChat
             ? (await this.prisma.wbsNode.findUnique({ where: { id: body.wbsNodeId }, select: { name: true } }))?.name ?? 'gałąź'
             : null;
-        const title = isBranchChat
+        // @anchor comment-push-qa-question — odpowiedź na pytanie Q&A: tytuł mówi, że to odpowiedź,
+        // a treść niesie pytanie przed odpowiedzią — sama odpowiedź („tak", „200 mm") bez pytania nic nie mówi.
+        const qaQuestion = typeof body.qaQuestion === 'string' ? body.qaQuestion.trim() : '';
+        const skroc = (s: string, n: number) => `${s.slice(0, n)}${s.length > n ? '…' : ''}`;
+        const title = isBranchChat && qaQuestion
+            ? `💡 ${authorName} — odpowiedź na pytanie „${wbsNodeName}” w ${orderName}`
+            : isBranchChat
             ? `💬 ${authorName} — czat „${wbsNodeName}” w ${orderName}`
             : isMention
             ? `📌 ${authorName} oznaczył(a) Cię w ${orderName}`
             : isQuestion ? `❓ Pytanie w ${orderName}` : `💬 Komentarz w ${orderName}`;
-        const bodyText = body.text
-            ? `${body.text.slice(0, 100)}${body.text.length > 100 ? '…' : ''}`
+        const tresc = body.text
+            ? skroc(body.text, 100)
             : `📷 ${images.length > 1 ? `${images.length} obrazki` : 'obrazek'}`;
+        const bodyText = qaQuestion ? `❓ ${skroc(qaQuestion, 120)}\n↳ ${tresc}` : tresc;
 
         for (const id of recipientIds) {
             const type = mentionedIds.includes(id) ? 'NEW_MENTION' : isQuestion ? 'NEW_QUESTION' : 'NEW_COMMENT';
