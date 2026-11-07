@@ -90,7 +90,7 @@
 .rz .k-qa { background: var(--warn-soft); color: var(--warn); }
 .rz .k-buy { background: var(--ok-soft); color: var(--ok); }
 .rz .k-block { background: var(--bad-soft); color: var(--bad); }
-.rz .k-task { background: var(--sunk); color: var(--ink); border: 1px solid var(--line); }
+.rz .k-task { background: var(--sunk); color: #8C99A6; border: 1px solid var(--line); }
 .rz .k-proto { background: var(--ok-soft); color: var(--ok); }
 .rz .mini-btn { font: 500 11px var(--f-body); border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 4px; padding: 0 6px; line-height: 18px; cursor: pointer; white-space: nowrap; }
 .rz .mini-btn:hover { color: var(--ink); border-color: var(--muted); }
@@ -274,4 +274,26 @@
 .rz .mailform .adr { display: inline-flex; gap: 4px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 1px 8px; cursor: pointer; user-select: none; background: var(--surface); }
 .rz .mailform .adr.on { border-color: var(--info); color: var(--info); background: var(--info-soft); }
 .rz .mailform .adr input { margin: 0; }
-.rz .mail-caly { white-space: pre-wrap; font-size: 12px; color: var(--muted); border-left: 2px solid var(--line); padding: 4px 8px; margin-top: 4px; max-height: 320px; overflow: auto; }
+
+/* Dół karty wątku — nowy wpis rodzaju z filtra (RealizacjaPanel NowyWpis) */
+.rz .nowy-wpis { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12px; flex-wrap: wrap; }
+.rz .nowy-wpis.kol { flex-direction: column; align-items: stretch; gap: 6px; }
+.rz .nowy-wpis.kol textarea.in { width: 100%; resize: none; font: inherit; }
+.rz .nowy-wpis .row2 { display: flex; gap: 6px; align-items: center; }
+.rz .nowy-wpis + .reply { border-top: 0; }
+
+
+/* Blok wpisu wątku — jeden układ dla każdego rodzaju (realizacja-wpis-blok): temat → szczegóły → treść.
+   Lewa kreska w kolorze rodzaju; `k-*` nadaje kolor, tło i obramowanie zerujemy. */
+.rz .wpis-blok { margin-top: 5px; padding: 1px 0 1px 10px; border: 0; border-left: 3px solid currentColor; background: none; border-radius: 0; }
+.rz .wpis-temat { font: 600 13px var(--f-body); color: #F5F8FA; white-space: pre-wrap; overflow-wrap: anywhere; }
+.rz .wpis-meta { display: grid; grid-template-columns: max-content 1fr; gap: 1px 10px; margin-top: 3px; font-size: 11.5px; }
+.rz .wpis-meta .l { color: var(--muted); opacity: .8; }
+.rz .wpis-meta span:not(.l) { color: #C9D3DC; overflow-wrap: anywhere; }
+.rz .wpis-meta span.dpos { color: var(--bad); }
+.rz .wpis-tresc { margin-top: 5px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; color: #F5F8FA; max-height: 360px; overflow: auto; }
+.rz .wpis-blok.k-mail .wpis-tresc { border-top: 1px solid var(--line); padding-top: 5px; }
+.rz .ev.ev-zamk .wpis-temat, .rz .ev.ev-zamk .wpis-tresc { color: var(--muted); }
+.rz .ev .wpis-temat.qa-p::before, .rz .ev .wpis-tresc.qa-o::before { font: 600 10px var(--f-mono); margin-right: 6px; padding: 0 4px; border-radius: 3px; }
+.rz .ev .wpis-temat.qa-p::before { content: 'P'; color: var(--warn); background: var(--warn-soft); }
+.rz .ev .wpis-tresc.qa-o::before { content: 'O'; color: var(--info); background: var(--info-soft); }

@@ -256,7 +256,6 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-hook | useSzerokosciKolumn | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szerokosci-kolumn |
 | ui-stala | boczne karty Kokpitu do krawędzi (margines -24px wątku i blokerów, środek bez zmian) | apps/frontend/src/components/shared/realizacja/realizacja.css | @anchor realizacja-kolumny-do-krawedzi |
 | ui-sekcja | DwieKolumny | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-dwie-kolumny |
-| ui-przycisk | NowyBloker — „+ Bloker” pod wątkiem | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-nowy-bloker |
 | ui-stala | style Q&A w wątku: naprzemienne akapity P/O | apps/frontend/src/components/shared/realizacja/realizacja.css | @anchor realizacja-qa-akapity |
 | ui-funkcja | Kokpit — przychód i zysk | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit-wynik |
 | ui-input | PoleCzatu | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-pole-czatu |
@@ -278,6 +277,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | kiedyTekst | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor kiedy-tekst |
 | ui-hook | useWatekRealizacji | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor use-watek-realizacji |
 | ui-funkcja | wyslij | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-wyslij |
+| ui-hook | auto-odświeżanie wątku (push, powrót do karty, co 60 s) | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-auto-odswiez |
 | back-funkcja | push odpowiedzi Q&A — pytanie (`qaQuestion`) w treści powiadomienia | apps/backend/src/comments/comments.controller.ts | @anchor comment-push-qa-question |
 | ui-funkcja | zamknijBloker | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-zamknij-bloker |
 | schema-model | Constraint | apps/backend/prisma/schema.prisma | @anchor constraint |
@@ -319,6 +319,12 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-sekcja | GotowoscChipy | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-gotowosc-chipy |
 | ui-formularz | BlokerForm | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-bloker-form |
 | ui-funkcja | kolejnoscDecyzji (sortowanie blokerów i Q&A w wątku) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolejnosc-blokerow |
+| ui-sekcja | WatekKarta — karta wątku z filtrami rodzajów i formularzem nowego wpisu | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-watek-karta |
+| ui-formularz | NowyWpis — formularz nowego wpisu rodzaju z filtra | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-nowy-wpis |
+| ui-formularz | NowePytanie — nowe pytanie Q&A z wątku | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-nowe-pytanie |
+| ui-funkcja | dodajQa | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-dodaj-qa |
+| ui-stan | sygnalZakupu | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-sygnal-zakupu |
+| ui-propsy | PurchaseDrawer.addSignal | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor purchase-drawer-add-signal |
 | ui-sekcja | Harmonogram (wspólny widok robót Planowanie + Realizacja, wygląd Lookahead; zakres 14 dni / miesiąc / całość) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram |
 | ui-funkcja | dniRobocze (dni robocze od..ost włącznie, opcjonalnie z dniami wolnymi) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-dni-robocze |
 | ui-funkcja | przesunPasek (nowe daty paska po przeciągnięciu: move zachowuje dni robocze, l/r zmienia krawędź) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-przesun |
@@ -835,7 +841,6 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-przycisk | „+ Bloker” gałęzi pod wątkiem Kokpitu | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit-bloker |
 | ui-stala | kontekst otwierania formularza zadania z wpisów wątku Realizacji | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zadanie-ctx |
 | ui-stan | otwarty formularz zadania (TaskModal) w Realizacji | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zadanie-modal |
-| ui-przycisk | „+ Zadanie” w nagłówku wątku gałęzi / pozycji / milestone'a | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-dodaj-zadanie |
 | ui-funkcja | wpisAktywny — który wpis wątku liczy się w chipach filtrów | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-aktywny |
 | ui-funkcja | statusWpisu — status wpisu wątku w nagłówku | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-status-wpisu |
 | ui-sekcja | nagłówek wpisu wątku: rodzaj · osoba · status · WBS · termin · kiedy | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-naglowek |
@@ -3706,6 +3711,10 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-sekcja | NowyMail (Kokpit) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit-mail |
 | ui-wiersz | Wpis — rodzaj mail | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-mail |
 | ui-funkcja | mailPoKomentarzu | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor watek-mail-po-komentarzu |
+| ui-funkcja | mailInfo (od, do, DW, kiedy) | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor watek-mail-info |
+| ui-funkcja | dataPelna | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-data-pelna |
+| ui-funkcja | ukladWpisu — temat / szczegóły / treść wpisu wątku | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-uklad-wpisu |
+| ui-sekcja | blok wpisu wątku (temat → szczegóły → treść) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-blok |
 | ui-modal | QaMailModal | apps/frontend/src/components/shared/wbs/QaMailModal.jsx | @anchor qa-mail-modal |
 | ui-stala | MAIL_TEXTS | apps/frontend/src/components/shared/wbs/QaMailModal.jsx | @anchor qa-mail-lang-texts |
 | ui-stan | lang | apps/frontend/src/components/shared/wbs/QaMailModal.jsx | @anchor qa-mail-lang |

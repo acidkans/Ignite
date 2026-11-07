@@ -1,3 +1,34 @@
+## 2026-11-07 — feat(realizacja): jeden czytelny układ każdego wpisu wątku — rodzaj, gałąź, status, temat, szczegóły (właściciel, termin), treść; Zadanie na szaro (v2026.11.07.2211)
+
+### architektura / API
+- `ui-funkcja` `ukladWpisu` + `ui-sekcja` blok wpisu: nagłówek „rodzaj · gałąź › pozycja · status · kiedy”, pod nim temat (tytuł zadania, opis blokera, pytanie, temat maila), szczegóły „etykieta: wartość” (Odpowiedzialny / Właściciel / Autor, Termin, Rodzaj, Wpływ, Od/Do) i treść (opis zadania, notatka, odpowiedź, wiadomość); lewa kreska w kolorze rodzaju
+- `ui-hook` `useWatekRealizacji` odświeża wątek sam (push o zamówieniu, powrót do karty, co 60 s); „sprawdź pocztę” zawsze odświeża — odpowiedź zaimportowana przez cron nie pojawiała się bez przeładowania
+- mail korzysta z tego samego bloku (usunięty osobny `realizacja-mail-uklad`); rodzaj „Zadanie” szary
+
+### słownik
+- dodano `realizacja-uklad-wpisu`, `realizacja-wpis-blok`, `watek-auto-odswiez`
+- usunięto `realizacja-mail-uklad`
+
+## 2026-11-07 — feat(realizacja): mail w wątku w układzie poczty — temat, Od, Do/DW, data, treść pod spodem (v2026.11.07.2203)
+
+### architektura / API
+- `ui-sekcja` wpis „Mail” w wątku: ramka z tematem, Od, Do (DW), datą wysłania/odebrania i jaśniejszą treścią pod spodem; status „wysłany”/„odebrany” jako pill zamiast emoji (nie renderowały się); „cały mail” podmienia treść w ramce
+
+### słownik
+- dodano `watek-mail-info`, `realizacja-mail-uklad`, `realizacja-data-pelna`
+
+## 2026-11-07 — feat(realizacja): wątek gałęzi / pozycji / milestone'a — wszystkie rodzaje w filtrach nagłówka, formularz nowego wpisu wybranego rodzaju na dole (v2026.11.07.2126)
+
+### architektura / API
+- `ui-sekcja` `WatekKarta` — jedna karta wątku dla Kokpitu, pozycji i milestone'a: chipy wszystkich rodzajów (też w pustym wątku), pod listą `ui-formularz` `NowyWpis` rodzaju z filtra (czat, bloker, pytanie Q&A, zadanie, mail, zakup, podpowiedź dla odbiorów); usunięte rozrzucone „+ Zadanie” w nagłówku, „+ Bloker”, „+ Mail”
+- `ui-funkcja` `dodajQa` — nowe pytanie Q&A z wątku (`PATCH /wbs-nodes/:id { qa }`)
+- `ui-propsy` `PurchaseDrawer.addSignal` — filtr „Zakupy” w wątku pozycji otwiera formularz wpisu w szufladzie zakupów
+- wpisy wątku pozycji i milestone'a rozwijają się do edycji jak w Kokpicie
+
+### słownik
+- dodano `realizacja-watek-karta`, `realizacja-nowy-wpis`, `realizacja-nowe-pytanie`, `realizacja-dodaj-qa`, `realizacja-sygnal-zakupu`, `purchase-drawer-add-signal`
+- usunięto `realizacja-nowy-bloker`, `realizacja-dodaj-zadanie`
+
 ## 2026-11-07 — feat(realizacja): maile z wątku gałęzi / pozycji — wybór adresatów, wysyłka ze skrzynki firmowej, odbiór odpowiedzi i import do wątku (v2026.11.07.2042)
 
 ### schema.prisma

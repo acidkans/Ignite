@@ -1337,9 +1337,12 @@ function CommentCell({ node, readOnly, onSave }) {
 // Wpisy są tu EDYTOWALNE w miejscu, a nowy dodaje się przyciskiem w nagłówku szuflady —
 // dopisywanie jest świadomą czynnością, więc formularz otwiera się na żądanie, a nie stoi
 // pustym wierszem pod każdą pozycją.
-export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms = [], onAdd, onUpdate, onDelete }) {
+// `addSignal` — licznik z zewnątrz (filtr „Zakupy” w wątku pozycji): każda zmiana otwiera formularz nowego wpisu.
+export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms = [], onAdd, onUpdate, onDelete, addSignal = 0 }) {
     const withCard = TYPE_META[node.type]?.hasCard;
     const [adding, setAdding] = useState(false);
+    // @anchor purchase-drawer-add-signal
+    useEffect(() => { if (addSignal && !readOnly) setAdding(true); }, [addSignal, readOnly]);
     // @anchor realization-new-drawer-search — wyszukiwarka nagłówka zawęża WPISY szuflady, gdy
     // pozycja trafiła do wyniku przez zakup, a nie przez własną nazwę. Sumy w stopce zostają
     // z całej pozycji — rozliczenie wobec wyceny nie może zależeć od wpisanej frazy.

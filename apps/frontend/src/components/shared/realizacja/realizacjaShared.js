@@ -115,11 +115,18 @@ export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, con
                     ? (mi?.reply ? (mi.reply.fromName || mi.reply.fromEmail) : 'odpowiedź mailem')
                     : `${osoba(c.user)}${doKogo ? ` → ${doKogo}` : ''}`,
                 tekst: cialo,
+                // @anchor watek-mail-info — dane do układu maila w wątku: temat, od, do, DW, kiedy (wysłany / odebrany).
                 mailInfo: {
                     kierunek: c.type === 'MAIL_IN' ? 'in' : 'out',
                     temat: mi?.reply ? String(mi.reply.subject || '').replace(/\s*Ref number \[IGW-[A-Z0-9]{6}\]\s*/g, ' ').trim() : mi?.mail?.temat || '',
                     fromEmail: mi?.reply?.fromEmail || null, replyId: mi?.reply?.id || null,
-                    pelnaTresc: mi?.reply?.text || null, doKogo,
+                    pelnaTresc: mi?.reply?.text || null,
+                    od: c.type === 'MAIL_IN'
+                        ? (mi?.reply ? (mi.reply.fromName ? `${mi.reply.fromName} <${mi.reply.fromEmail}>` : mi.reply.fromEmail) : '')
+                        : [osoba(c.user), mi?.mail?.fromEmail ? `<${mi.mail.fromEmail}>` : ''].filter(Boolean).join(' '),
+                    doKogo: c.type === 'MAIL_IN' ? (mi?.mail?.fromEmail || '') : doKogo,
+                    dw: c.type === 'MAIL_IN' ? '' : (mi?.mail?.ccEmails || []).join(', '),
+                    kiedy: (c.type === 'MAIL_IN' ? mi?.reply?.receivedAt : mi?.mail?.sentAt) || c.createdAt,
                 },
             });
             continue;

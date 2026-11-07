@@ -62,6 +62,8 @@ const czyDostawa = (l, e) => hasPurchaseAxis(l.type) && entryStatusOf(e) === 'FO
 // `otworz(null, wbsNodeId)` = nowe zadanie przypięte do węzła. Dostępne w każdym wpisie wątku bez przekazywania propsów.
 const ZadanieCtx = React.createContext(null);
 const DNI_TYG = ['nd', 'pn', 'wt', 'śr', 'cz', 'pt', 'sb'];
+// @anchor realizacja-data-pelna — „pt., 7 listopada 2026, 21:22” (nagłówek maila w wątku).
+const dataPelna = (d) => (d ? new Date(d).toLocaleString('pl-PL', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
 const dzienMies = (d) => `${new Date(d).getDate()}.${String(new Date(d).getMonth() + 1).padStart(2, '0')}`;
 
 // @anchor realizacja-droga — „droga pozycji": kolejne etapy od zamówienia do odbioru.
@@ -274,9 +276,24 @@ export default function RealizacjaPanel({
         setQaOverrides(prev => ({ ...prev, [wbsNodeId]: qa }));
         window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
     }, []);
-    // @anchor realizacja-edycja-watku — czym wątek Kokpitu edytuje wpis w miejscu (bez wejścia w pozycję).
-    const edycjaWatku = useMemo(() => ({ wyslij, zapiszQa, zmienBloker, ownerUsers, canEdit }),
-        [wyslij, zapiszQa, zmienBloker, ownerUsers, canEdit]);
+    // @anchor realizacja-dodaj-qa — nowe pytanie Q&A na węźle z wątku (filtr „Q&A”): dopisuje parę na końcu `qa`.
+    const dodajQa = useCallback(async (wbsNodeId, { question, answer }) => {
+        const n = nodesRef.current.find(x => x.id === wbsNodeId);
+        if (!n) throw new Error('brak węzła');
+        const id = window.crypto?.randomUUID?.() || `qa-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        const qa = [...parseQa(n.qa), { id, question: String(question || '').trim(), answer: String(answer || '').trim() }];
+        const res = await fetch(`${API_URL}/wbs-nodes/${wbsNodeId}`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ qa }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setQaOverrides(prev => ({ ...prev, [wbsNodeId]: qa }));
+        window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
+    }, []);
+    // @anchor realizacja-edycja-watku — czym wątek edytuje wpis w miejscu i dodaje nowe (`NowyWpis`).
+    const edycjaWatku = useMemo(() => ({ wyslij, zapiszQa, dodajQa, zmienBloker, dodajBloker, ownerUsers, canEdit }),
+        [wyslij, zapiszQa, dodajQa, zmienBloker, dodajBloker, ownerUsers, canEdit]);
 
     // @anchor realizacja-akcje-blokera — zamknięcie blokera (Constraint albo dawny pilny wpis czatu)
     // i zamiana otwartego pytania Q&A w bloker „decyzja klienta".
@@ -518,7 +535,7 @@ export default function RealizacjaPanel({
                                 key={pozPodgladu.id}
                                 node={pozPodgladu} r={r} planValue={planValue} card={card} zakupyApi={zakupyApi} canEdit={canEdit} canSeeMoney={canSeeMoney}
                                 wpisy={wpisy.filter(w => w.nodeId === pozPodgladu.id)}
-                                saveAxis={saveAxis} zapiszShort={zapiszShort}
+                                saveAxis={saveAxis} zapiszShort={zapiszShort} edycja={edycjaWatku}
                                 wyslij={wyslij} dodajBloker={dodajBloker} akcje={canEdit ? akcje : null}
                                 ownerUsers={ownerUsers} gotowosc={gotowosc(pozPodgladu)}
                             />
@@ -537,7 +554,7 @@ export default function RealizacjaPanel({
                         <SzczegolyMilestone
                             key={msPodgladu.id} node={msPodgladu} canEdit={canEdit}
                             wpisy={wpisy.filter(w => w.nodeId === msPodgladu.id)}
-                            wyslij={wyslij} dodajBloker={dodajBloker} akcje={canEdit ? akcje : null} ownerUsers={ownerUsers}
+                            akcje={canEdit ? akcje : null} edycja={edycjaWatku}
                         />
                     </div>
                 )}
@@ -606,13 +623,6 @@ export default function RealizacjaPanel({
     );
 }
 
-// @anchor realizacja-dodaj-zadanie — przycisk „+ Zadanie” w nagłówku karty: nowe zadanie przypięte do węzła.
-function DodajZadanie({ wbsNodeId }) {
-    const ctx = React.useContext(ZadanieCtx);
-    if (!ctx || !wbsNodeId) return null;
-    return <button className="mini-btn" onClick={() => ctx.otworz(null, wbsNodeId)} title="Nowe zadanie przypięte do tego węzła">+ Zadanie</button>;
-}
-
 // ─── Wspólne ─────────────────────────────────────────────────────────────────
 
 // @anchor realizacja-droga-pasek — pasek drogi pozycji + podpis osi.
@@ -668,6 +678,46 @@ function statusWpisu(w) {
     return null;
 }
 
+// @anchor realizacja-uklad-wpisu — { temat, meta: [[etykieta, wartość, klasa]], tresc } wpisu wątku. Temat = to,
+// czego wpis dotyczy (tytuł zadania, opis blokera, pytanie, temat maila); meta = kto i kiedy; treść = rozwinięcie
+// (opis zadania, notatka blokera, odpowiedź, wiadomość czatu, treść maila).
+function ukladWpisu(w, { termin, calyMail }) {
+    const z = w.zadanie;
+    const terminTxt = termin ? `${dzienMies(termin)}${w.poTerminie ? ' — minął' : ''}` : null;
+    const terminMeta = terminTxt ? [['Termin', terminTxt, w.poTerminie ? 'dpos' : '']] : [];
+    const mi = w.mailInfo;
+    switch (w.rodzaj) {
+        case 'task':
+            return { temat: z?.title || w.tekst, meta: [...(w.kto ? [['Odpowiedzialny', w.kto]] : []), ...terminMeta], tresc: z?.description?.trim() || null };
+        case 'block':
+            return {
+                temat: w.tekst,
+                meta: [
+                    ...(w.kto ? [['Właściciel', w.kto]] : []),
+                    ...(w.constraintId ? [['Rodzaj', RODZAJE_BLOKERA[w.rodzajBlokera]?.label || w.rodzajBlokera]] : []),
+                    ...terminMeta,
+                    ...(w.wplywDni ? [['Wpływ', `+${w.wplywDni} dni`]] : []),
+                ],
+                tresc: w.notatka || null,
+            };
+        case 'qa':
+            return { temat: w.tekst, meta: [['Źródło', w.kto], ...(w.mail ? [['Mail', w.mail]] : [])], tresc: w.odpowiedz || null };
+        case 'mail':
+            return {
+                temat: mi?.temat || null,
+                meta: [
+                    ...(mi?.od ? [['Od', mi.od]] : []),
+                    ...(mi?.doKogo ? [['Do', mi.doKogo]] : []),
+                    ...(mi?.dw ? [['DW', mi.dw]] : []),
+                    [mi?.kierunek === 'in' ? 'Odebrano' : 'Wysłano', dataPelna(mi?.kiedy)],
+                ],
+                tresc: calyMail && mi?.pelnaTresc ? mi.pelnaTresc : w.tekst,
+            };
+        default: // czat, zakup, odbiór
+            return { temat: null, meta: w.kto ? [['Autor', w.kto]] : [], tresc: w.tekst };
+    }
+}
+
 // @anchor realizacja-wpis — jeden wpis wątku (czat, bloker, pytanie, zakup, zadanie, odbiór).
 // `edycja` (Kokpit) = klik w treść rozwija wpis: odpowiedź do czatu pozycji, edycja pary Q&A, edycja blokera.
 function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
@@ -685,21 +735,21 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
     const st = statusWpisu(w);
     const termin = blokerKonstr ? w.termin : w.rodzaj === 'task' ? w.zadanie?.plannedEnd : null;
     const zamkniety = st && !st.otwarty;
+    const uklad = ukladWpisu(w, { termin, calyMail });
+    const klikTresci = rozwijalny && !rozwiniety ? () => setRozwiniety(true)
+        : w.rodzaj === 'task' && w.zadanie && zadCtx ? () => zadCtx.otworz(w.zadanie) : undefined;
     return (
         <div className={`ev${rozwijalny ? ' ev-rozw' : ''}${rozwiniety ? ' on' : ''}${zamkniety ? ' ev-zamk' : ''}`}>
             <div style={{ minWidth: 0 }}>
                 {/* @anchor realizacja-wpis-naglowek — nagłówek wpisu: rodzaj (pełna nazwa, kapitaliki, kolor rodzaju)
-                    · osoba · status · gałąź › pozycja (2 najniższe poziomy WBS) · termin · kiedy; akcje po prawej. */}
+                    · gałąź › pozycja (2 najniższe poziomy WBS) · status · znaczniki · kiedy; akcje po prawej.
+                    Osoba, termin i reszta szczegółów są w bloku wpisu poniżej (`realizacja-wpis-blok`). */}
                 <div className="who">
                     <span className={`rodz ${r.cls}`}>{r.nazwa}</span>
-                    {w.kto && <span className="kto">{w.kto}</span>}
-                    {st && <span className={`pill ${st.cls}`} style={{ padding: '0 6px' }}>{st.l}</span>}
                     {nazwaPozycji && <button className="lnk" onClick={onPozycja} title={nazwaPozycji}>{nazwaPozycji}</button>}
-                    {blokerKonstr && <span className="cnt c-mut">{RODZAJE_BLOKERA[w.rodzajBlokera]?.label || w.rodzajBlokera}</span>}
-                    {termin && <span className={w.poTerminie ? 'dpos' : ''}>termin {dzienMies(termin)}{w.poTerminie ? ' — minął' : ''}</span>}
-                    {blokerKonstr && w.wplywDni ? <span>wpływ +{w.wplywDni} dni</span> : null}
-                    {w.mail && <span className="mono">{w.mail}</span>}
-                    {mi && <span className="cnt c-mut" title={mi.kierunek === 'in' ? 'Odpowiedź mailem — zaimportowana do wątku' : `Wysłany mail${mi.doKogo ? ` do ${mi.doKogo}` : ''}`}>{mi.kierunek === 'in' ? '📨 przychodzący' : '✉️ wysłany'}</span>}
+                    {st && <span className={`pill ${st.cls}`} style={{ padding: '0 6px' }}>{st.l}</span>}
+                    {mi && <span className={`pill ${mi.kierunek === 'in' ? 'p-ok' : 'p-info'}`} style={{ padding: '0 6px' }}
+                        title={mi.kierunek === 'in' ? 'Odpowiedź mailem — zaimportowana do wątku' : 'Mail wysłany z wątku'}>{mi.kierunek === 'in' ? 'odebrany' : 'wysłany'}</span>}
                     {w.prognoza && <span className="p-info">prognoza</span>}
                     {w.blokerem && <span className="cnt c-bad">bloker</span>}
                     {w.kiedy && w.rodzaj !== 'task' && <span className="os">{kiedyTekst(w.kiedy)}</span>}
@@ -729,12 +779,20 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
                         )}
                     </span>
                 </div>
-                <div className={`txt${w.rodzaj === 'qa' ? ' qa-p' : ''}`} onClick={rozwijalny && !rozwiniety ? () => setRozwiniety(true) : w.rodzaj === 'task' && w.zadanie && zadCtx ? () => zadCtx.otworz(w.zadanie) : undefined}>{w.tekst}</div>
-                {mi?.temat && <div className="muted" style={{ fontSize: 11 }}>Temat: {mi.temat}</div>}
-                {calyMail && mi?.pelnaTresc && <div className="mail-caly">{mi.pelnaTresc}</div>}
+                {/* @anchor realizacja-wpis-blok — treść wpisu w jednym układzie dla każdego rodzaju (jak mail):
+                    temat (pogrubiony) → szczegóły „etykieta: wartość” (właściciel, termin, …) → treść pod spodem. */}
+                <div className={`wpis-blok ${r.cls}`} onClick={klikTresci}>
+                    {uklad.temat && <div className={`wpis-temat${w.rodzaj === 'qa' ? ' qa-p' : ''}`}>{uklad.temat}</div>}
+                    {uklad.meta.length > 0 && (
+                        <div className="wpis-meta">
+                            {uklad.meta.map(([l, v, cls]) => (
+                                <React.Fragment key={l}><span className="l">{l}</span><span className={cls || ''}>{v}</span></React.Fragment>
+                            ))}
+                        </div>
+                    )}
+                    {uklad.tresc && !(rozwiniety && w.rodzaj === 'qa') && <div className={`wpis-tresc${w.rodzaj === 'qa' ? ' qa-o' : ''}`}>{uklad.tresc}</div>}
+                </div>
                 {odpMail && odpowiedzMail && <MailForm wbsNodeId={w.nodeId} odpowiedz={odpowiedzMail} onWyslano={() => setOdpMail(false)} onAnuluj={() => setOdpMail(false)} />}
-                {w.notatka && <div className="muted" style={{ fontSize: 12 }}>{w.notatka}</div>}
-                {w.odpowiedz && !(rozwiniety && w.rodzaj === 'qa') && <div className={`ans${w.rodzaj === 'qa' ? ' qa-o' : ''}`}>{w.odpowiedz}</div>}
                 {rozwiniety && <WpisEdycja w={w} edycja={edycja} onZamknij={() => setRozwiniety(false)} />}
             </div>
         </div>
@@ -879,7 +937,7 @@ function useSzerokosciKolumn() {
 }
 
 // @anchor realizacja-dwie-kolumny — układ Kokpitu, pozycji i milestone'a: wątek (lewa) · szczegóły (prawa).
-// Blokery są w wątku (filtr „Blokery”), nowy bloker dodaje się pod wątkiem (`realizacja-nowy-bloker`).
+// Blokery są w wątku (filtr „Blokery”), nowy bloker dodaje się na dole wątku po wybraniu filtra „Blokery” (`realizacja-nowy-wpis`).
 function DwieKolumny({ lewa, prawa }) {
     const { k, zacznij, resetuj } = useSzerokosciKolumn();
     const ref = useRef(null);
@@ -1008,17 +1066,103 @@ function BlokerForm({ wbsNodeId, dodajBloker, ownerUsers = [], onDodano, onAnulu
     );
 }
 
-// @anchor realizacja-nowy-bloker — „+ Bloker” pod wątkiem: rozwija formularz blokera węzła (gałęzi, pozycji
-// albo milestone'a); po dodaniu zwija się, a bloker pojawia się w wątku.
-function NowyBloker({ wbsNodeId, dodajBloker, ownerUsers }) {
-    const [otwarty, setOtwarty] = useState(false);
-    if (!wbsNodeId) return null;
-    if (!otwarty) return (
-        <div style={{ padding: '6px 12px 0' }}>
-            <button className="mini-btn bad" onClick={() => setOtwarty(true)} title="Co blokuje roboty — z terminem, wpływem i właścicielem (powstaje też zadanie)">+ Bloker</button>
+// @anchor realizacja-kolejnosc-blokerow — filtr Blokery / Q&A: najpierw otwarte, wśród nich po terminie,
+// potem wg terminu i wpływu w dniach (bez terminu na końcu); zamknięte na końcu.
+const kolejnoscDecyzji = (a, b) => {
+    if (!!a.otwarte !== !!b.otwarte) return a.otwarte ? -1 : 1;
+    if (!!a.poTerminie !== !!b.poTerminie) return a.poTerminie ? -1 : 1;
+    const ta = a.termin ? new Date(a.termin).getTime() : Infinity, tb = b.termin ? new Date(b.termin).getTime() : Infinity;
+    if (ta !== tb) return ta - tb;
+    return (b.wplywDni || 0) - (a.wplywDni || 0);
+};
+
+// @anchor realizacja-watek-karta — wspólna karta wątku gałęzi, pozycji i milestone'a: w nagłówku chipy
+// wszystkich rodzajów wpisów (filtr), pod listą formularz nowego wpisu WYBRANEGO rodzaju (`NowyWpis`).
+// Filtr może być sterowany z zewnątrz (Kokpit pamięta go między gałęziami), inaczej własny stan karty.
+function WatekKarta({ tytul, prawa, wpisy, wbsNodeId, gdzie, edycja, onZakup, renderWpis, filtr: filtrZew, setFiltr: setFiltrZew, maxHeight = 420 }) {
+    const [filtrWew, setFiltrWew] = useState('all');
+    const filtr = filtrZew ?? filtrWew;
+    const setFiltr = setFiltrZew ?? setFiltrWew;
+    const widoczne = wpisy.filter(w => filtr === 'all' || w.rodzaj === filtr);
+    if (filtr === 'block' || filtr === 'qa') widoczne.sort(kolejnoscDecyzji);
+    return (
+        <Karta tytul={tytul} prawa={prawa ?? `${wpisy.length} wpisów`}>
+            <FiltryWatku wpisy={wpisy} filtr={filtr} setFiltr={setFiltr} />
+            <div className="feed scroll" style={{ maxHeight }}>
+                {widoczne.length ? widoczne.map(renderWpis)
+                    : <Pusto>{wpisy.length ? 'Brak wpisów tego rodzaju — nowy dodasz poniżej.' : 'Brak wpisów — pierwszy dodasz poniżej.'}</Pusto>}
+            </div>
+            <NowyWpis rodzaj={filtr} wbsNodeId={wbsNodeId} gdzie={gdzie} edycja={edycja} onZakup={onZakup} />
+        </Karta>
+    );
+}
+
+// @anchor realizacja-nowy-wpis — dół karty wątku: formularz nowego wpisu rodzaju z filtra. „Wszystko” i „Czat”
+// = pole czatu; Blokery = formularz blokera; Q&A = nowe pytanie; Zadania = formularz zadania (TaskModal);
+// Maile = mail do zaznaczonych adresatów; Zakupy = szuflada zakupów pozycji; Odbiory = podpowiedź.
+function NowyWpis({ rodzaj, wbsNodeId, gdzie, edycja = {}, onZakup }) {
+    const zadCtx = React.useContext(ZadanieCtx);
+    const { wyslij, dodajBloker, dodajQa, ownerUsers = [], canEdit } = edycja;
+    const info = (t) => <div className="nowy-wpis muted">{t}</div>;
+    if (!wbsNodeId) return info('Wybierz gałąź w drzewie, by dodawać wpisy do jej wątku.');
+    const bezPrawa = info('Ten rodzaj wpisu dodaje kierownik, administrator albo logistyk.');
+    switch (rodzaj) {
+        case 'block':
+            return canEdit ? <BlokerForm wbsNodeId={wbsNodeId} dodajBloker={dodajBloker} ownerUsers={ownerUsers} /> : bezPrawa;
+        case 'qa':
+            return canEdit ? <NowePytanie wbsNodeId={wbsNodeId} dodajQa={dodajQa} /> : bezPrawa;
+        case 'task':
+            return (
+                <div className="nowy-wpis">
+                    <button className="btn acc" onClick={() => zadCtx?.otworz(null, wbsNodeId)}>+ Nowe zadanie</button>
+                    <span className="muted">termin, odpowiedzialny i opis w formularzu</span>
+                </div>
+            );
+        case 'mail':
+            return <NowyMail wbsNodeId={wbsNodeId} />;
+        case 'buy':
+            if (!onZakup) return info('Zakup należy do pozycji — otwórz pozycję z listy i dodaj go w jej wątku.');
+            return canEdit ? (
+                <div className="nowy-wpis">
+                    <button className="btn acc" onClick={onZakup}>+ Nowy wpis zakupu</button>
+                    <span className="muted">formularz otworzy się w karcie zakupów obok</span>
+                </div>
+            ) : bezPrawa;
+        case 'proto':
+            return info('Protokoły odbioru tworzy się w zakładce „Realizacja (tabela)” — tu pokazują się odebrane pozycje.');
+        default:
+            return (
+                <>
+                    {rodzaj === 'all' && <div className="nowy-wpis muted" style={{ paddingBottom: 0 }}>Bloker, pytanie, zadanie albo mail — wybierz rodzaj w filtrze u góry.</div>}
+                    <PoleCzatu uzytkownicy={ownerUsers} placeholder={`Napisz do czatu ${gdzie}… (@ oznacza osobę)`}
+                        onWyslij={(t, ids) => wyslij(wbsNodeId, t, false, ids)} />
+                </>
+            );
+    }
+}
+
+// @anchor realizacja-nowe-pytanie — nowe pytanie Q&A na węźle wątku (odpowiedź opcjonalna — bez niej pytanie jest otwarte).
+function NowePytanie({ wbsNodeId, dodajQa }) {
+    const [pytanie, setPytanie] = useState('');
+    const [odp, setOdp] = useState('');
+    const [zapis, setZapis] = useState(false);
+    const dodaj = async () => {
+        if (!pytanie.trim() || zapis) return;
+        setZapis(true);
+        try { await dodajQa(wbsNodeId, { question: pytanie, answer: odp }); setPytanie(''); setOdp(''); }
+        catch { alert('Nie udało się dodać pytania'); }
+        finally { setZapis(false); }
+    };
+    return (
+        <div className="nowy-wpis kol">
+            <AutoResizeTextarea className="in" value={pytanie} onChange={e => setPytanie(e.target.value)} placeholder="Pytanie — np. czy klient zapewnia dźwig?" />
+            <div className="row2">
+                <input className="in" value={odp} onChange={e => setOdp(e.target.value)} placeholder="Odpowiedź (opcjonalnie)"
+                    onKeyDown={e => { if (e.key === 'Enter') dodaj(); }} />
+                <button className="btn acc" onClick={dodaj} disabled={!pytanie.trim() || zapis}>Dodaj pytanie</button>
+            </div>
         </div>
     );
-    return <BlokerForm wbsNodeId={wbsNodeId} dodajBloker={dodajBloker} ownerUsers={ownerUsers} onDodano={() => setOtwarty(false)} onAnuluj={() => setOtwarty(false)} />;
 }
 
 // ─── Milestone'y ─────────────────────────────────────────────────────────────
@@ -1045,22 +1189,14 @@ function MilestonyChipy({ milestony = [], pelne, onOtworz }) {
 
 // @anchor realizacja-szczegoly-milestone — szczegóły milestone'a: wątek (czat z @wzmiankami) · termin,
 // status i pytania Q&A · blokery z formularzem. Daty zmienia się na Harmonogramie.
-function SzczegolyMilestone({ node, canEdit, wpisy, wyslij, dodajBloker, akcje, ownerUsers }) {
+function SzczegolyMilestone({ node, canEdit, wpisy, akcje, edycja }) {
     const zadania = wpisy.filter(w => w.rodzaj === 'task');
     const status = PLAN_STATUS_META[planStatusFromAny(node.status)]?.label || '—';
     return (
         <DwieKolumny
             lewa={
-                <Karta tytul="Wątek milestone'a" prawa={<>{wpisy.length} wpisów <DodajZadanie wbsNodeId={node.id} /></>}>
-                    <div className="feed scroll" style={{ maxHeight: 420 }}>
-                        {wpisy.length ? wpisy.map(w => <Wpis key={w.id} w={w} akcje={akcje} />)
-                            : <Pusto>Brak wpisów — pierwszy dodasz poniżej.</Pusto>}
-                    </div>
-                    {canEdit && <NowyBloker wbsNodeId={node.id} dodajBloker={dodajBloker} ownerUsers={ownerUsers} />}
-                    <NowyMail wbsNodeId={node.id} />
-                    <PoleCzatu uzytkownicy={ownerUsers} placeholder="Napisz do czatu milestone'a… (@ oznacza osobę)"
-                        onWyslij={(t, ids) => wyslij(node.id, t, false, ids)} />
-                </Karta>
+                <WatekKarta tytul="Wątek milestone'a" wpisy={wpisy} wbsNodeId={node.id} gdzie="milestone'a" edycja={edycja}
+                    renderWpis={w => <Wpis key={w.id} w={w} akcje={akcje} edycja={edycja} />} />
             }
             prawa={
                 <Karta tytul="Milestone" prawa={zakresMs(node)}>
@@ -1157,8 +1293,12 @@ function Macierz({ grupy, rowOf, actualsOf, sygnaly, pelne, canSeeMoney, onOtwor
 }
 
 // @anchor realizacja-rozwinieta-pozycja — trzy karty pod wierszem: wątek · zakup i realizacja · blokery i powiązania.
-function RozwinietaPozycja({ node, r, planValue, card, zakupyApi, canEdit, canSeeMoney, wpisy, saveAxis, zapiszShort, wyslij, dodajBloker, akcje, ownerUsers, gotowosc }) {
+function RozwinietaPozycja({ node, r, planValue, card, zakupyApi, canEdit, canSeeMoney, wpisy, saveAxis, zapiszShort, akcje, gotowosc, edycja }) {
     const [short, setShort] = useState(node.shortName || '');
+    // @anchor realizacja-sygnal-zakupu — filtr „Zakupy” w wątku → „+ Nowy wpis zakupu” otwiera formularz szuflady obok.
+    const [sygnalZakupu, setSygnalZakupu] = useState(0);
+    const zakupRef = useRef(null);
+    const nowyZakup = zakupyApi ? () => { setSygnalZakupu(n => n + 1); zakupRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } : null;
     const zadania = wpisy.filter(w => w.rodzaj === 'task');
     const pytania = wpisy.filter(w => w.rodzaj === 'qa');
     const blokery = wpisy.filter(w => w.rodzaj === 'block' && w.otwarte);
@@ -1166,16 +1306,8 @@ function RozwinietaPozycja({ node, r, planValue, card, zakupyApi, canEdit, canSe
     return (
         <DwieKolumny
             lewa={
-            <Karta tytul="Wątek pozycji" prawa={<>{wpisy.length} wpisów <DodajZadanie wbsNodeId={node.id} /></>}>
-                <div className="feed scroll" style={{ maxHeight: 420 }}>
-                    {wpisy.length ? wpisy.map(w => <Wpis key={w.id} w={w} akcje={akcje} />)
-                        : <Pusto>Brak wpisów — pierwszy dodasz poniżej.</Pusto>}
-                </div>
-                {canEdit && <NowyBloker wbsNodeId={node.id} dodajBloker={dodajBloker} ownerUsers={ownerUsers} />}
-                <NowyMail wbsNodeId={node.id} />
-                <PoleCzatu uzytkownicy={ownerUsers} placeholder="Napisz do czatu pozycji… (@ oznacza osobę)"
-                    onWyslij={(t, ids) => wyslij(node.id, t, false, ids)} />
-            </Karta>
+            <WatekKarta tytul="Wątek pozycji" wpisy={wpisy} wbsNodeId={node.id} gdzie="pozycji" edycja={edycja} onZakup={nowyZakup}
+                renderWpis={w => <Wpis key={w.id} w={w} akcje={akcje} edycja={edycja} />} />
 
             }
             prawa={
@@ -1210,8 +1342,8 @@ function RozwinietaPozycja({ node, r, planValue, card, zakupyApi, canEdit, canSe
                 {/* @anchor realizacja-szuflada-zakupow — wpisy zakupu/wykonania pozycji: lista edytowalna
                     w miejscu + przycisk dodania, ten sam komponent co w „Realizacja (tabela)". */}
                 {zakupyApi && (
-                    <div className="rn-fluid zakupy-pozycji">
-                        <PurchaseDrawer node={node} card={card} r={r} planValue={planValue} readOnly={!canEdit}
+                    <div className="rn-fluid zakupy-pozycji" ref={zakupRef}>
+                        <PurchaseDrawer node={node} card={card} r={r} planValue={planValue} readOnly={!canEdit} addSignal={sygnalZakupu}
                             onAdd={draft => zakupyApi.add(node, draft)}
                             onUpdate={zakupyApi.update} onDelete={zakupyApi.remove} />
                     </div>
@@ -1284,15 +1416,6 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
         const p = n.parentId && nodeById[n.parentId];
         return p ? `${nazwaWyswietlana(p, pelne)} › ${nazwaWyswietlana(n, pelne)}` : nazwaWyswietlana(n, pelne);
     };
-    // @anchor realizacja-kolejnosc-blokerow — filtr Blokery / Q&A: najpierw otwarte, wśród nich po terminie,
-    // potem wg terminu i wpływu w dniach (bez terminu na końcu); zamknięte na końcu.
-    const kolejnoscDecyzji = (a, b) => {
-        if (!!a.otwarte !== !!b.otwarte) return a.otwarte ? -1 : 1;
-        if (!!a.poTerminie !== !!b.poTerminie) return a.poTerminie ? -1 : 1;
-        const ta = a.termin ? new Date(a.termin).getTime() : Infinity, tb = b.termin ? new Date(b.termin).getTime() : Infinity;
-        if (ta !== tb) return ta - tb;
-        return (b.wplywDni || 0) - (a.wplywDni || 0);
-    };
     const dni = dniOkna(LOOKAHEAD_DNI);
     const najblizsze = liscie.map(l => {
         const d0 = indeksDnia(l.planOd, dni[0]);
@@ -1303,8 +1426,6 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
         const rob = d0 !== null && d1 >= 0 && d0 < LOOKAHEAD_DNI;
         return { l, d0, d1, dost, rob, klucz: Math.min(rob ? Math.max(d0, 0) : 99, dost ?? 99) };
     }).filter(x => x.rob || x.dost !== undefined).sort((a, b) => a.klucz - b.klucz);
-    const widoczne = wpisy.filter(w => filtr === 'all' || w.rodzaj === filtr);
-    if (filtr === 'block' || filtr === 'qa') widoczne.sort(kolejnoscDecyzji);
 
     return (
         <>
@@ -1324,24 +1445,11 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
             <div style={{ marginTop: 16 }}>
             <DwieKolumny
                 lewa={<>
-                <Karta tytul="Wątek gałęzi" prawa={<>wszystko z {liscie.length} pozycji <DodajZadanie wbsNodeId={galazId} /></>}>
-                    <FiltryWatku wpisy={wpisy} filtr={filtr} setFiltr={setFiltr} />
-                    <div className="feed scroll" style={{ maxHeight: 560 }}>
-                        {widoczne.length ? widoczne.map(w => (
-                            <Wpis key={w.id} w={w} nazwaPozycji={nazwa(w.nodeId)} onPozycja={() => onOtworz(w.nodeId)} akcje={canEdit ? akcje : null} edycja={edycja} />
-                        )) : <Pusto>Brak wpisów tego rodzaju.</Pusto>}
-                    </div>
-                    {/* @anchor realizacja-kokpit-czat — wpis do czatu gałęzi wprost z Kokpitu (`Comment.wbsNodeId` = gałąź);
-                        na całym zamówieniu nie ma węzła, do którego przypiąć wpis — wtedy podpowiedź. */}
-                    {/* @anchor realizacja-kokpit-bloker — nowy bloker na gałęzi z Kokpitu (liczy się w gotowości jej pozycji). */}
-                    {canEdit && <NowyBloker wbsNodeId={galazId} dodajBloker={dodajBloker} ownerUsers={ownerUsers} />}
-                    {/* @anchor realizacja-kokpit-mail — mail z wątku gałęzi do zaznaczonych adresatów; odpowiedzi wracają do wątku. */}
-                    <NowyMail wbsNodeId={galazId} />
-                    {galazId
-                        ? <PoleCzatu uzytkownicy={ownerUsers} placeholder="Napisz do czatu gałęzi… (@ oznacza osobę)"
-                            onWyslij={(t, ids) => wyslij(galazId, t, false, ids)} />
-                        : <div className="muted" style={{ fontSize: 12, padding: '8px 12px' }}>Wybierz gałąź w drzewie, by pisać w jej czacie.</div>}
-                </Karta>
+{/* @anchor realizacja-kokpit-czat — wątek gałęzi z Kokpitu: wpisy przypinają się do gałęzi (`galazId`);
+                    na całym zamówieniu nie ma węzła — wtedy podpowiedź zamiast formularza. */}
+                <WatekKarta tytul="Wątek gałęzi" prawa={`wszystko z ${liscie.length} pozycji`} wpisy={wpisy} wbsNodeId={galazId} gdzie="gałęzi"
+                    filtr={filtr} setFiltr={setFiltr} edycja={edycja} maxHeight={560}
+                    renderWpis={w => <Wpis key={w.id} w={w} nazwaPozycji={nazwa(w.nodeId)} onPozycja={() => onOtworz(w.nodeId)} akcje={canEdit ? akcje : null} edycja={edycja} />} />
                 </>}
                 prawa={<>
                     {milestony.length > 0 && <NajblizszeMilestony milestony={milestony} pelne={pelne} onOtworz={onOtworz} />}

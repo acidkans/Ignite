@@ -110,11 +110,11 @@ export function MailForm({ wbsNodeId, odpowiedz = null, onWyslano, onAnuluj }) {
     );
 }
 
-// @anchor nowy-mail — „+ Mail” pod wątkiem (obok „+ Bloker”) i „Sprawdź pocztę” — ręczny odbiór odpowiedzi
-// na maile wątków zamówienia (automat co 5 min robi to samo na serwerze).
+// @anchor nowy-mail — dół wątku przy filtrze „Maile”: formularz nowego maila (po wysyłce czysty, gotowy
+// na kolejny) i „sprawdź pocztę” — ręczny odbiór odpowiedzi (automat co 5 min robi to samo na serwerze).
 export function NowyMail({ wbsNodeId }) {
     const ctxMail = React.useContext(MailCtx);
-    const [otwarty, setOtwarty] = useState(false);
+    const [wersja, setWersja] = useState(0);
     const [sprawdzam, setSprawdzam] = useState(false);
     const [info, setInfo] = useState(null);
     if (!wbsNodeId || !ctxMail?.orderId) return null;
@@ -123,17 +123,19 @@ export function NowyMail({ wbsNodeId }) {
         setSprawdzam(true); setInfo(null);
         try {
             const r = await fetch(`${API_URL}/watek-mail/check`, { method: 'POST', headers: naglowki(), body: JSON.stringify({ processNodeId: ctxMail.orderId }) }).then(json);
-            if (r.found) await ctxMail.odswiez?.();
+            // Zawsze odśwież — odpowiedź mógł już wcześniej zaimportować cron (wtedy found = 0, a wątku na ekranie brak).
+            await ctxMail.odswiez?.();
             setInfo(r.errors?.length ? `Błąd: ${r.errors[0]}` : r.found ? `Nowe odpowiedzi: ${r.found}` : 'Brak nowych odpowiedzi');
         } catch (e) { setInfo(`Błąd: ${e.message}`); }
         finally { setSprawdzam(false); }
     };
-    if (otwarty) return <MailForm wbsNodeId={wbsNodeId} onWyslano={() => setOtwarty(false)} onAnuluj={() => setOtwarty(false)} />;
     return (
-        <div style={{ padding: '6px 12px 0', display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button className="mini-btn" onClick={() => setOtwarty(true)} title="Mail z tego wątku do wybranych osób — odpowiedzi wrócą do wątku">+ Mail</button>
-            <button className="mini-btn" onClick={sprawdz} disabled={sprawdzam} title="Pobierz odpowiedzi na maile z wątków tego zamówienia">{sprawdzam ? 'sprawdzam…' : 'sprawdź pocztę'}</button>
-            {info && <span className="muted" style={{ fontSize: 11 }}>{info}</span>}
-        </div>
+        <>
+            <MailForm key={`${wbsNodeId}-${wersja}`} wbsNodeId={wbsNodeId} onWyslano={() => { setWersja(v => v + 1); setInfo('Mail wysłany — odpowiedź wróci do tego wątku.'); }} />
+            <div className="nowy-wpis" style={{ paddingTop: 0 }}>
+                <button className="mini-btn" onClick={sprawdz} disabled={sprawdzam} title="Pobierz odpowiedzi na maile z wątków tego zamówienia">{sprawdzam ? 'sprawdzam…' : 'sprawdź pocztę'}</button>
+                {info && <span className="muted" style={{ fontSize: 11 }}>{info}</span>}
+            </div>
+        </>
     );
 }

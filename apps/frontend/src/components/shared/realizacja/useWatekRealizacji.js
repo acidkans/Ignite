@@ -34,6 +34,26 @@ export function useWatekRealizacji(nodeId) {
 
     useEffect(() => { pobierz(); }, [pobierz]);
 
+    // @anchor watek-auto-odswiez — wątek odświeża się sam: push o tym zamówieniu (service worker →
+    // NEW_NOTIFICATION, np. odpowiedź mailem zaimportowana przez cron), powrót do karty/okna i co 60 s,
+    // gdy karta jest widoczna. Bez tego nowy wpis z serwera pojawiał się dopiero po przeładowaniu.
+    useEffect(() => {
+        if (!nodeId) return;
+        const widoczna = () => document.visibilityState === 'visible';
+        const naPowrot = () => { if (widoczna()) pobierz(); };
+        const naPush = (e) => { if (e.data?.type === 'NEW_NOTIFICATION' && (!e.data.orderId || e.data.orderId === nodeId)) pobierz(); };
+        const id = setInterval(() => { if (widoczna()) pobierz(); }, 60000);
+        document.addEventListener('visibilitychange', naPowrot);
+        window.addEventListener('focus', naPowrot);
+        navigator.serviceWorker?.addEventListener('message', naPush);
+        return () => {
+            clearInterval(id);
+            document.removeEventListener('visibilitychange', naPowrot);
+            window.removeEventListener('focus', naPowrot);
+            navigator.serviceWorker?.removeEventListener('message', naPush);
+        };
+    }, [nodeId, pobierz]);
+
     // @anchor watek-wyslij — odpowiedź z wątku idzie do czatu pozycji (`Comment.wbsNodeId`).
     // `pilne` = wpis typu URGENT, czyli bloker w MVP. `mentionedUserIds` = osoby oznaczone „@" —
     // backend wysyła im powiadomienie NEW_MENTION (`comments.controller.ts`).
