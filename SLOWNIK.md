@@ -1472,6 +1472,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | back-endpoint | POST /my-tasks/:id/reminders | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-reminder-create-endpoint |
 | ui-stala | ALARM_INTERVALS | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-alarm-interval-options |
 | ui-modal | CyclicAlarmEditor | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-cyclic-alarm-editor |
+| ui-funkcja | handleStartChange (CyclicAlarmEditor) | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor alarm-handle-start-change |
 
 ### MyTasksModal — frontend (Etap 6)
 
