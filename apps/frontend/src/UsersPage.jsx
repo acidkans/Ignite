@@ -8,8 +8,15 @@ import ImportUsersModal from './components/shared/ImportUsersModal';
 import { exportUsersWorkbook } from './utils/usersExcel';
 import { LEAVE_COMPANIES, calculateLeaveEntitlement, formatWorkExperience } from './utils/leaveCompanies';
 import useAutoRefresh from './hooks/useAutoRefresh';
+import { useDevice } from './hooks/useDevice';
+
+const ROLE_LABELS = { USER: 'Pracownik', ADMIN: 'Administrator', MANAGER: 'Menadżer', LOGISTYK: 'Logistyk' };
+const userRolesText = (u) => u.userRoles?.map(r => ROLE_LABELS[r.role.name] || r.role.name).join(', ') || 'Pracownik';
 
 export default function UsersPage() {
+    // @anchor users-page-compact — telefon i tablet: karty zamiast AG Grid, bez przeciągania (dotyk go nie obsługuje)
+    const { isMobile, isTablet } = useDevice();
+    const compact = isMobile || isTablet;
     const [activeTab, setActiveTab] = useState('users'); // 'users' | 'teams'
     const [rowData, setRowData] = useState([]);
     const [teams, setTeams] = useState([]);
@@ -239,7 +246,7 @@ export default function UsersPage() {
         {
             headerName: 'Uprawnienia',
             field: 'roleName',
-            valueGetter: p => p.data.userRoles?.map(r => r.role.name === 'USER' ? 'Pracownik' : r.role.name === 'ADMIN' ? 'Administrator' : r.role.name === 'MANAGER' ? 'Menadżer' : r.role.name === 'LOGISTYK' ? 'Logistyk' : r.role.name).join(', ') || 'Pracownik',
+            valueGetter: p => userRolesText(p.data),
             editable: false,
             flex: 1
         },
@@ -491,7 +498,24 @@ export default function UsersPage() {
     if (error) return <div className="p-8 text-center text-red-400">Błąd: {error}</div>;
 
     return (
-        <div className="p-8 w-full h-full animate-fade-in flex flex-col">
+        <div className={`${compact ? 'p-4' : 'p-8'} w-full h-full animate-fade-in flex flex-col`}>
+            {compact ? (
+                <div className="mb-3 flex shrink-0 flex-col gap-2">
+                    <div className="flex gap-1 rounded-lg bg-white/5 p-1">
+                        <button onClick={() => setActiveTab('users')} className={`min-h-[40px] flex-1 rounded-md text-sm transition-all ${activeTab === 'users' ? 'bg-blue-600/50 text-white' : 'text-gray-400'}`}>Użytkownicy</button>
+                        {isAdminOrManager && (
+                            <button onClick={() => setActiveTab('teams')} className={`min-h-[40px] flex-1 rounded-md text-sm transition-all ${activeTab === 'teams' ? 'bg-purple-600/50 text-white' : 'text-gray-400'}`}>Zespoły</button>
+                        )}
+                    </div>
+                    {isAdminOrManager && activeTab === 'users' && (
+                        <div className="flex gap-2">
+                            <button onClick={() => setIsAddUserModalOpen(true)} className="min-h-[40px] flex-1 rounded-md bg-green-600 px-3 text-sm font-semibold text-white active:bg-green-500">+ Dodaj</button>
+                            <button onClick={handleExportUsers} disabled={exporting} className="min-h-[40px] flex-1 rounded-md bg-sky-600 px-3 text-sm font-semibold text-white active:bg-sky-500 disabled:opacity-50">{exporting ? 'Przygotowuję…' : '⬇ Eksport'}</button>
+                            <button onClick={() => setIsImportUsersModalOpen(true)} className="min-h-[40px] flex-1 rounded-md bg-emerald-600 px-3 text-sm font-semibold text-white active:bg-emerald-500">⬆ Import</button>
+                        </div>
+                    )}
+                </div>
+            ) : (
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
                     Zarządzanie Organizacją
@@ -545,6 +569,7 @@ export default function UsersPage() {
                     )}
                 </div>
             </div>
+            )}
 
             <AddUserModal
                 isOpen={isAddUserModalOpen}
@@ -570,7 +595,29 @@ export default function UsersPage() {
                 />
             )}
 
-            {activeTab === 'users' ? (
+            {activeTab === 'users' && compact ? (
+                // @anchor users-mobile-list — kliknięcie karty otwiera tę samą edycję co dwuklik w tabeli
+                <div className="flex min-h-0 flex-1 flex-col">
+                    <input
+                        value={userQuery}
+                        onChange={(e) => setUserQuery(e.target.value)}
+                        placeholder="Szukaj (imię, nazwisko, e-mail)…"
+                        className="mb-2 w-full shrink-0 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-400 focus:outline-none"
+                    />
+                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pb-4">
+                        {filteredUsers.map(user => (
+                            <button key={user.id} onClick={() => isAdminOrManager && setEditingUser(user)} className="block w-full rounded-xl border border-white/10 bg-white/5 p-3 text-left active:bg-white/10">
+                                <div className="text-sm font-semibold text-gray-100">{user.firstName} {user.lastName}</div>
+                                <div className="truncate text-xs text-gray-500">{user.email}</div>
+                                <div className="mt-1 text-[11px] text-gray-400">
+                                    {[user.company, userRolesText(user), ...(Array.isArray(user.teams) ? user.teams.map(t => t.name) : [])].filter(Boolean).join(' · ')}
+                                </div>
+                            </button>
+                        ))}
+                        {filteredUsers.length === 0 && <div className="py-6 text-center text-sm italic text-gray-500">Brak pasujących pracowników</div>}
+                    </div>
+                </div>
+            ) : activeTab === 'users' ? (
                 <div className="w-full flex-1 rounded-lg overflow-hidden shadow-2xl border border-white/10" style={{ minHeight: '500px' }}>
                     <AgGridReact
                         rowData={rowData}
@@ -588,7 +635,8 @@ export default function UsersPage() {
                     />
                 </div>
             ) : (
-                <div className="flex-1 overflow-auto">
+                <div className="min-h-0 flex-1 overflow-auto">
+                    {compact && <p className="mb-2 text-xs text-gray-500">Aby dodać osobę do zespołu, otwórz ją w zakładce Użytkownicy.</p>}
                     {/* @anchor teams-user-query-input */}
                     <input
                         value={userQuery}
@@ -599,7 +647,7 @@ export default function UsersPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {orderedCardIds.map(cardId => {
                             // Karta: Lista wszystkich pracowników
-                            if (cardId === 'all-users') return (
+                            if (cardId === 'all-users') return compact ? null : (
                         <div
                             key="all-users"
                             className={`${draggedCardId === 'all-users' ? 'opacity-40' : ''} bg-white/5 border ${dragOverTeamId === 'all-users' ? 'border-blue-400 bg-blue-400/10' : 'border-white/10'} rounded-xl p-4 flex flex-col transition-all`}
@@ -649,7 +697,7 @@ export default function UsersPage() {
                                 <div draggable="true" onDragStart={(e) => handleCardDragStart(e, team.id)} onDragEnd={handleCardDragEnd}
                                     title="Przeciągnij, aby przenieść kartę"
                                     className="flex justify-between items-center mb-4 pb-2 border-b border-white/5 cursor-move">
-                                    <h3 className="font-bold text-lg text-blue-300"><span className="mr-1.5 text-gray-600">⠿</span>{team.name}</h3>
+                                    <h3 className="font-bold text-lg text-blue-300">{!compact && <span className="mr-1.5 text-gray-600">⠿</span>}{team.name}</h3>
                                     <div className="flex items-center gap-2">
                                         <span className="text-xs bg-white/10 px-2 py-1 rounded-full">
                                             {rowData.filter(u => Array.isArray(u.teams) && u.teams.some(t => t.id === team.id)).length}
@@ -675,7 +723,7 @@ export default function UsersPage() {
                                                 <span className="text-[10px] text-gray-400">{user.email}</span>
                                             </div>
                                             <button
-                                                className="text-xs text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-red-500/20 rounded-full"
+                                                className={`text-xs text-red-400 transition-opacity p-1.5 hover:bg-red-500/20 rounded-full ${compact ? '' : 'opacity-0 group-hover:opacity-100'}`}
                                                 onClick={() => handleRemoveUserFromTeam(user.id, team.id)}
                                                 title="Usuń z tego zespołu"
                                             >

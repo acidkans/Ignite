@@ -1606,7 +1606,14 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stan | exportOpen (WorkwearPage) | apps/frontend/src/WorkwearPage.jsx | @anchor workwear-export-open |
 | ui-modal | NewWorkwearItemModal | apps/frontend/src/WorkwearPage.jsx | @anchor new-workwear-item-modal |
 | ui-widok | mobileView 'workwear' | apps/frontend/src/App.jsx | @anchor mobile-view-workwear |
-| ui-przycisk | kafel Ubrania robocze (MobileHome, ADMIN) | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home-tile-workwear |
+| ui-widok | mobileView 'users-menu' | apps/frontend/src/App.jsx | @anchor mobile-view-users-menu |
+| ui-widok | mobileView 'users-list' | apps/frontend/src/App.jsx | @anchor mobile-view-users-list |
+| ui-przycisk | kafel Użytkownicy (MobileHome, ADMIN) | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home-tile-users |
+| ui-widok | MobileUsersMenu | apps/frontend/src/components/Mobile/MobileUsersMenu.jsx | @anchor mobile-users-menu |
+| ui-sekcja | MobileSubpage | apps/frontend/src/components/Mobile/MobileUsersMenu.jsx | @anchor mobile-subpage |
+| ui-stan | compact (UsersPage) | apps/frontend/src/UsersPage.jsx | @anchor users-page-compact |
+| ui-lista | lista kart użytkowników (UsersPage) | apps/frontend/src/UsersPage.jsx | @anchor users-mobile-list |
+| ui-lista | karty pracowników (WorkwearPage) | apps/frontend/src/WorkwearPage.jsx | @anchor workwear-mobile-cards |
 | ui-stan | addItemOpen (WorkwearPage) | apps/frontend/src/WorkwearPage.jsx | @anchor workwear-add-item-open |
 | back-funkcja | WorkwearService.addItem | apps/backend/src/workwear/workwear.service.ts | @anchor workwear-add-item |
 | back-endpoint | POST /workwear/items | apps/backend/src/workwear/workwear.controller.ts | @anchor workwear-add-item-endpoint |
@@ -3467,7 +3474,6 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-funkcja | fuzzyOrders() | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor fuzzy-orders |
 | ui-funkcja | Highlight | apps/frontend/src/components/shared/trainings/TrainingsUi.jsx | @anchor highlight-hits |
 | ui-funkcja | brakujace() | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor missing-trainings-for-order |
-| ui-przycisk | kafel Szkolenia (MobileHome, ADMIN) | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home-tile-trainings |
 | ui-widok | mobileView 'trainings' | apps/frontend/src/App.jsx | @anchor mobile-view-trainings |
 | ui-widok | mobileView 'chat' | apps/frontend/src/App.jsx | @anchor mobile-view-chat |
 | schema-pole | SystemNotificationSettings.trainingAlertHour | apps/backend/prisma/schema.prisma | @anchor notif-settings-training-alert-hour |

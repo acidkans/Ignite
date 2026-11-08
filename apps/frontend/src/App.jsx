@@ -14,7 +14,7 @@ import MainLayout from './components/Layout/MainLayout';
 import MobileDashboard from './components/Mobile/MobileDashboard';
 import MobileHome from './components/Mobile/MobileHome';
 import MobileOrdersTree from './components/Mobile/MobileOrdersTree';
-import { ArrowLeft } from 'lucide-react';
+import MobileUsersMenu, { MobileSubpage } from './components/Mobile/MobileUsersMenu';
 import MobileChat from './components/Mobile/MobileChat';
 import OfflineBanner from './components/shared/OfflineBanner';
 import { useDevice } from './hooks/useDevice';
@@ -117,7 +117,7 @@ window.fetch = async (...args) => {
 function App() {
   const [token, setToken] = useState(loadValidToken);
   // @anchor mobile-view-state
-  const [mobileView, setMobileView] = useState('home'); // 'home' | 'tasks' | 'tree' | 'trainings'
+  const [mobileView, setMobileView] = useState('home'); // 'home' | 'tasks' | 'tree' | 'chat' | 'users-menu' | 'users-list' | 'trainings' | 'workwear'
   const navigate = useNavigate();
   const location = useLocation();
   const { isMobile, isTablet } = useDevice();
@@ -245,34 +245,26 @@ function App() {
       <div className="flex flex-col h-[100dvh]">
         <OfflineBanner />
         <div className="flex-1 min-h-0">
-          {mobileView === 'home' && <MobileHome onNavigate={setMobileView} onLogout={handleLogout} showTrainings={tokenRoles().includes('ADMIN')} showWorkwear={tokenRoles().includes('ADMIN')} />}
+          {mobileView === 'home' && <MobileHome onNavigate={setMobileView} onLogout={handleLogout} showUsers={tokenRoles().includes('ADMIN')} />}
           {mobileView === 'tasks' && <MobileDashboard onGoHome={() => setMobileView('home')} />}
           {mobileView === 'tree' && <MobileOrdersTree onBack={() => setMobileView('home')} />}
           {/* @anchor mobile-view-chat */}
           {mobileView === 'chat' && <MobileChat onBack={() => setMobileView('home')} />}
           {/* @anchor mobile-view-trainings — ten sam widok co /szkolenia, z paskiem powrotu zamiast menu bocznego */}
           {mobileView === 'trainings' && tokenRoles().includes('ADMIN') && (
-            <div className="flex h-full flex-col bg-gray-950 text-white">
-              <div className="flex items-center gap-3 border-b border-white/5 bg-gray-900/50 px-4 py-3">
-                <button onClick={() => setMobileView('home')} className="p-2 rounded-xl bg-white/5 active:scale-90 transition-transform flex-shrink-0">
-                  <ArrowLeft size={18} className="text-gray-400" />
-                </button>
-                <span className="font-bold text-sm">Szkolenia</span>
-              </div>
-              <div className="min-h-0 flex-1"><TrainingsPage /></div>
-            </div>
+            <MobileSubpage title="Szkolenia" onBack={() => setMobileView('users-menu')}><TrainingsPage /></MobileSubpage>
           )}
           {/* @anchor mobile-view-workwear — ten sam widok co /ubrania-robocze, z paskiem powrotu zamiast menu bocznego */}
           {mobileView === 'workwear' && tokenRoles().includes('ADMIN') && (
-            <div className="flex h-full flex-col bg-gray-950 text-white">
-              <div className="flex items-center gap-3 border-b border-white/5 bg-gray-900/50 px-4 py-3">
-                <button onClick={() => setMobileView('home')} className="p-2 rounded-xl bg-white/5 active:scale-90 transition-transform flex-shrink-0">
-                  <ArrowLeft size={18} className="text-gray-400" />
-                </button>
-                <span className="font-bold text-sm">Ubrania robocze</span>
-              </div>
-              <div className="min-h-0 flex-1"><WorkwearPage /></div>
-            </div>
+            <MobileSubpage title="Ubrania robocze" onBack={() => setMobileView('users-menu')}><WorkwearPage /></MobileSubpage>
+          )}
+          {/* @anchor mobile-view-users-menu */}
+          {mobileView === 'users-menu' && tokenRoles().includes('ADMIN') && (
+            <MobileUsersMenu onNavigate={setMobileView} onBack={() => setMobileView('home')} />
+          )}
+          {/* @anchor mobile-view-users-list */}
+          {mobileView === 'users-list' && tokenRoles().includes('ADMIN') && (
+            <MobileSubpage title="Lista użytkowników" onBack={() => setMobileView('users-menu')}><UsersPage /></MobileSubpage>
           )}
         </div>
       </div>
