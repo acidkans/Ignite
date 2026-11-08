@@ -25,7 +25,7 @@ import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, authHeaders, flattenWbsNodes, getParentPath,
     leafNodesOf, buildCardMap, wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf,
     planUnitOf, planValueOf, fmtQty, fmtZl, fmtDate, ROZLICZENIE, POWOD_POZA_OFERTA, rozliczenieOf, POZA_BASELINE_META,
-    offerPriceOf,
+    offerPriceOf, ENTRY_STATUS, entryStatusOf,
 } from './wbs/realizationShared';
 
 // ─── Kolumny ──────────────────────────────────────────────────────────────────
@@ -246,7 +246,7 @@ export function RealizationRow({ node, card, realization, odbior, isExpanded, on
     const planValue = planUnit != null ? planUnit * (Number(node.quantity) || 0) : null;
     const purchaseUnit = r.avg ?? purchaseUnitOf(card);
     const hasReal = r.qty > 0 || node.realizationClosed;
-    const dValue = hasReal && planValue != null ? Math.round((r.value - planValue) * 100) / 100 : null;
+    const dValue = hasReal && planValue != null ? Math.round((r.koszt - planValue) * 100) / 100 : null;
     const dQty = Math.round((r.qty - r.plan) * 1000) / 1000;
     const dQtyBrak = Math.abs(dQty) < 1e-9 || (r.qty === 0 && !node.realizationClosed);
 
@@ -383,12 +383,15 @@ export function RealizationRow({ node, card, realization, odbior, isExpanded, on
                     były czerwone i różnił je tylko odcień — nie dało się na rzut oka powiedzieć,
                     która jest planem. Δ zostaje przy kolorze wg znaku, bo niesie inną informację
                     (oszczędność vs przekroczenie), a nie kwotę. */}
-                <div className="text-orange-400" title="Koszt całkowity z wyceny (ilość × koszt jedn.)">
-                    {planValue != null ? `${fmtZl(planValue)} zł` : '—'}
+                <div className="text-orange-400" title="Plan wydatków: koszt z wyceny (ilość × koszt jedn.) + zakupy pozaplanowe">
+                    {planValue != null ? `${fmtZl(r.planWydatkow)} zł` : '—'}
                 </div>
-                <div className={hasReal ? 'text-red-400' : 'text-gray-600'} title="Koszt całkowity zakupu — suma wpisów realizacji">
+                <div className={hasReal ? 'text-red-400' : 'text-gray-600'} title="Zakupy poniesione — suma wpisów planowych i pozaplanowych">
                     {hasReal ? `${fmtZl(r.value)} zł` : '—'}
                 </div>
+                {r.byStatus.FORECAST > 0 && (
+                    <div className="text-sm text-amber-300" title="Plan budżetu minus zakupy planowe">prognoza {fmtZl(r.byStatus.FORECAST)} zł</div>
+                )}
                 {dValue != null && (
                     /* Δ w tym samym stopniu co kwoty nad nią — to najważniejsza liczba w kolumnie
                        (o nią chodzi w całym porównaniu), a była z nich najdrobniejsza. */
@@ -924,11 +927,12 @@ export function RealizationExpandPanel({ node, card, realization, token, readOnl
 // @anchor realization-totals — sumy widocznych wierszy. Poziom modułu, bo liczy je i nagłówek
 // tabeli, i arkusz „Podsumowanie" w eksporcie — dwie kopie tej arytmetyki rozjechałyby się.
 export function liczTotals(rows) {
-        let plan = 0, real = 0, done = 0, entries = 0, przychod = 0, przychodPoAkceptacji = 0;
+        let plan = 0, real = 0, planWydatkow = 0, done = 0, entries = 0, przychod = 0, przychodPoAkceptacji = 0;
         const wgStatusu = { PLANNED: 0, UNPLANNED: 0, FORECAST: 0 };
         for (const { node, card, realization } of rows) {
             plan += planValueOf(node, card);
-            real += realization.value;
+            real += realization.koszt;
+            planWydatkow += realization.planWydatkow;
             przychod += offerPriceOf(node);
             if (node?._outOfBaseline) przychodPoAkceptacji += offerPriceOf({ ...node, _outOfBaseline: false });
             for (const k of Object.keys(wgStatusu)) wgStatusu[k] += realization.byStatus?.[k] || 0;
@@ -938,6 +942,7 @@ export function liczTotals(rows) {
         return {
             plan: Math.round(plan * 100) / 100,
             real: Math.round(real * 100) / 100,
+            planWydatkow: Math.round(planWydatkow * 100) / 100,
             delta: Math.round((real - plan) * 100) / 100,
             done, entries,
             count: rows.length,
@@ -961,9 +966,9 @@ export function liczAnalize(rows) {
             const g = wgTypu.get(t);
             g.planCaly += p;
             if (!(realization.qty > 0 || node.realizationClosed)) continue;
-            const d = Math.round((realization.value - p) * 100) / 100;
-            planR += p; realR += realization.value; ruszone += 1;
-            g.planRuszone += p; g.realRuszone += realization.value;
+            const d = Math.round((realization.koszt - p) * 100) / 100;
+            planR += p; realR += realization.koszt; ruszone += 1;
+            g.planRuszone += p; g.realRuszone += realization.koszt;
             if (d < 0) { taniej += 1; oszczednosc -= d; }
             else if (d > 0) { drozej += 1; przekroczenie += d; }
             else wPunkt += 1;
@@ -1131,7 +1136,6 @@ export async function eksportRealizacjiXlsx({
         const planUnit = planUnitOf(node, card);
         const purchaseUnit = r.avg ?? purchaseUnitOf(card);
         const planValue = planUnit != null ? planUnit * (Number(node.quantity) || 0) : null;
-        const hasReal = r.qty > 0 || node.realizationClosed;
         const scopes = [...new Set(r.entries.map(e => e.scope).filter(Boolean))];
         const product = [card?.manufacturer, card?.model].filter(Boolean).join(' ') || scopes.join('; ');
         ws.addRow({
@@ -1148,9 +1152,10 @@ export async function eksportRealizacjiXlsx({
             pricePlan: planUnit,
             pricePurchase: purchaseUnit,
             valuePlan: planUnit != null ? { formula: `${W('qtyPlan')}${n}*${W('pricePlan')}${n}`, result: planValue ?? 0 } : null,
-            // Zakup to SUMA wpisów o różnych cenach, nie iloczyn — zostaje wartością.
-            valueReal: hasReal ? r.value : null,
-            delta: planValue != null && hasReal ? { formula: `${W('valueReal')}${n}-${W('valuePlan')}${n}`, result: Math.round((r.value - planValue) * 100) / 100 } : null,
+            // Koszt całkowity = suma wpisów o różnych cenach + prognoza, nie iloczyn — zostaje wartością.
+            // Wypełniony także przy pozycjach nieruszonych: tam cały koszt to prognoza.
+            valueReal: r.koszt,
+            delta: planValue != null ? { formula: `${W('valueReal')}${n}-${W('valuePlan')}${n}`, result: Math.round((r.koszt - planValue) * 100) / 100 } : null,
             kPlanned: r.byStatus?.PLANNED || 0,
             kUnplanned: r.byStatus?.UNPLANNED || 0,
             kForecast: r.byStatus?.FORECAST || 0,
@@ -1198,6 +1203,8 @@ export async function eksportRealizacjiXlsx({
     const zakupy = [];
     for (const { node, card, realization: r } of rows) {
         for (const e of r.entries) {
+            // Wpis prognozowany to tylko termin dostawy, nie zakup — kwota prognozy jest w arkuszu „Realizacja”.
+            if (entryStatusOf(e) === ENTRY_STATUS.FORECAST) continue;
             const { rozl, powod } = rozliczenieOf(node, card, e);
             zakupy.push({ node, card, e, planQty: Number(r.plan) || 0, rozl: rozl === ROZLICZENIE.OFERTA ? ROZL_XLS.OFERTA : rozl === ROZLICZENIE.PROGNOZA ? ROZL_XLS.PROGNOZA : ROZL_XLS.POZA, powod });
         }
@@ -1772,7 +1779,7 @@ export async function eksportRealizacjiXlsx({
     for (const t of typy) {
         const mine = rows.filter(({ node }) => (TYPE_META[node.type]?.label || node.type || '—') === t);
         const planT = Math.round(mine.reduce((s, x) => s + planValueOf(x.node, x.card), 0) * 100) / 100;
-        const realT = Math.round(mine.reduce((s, x) => s + x.realization.value, 0) * 100) / 100;
+        const realT = Math.round(mine.reduce((s, x) => s + x.realization.koszt, 0) * 100) / 100;
         const n = ps.rowCount + 1;
         ps.addRow({
             a: t,
@@ -2240,7 +2247,7 @@ export default function RealizationTab({
         let list = leaves.map(node => ({
             node,
             card: cards[node.id] || null,
-            realization: realizationOf(node, actualsByRoot[wbsRootOf(node)] || []),
+            realization: realizationOf(node, actualsByRoot[wbsRootOf(node)] || [], cards[node.id] || null),
         }));
 
         const matchTokens = (text, q) => q.split(/[\s/]+/).filter(Boolean).every(t => text.toLowerCase().includes(t));
@@ -2340,7 +2347,7 @@ export default function RealizationTab({
             else if (k === 'price')        cmp = (planUnitOf(a.node, a.card) ?? Infinity) - (planUnitOf(b.node, b.card) ?? Infinity);
             else if (k === 'purchasePrice') cmp = (a.realization.avg ?? purchaseUnitOf(a.card) ?? Infinity) - (b.realization.avg ?? purchaseUnitOf(b.card) ?? Infinity);
             // Koszt całkowity sortuje po odchyleniu — to jest pytanie, które się tej kolumnie zadaje.
-            else if (k === 'total')        cmp = (a.realization.value - planValueOf(a.node, a.card)) - (b.realization.value - planValueOf(b.node, b.card));
+            else if (k === 'total')        cmp = (a.realization.koszt - planValueOf(a.node, a.card)) - (b.realization.koszt - planValueOf(b.node, b.card));
             else if (k === 'status')       cmp = statusLabel(a.node).localeCompare(statusLabel(b.node), 'pl');
             else if (k === 'purchaseStatus') cmp = purchaseStatusLabel(a.node).localeCompare(purchaseStatusLabel(b.node), 'pl');
             else if (k === 'execStatus')     cmp = execStatusLabelOf(a.node, odbiorByRoot[wbsRootOf(a.node)]).localeCompare(execStatusLabelOf(b.node, odbiorByRoot[wbsRootOf(b.node)]), 'pl');
@@ -2720,8 +2727,9 @@ export default function RealizationTab({
                                     if (c.key === 'total') return (
                                         <td key={c.key} className={`${base} px-3 py-2 text-right font-mono text-base whitespace-nowrap`}>
                                             {/* Ta sama logika koloru co w wierszach — patrz `realization-total-plan-color`. */}
-                                            <div className="text-orange-400" title="Suma kosztów całkowitych z wyceny">{fmtZl(totals.plan)} zł</div>
-                                            <div className="text-red-400" title="Suma kosztów całkowitych zakupu">{fmtZl(totals.real)} zł</div>
+                                            <div className="text-orange-400" title="Plan wydatków: suma z wyceny + zakupy pozaplanowe">{fmtZl(totals.planWydatkow)} zł</div>
+                                            <div className="text-red-400" title="Suma zakupów poniesionych">{fmtZl(totals.poniesione)} zł</div>
+                                            {totals.wgStatusu.FORECAST > 0 && <div className="text-sm text-amber-300" title="Suma: plan budżetu minus zakupy planowe">prognoza {fmtZl(totals.wgStatusu.FORECAST)} zł</div>}
                                             <div className={`text-base font-bold ${totals.delta > 0.005 ? 'text-red-300' : totals.delta < -0.005 ? 'text-teal-300' : 'text-gray-500'}`}>
                                                 Δ {totals.delta > 0 ? '+' : ''}{fmtZl(totals.delta)}
                                             </div>

@@ -1472,6 +1472,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | back-endpoint | POST /my-tasks/:id/reminders | apps/backend/src/user-tasks/user-tasks.controller.ts | @anchor user-tasks-reminder-create-endpoint |
 | ui-stala | ALARM_INTERVALS | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-alarm-interval-options |
 | ui-modal | CyclicAlarmEditor | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-cyclic-alarm-editor |
+| ui-funkcja | handleStartChange (CyclicAlarmEditor) | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor alarm-handle-start-change |
+| ui-stan | cenaZPrognozy (PurchaseDrawer) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor purchase-drawer-forecast-prefill |
 
 ### MyTasksModal — frontend (Etap 6)
 
@@ -1598,6 +1600,33 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stan | editUserTask | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-edit-user-task |
 | ui-stan | newTaskDate | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-new-task-date |
 | ui-modal | OrderTeamModal | apps/frontend/src/components/shared/OrderTeamModal.jsx | @anchor order-team-modal |
+| ui-modal | NewContactModal | apps/frontend/src/components/shared/NewContactModal.jsx | @anchor new-contact-modal |
+| ui-widok | WorkwearPage | apps/frontend/src/WorkwearPage.jsx | @anchor workwear-page |
+| ui-funkcja | buildWorkwearExcel | apps/frontend/src/utils/workwearExcel.js | @anchor build-workwear-excel |
+| ui-stan | exportOpen (WorkwearPage) | apps/frontend/src/WorkwearPage.jsx | @anchor workwear-export-open |
+| ui-modal | NewWorkwearItemModal | apps/frontend/src/WorkwearPage.jsx | @anchor new-workwear-item-modal |
+| ui-widok | mobileView 'workwear' | apps/frontend/src/App.jsx | @anchor mobile-view-workwear |
+| ui-przycisk | kafel Ubrania robocze (MobileHome, ADMIN) | apps/frontend/src/components/Mobile/MobileHome.jsx | @anchor mobile-home-tile-workwear |
+| ui-stan | addItemOpen (WorkwearPage) | apps/frontend/src/WorkwearPage.jsx | @anchor workwear-add-item-open |
+| back-funkcja | WorkwearService.addItem | apps/backend/src/workwear/workwear.service.ts | @anchor workwear-add-item |
+| back-endpoint | POST /workwear/items | apps/backend/src/workwear/workwear.controller.ts | @anchor workwear-add-item-endpoint |
+| schema-model | WorkwearItem | apps/backend/prisma/schema.prisma | @anchor workwear-item |
+| schema-pole | WorkwearItem.name | apps/backend/prisma/schema.prisma | @anchor workwear-item-name |
+| ui-widok | route /ubrania-robocze | apps/frontend/src/App.jsx | @anchor route-ubrania-robocze |
+| ui-przycisk | Ubrania robocze (menu Użytkownicy) | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-ubrania-robocze-button |
+| back-modul | WorkwearModule | apps/backend/src/workwear/workwear.module.ts | @anchor workwear-module |
+| back-controller | WorkwearController | apps/backend/src/workwear/workwear.controller.ts | @anchor workwear-controller |
+| back-serwis | WorkwearService | apps/backend/src/workwear/workwear.service.ts | @anchor workwear-service |
+| back-stala | WORKWEAR_ITEMS | apps/backend/src/workwear/workwear.service.ts | @anchor workwear-items |
+| back-stala | WORKWEAR_SCALES | apps/backend/src/workwear/workwear.service.ts | @anchor workwear-scales |
+| back-endpoint | GET /workwear/overview | apps/backend/src/workwear/workwear.controller.ts | @anchor workwear-overview-endpoint |
+| back-endpoint | PUT /workwear/users/:userId/items/:item | apps/backend/src/workwear/workwear.controller.ts | @anchor workwear-size-endpoint |
+| schema-model | UserWorkwear | apps/backend/prisma/schema.prisma | @anchor user-workwear |
+| schema-pole | UserWorkwear.item | apps/backend/prisma/schema.prisma | @anchor user-workwear-item |
+| schema-pole | UserWorkwear.sizeScale | apps/backend/prisma/schema.prisma | @anchor user-workwear-size-scale |
+| schema-pole | UserWorkwear.size | apps/backend/prisma/schema.prisma | @anchor user-workwear-size |
+| schema-relacja | User.workwear | apps/backend/prisma/schema.prisma | @anchor user-workwear-entries |
+| ui-stan | contactModalOpen (RequirementsTab) | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-contact-modal-open |
 | ui-stan | teamStep (AddNodeModal) | apps/frontend/src/components/shared/AddNodeModal.jsx | @anchor add-node-team-step |
 | ui-funkcja | createNode (AddNodeModal) | apps/frontend/src/components/shared/AddNodeModal.jsx | @anchor add-node-create |
 | ui-stan | orderTeam (RequirementsTab) | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-order-team |

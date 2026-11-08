@@ -24,7 +24,7 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
     const location = useLocation();
     const [filter, setFilter] = useState('');
     // @anchor sidebar-users-drawer-open — szuflada „Użytkownicy” otwarta na start, gdy jesteśmy w jednej z jej stron
-    const [usersDrawerOpen, setUsersDrawerOpen] = useState(() => ['/users', '/szkolenia'].includes(location.pathname));
+    const [usersDrawerOpen, setUsersDrawerOpen] = useState(() => ['/users', '/szkolenia', '/ubrania-robocze'].includes(location.pathname));
     // @anchor sidebar-drag-id
     const [dragId, setDragId] = useState(null);
     // @anchor sidebar-drag-over-id
@@ -153,7 +153,7 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                             title="Użytkownicy"
                             aria-expanded={usersDrawerOpen}
                             className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md flex items-center gap-1.5
-                                ${['/users', '/szkolenia'].includes(location.pathname) && !usersDrawerOpen
+                                ${['/users', '/szkolenia', '/ubrania-robocze'].includes(location.pathname) && !usersDrawerOpen
                                     ? 'text-blue-400 bg-blue-500/10'
                                     : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
                                 }
@@ -170,6 +170,8 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                                 { path: '/users', label: 'Lista użytkowników' },
                                 // @anchor sidebar-szkolenia-button
                                 { path: '/szkolenia', label: 'Szkolenia' },
+                                // @anchor sidebar-ubrania-robocze-button
+                                { path: '/ubrania-robocze', label: 'Ubrania robocze' },
                             ].map(item => (
                                 <button
                                     key={item.path}

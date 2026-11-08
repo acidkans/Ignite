@@ -8,6 +8,7 @@ import NotificationSettingsPage from './NotificationSettingsPage';
 import ProcessTreePage from './ProcessTreePage';
 import LeavesPage from './LeavesPage';
 import TrainingsPage from './TrainingsPage';
+import WorkwearPage from './WorkwearPage';
 import DashboardPage from './DashboardPage';
 import MainLayout from './components/Layout/MainLayout';
 import MobileDashboard from './components/Mobile/MobileDashboard';
@@ -244,7 +245,7 @@ function App() {
       <div className="flex flex-col h-[100dvh]">
         <OfflineBanner />
         <div className="flex-1 min-h-0">
-          {mobileView === 'home' && <MobileHome onNavigate={setMobileView} onLogout={handleLogout} showTrainings={tokenRoles().includes('ADMIN')} />}
+          {mobileView === 'home' && <MobileHome onNavigate={setMobileView} onLogout={handleLogout} showTrainings={tokenRoles().includes('ADMIN')} showWorkwear={tokenRoles().includes('ADMIN')} />}
           {mobileView === 'tasks' && <MobileDashboard onGoHome={() => setMobileView('home')} />}
           {mobileView === 'tree' && <MobileOrdersTree onBack={() => setMobileView('home')} />}
           {/* @anchor mobile-view-chat */}
@@ -259,6 +260,18 @@ function App() {
                 <span className="font-bold text-sm">Szkolenia</span>
               </div>
               <div className="min-h-0 flex-1"><TrainingsPage /></div>
+            </div>
+          )}
+          {/* @anchor mobile-view-workwear — ten sam widok co /ubrania-robocze, z paskiem powrotu zamiast menu bocznego */}
+          {mobileView === 'workwear' && tokenRoles().includes('ADMIN') && (
+            <div className="flex h-full flex-col bg-gray-950 text-white">
+              <div className="flex items-center gap-3 border-b border-white/5 bg-gray-900/50 px-4 py-3">
+                <button onClick={() => setMobileView('home')} className="p-2 rounded-xl bg-white/5 active:scale-90 transition-transform flex-shrink-0">
+                  <ArrowLeft size={18} className="text-gray-400" />
+                </button>
+                <span className="font-bold text-sm">Ubrania robocze</span>
+              </div>
+              <div className="min-h-0 flex-1"><WorkwearPage /></div>
             </div>
           )}
         </div>
@@ -277,6 +290,8 @@ function App() {
             <Route path="/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
             {/* @anchor route-szkolenia */}
             <Route path="/szkolenia" element={<AdminRoute><TrainingsPage /></AdminRoute>} />
+            {/* @anchor route-ubrania-robocze */}
+            <Route path="/ubrania-robocze" element={<AdminRoute><WorkwearPage /></AdminRoute>} />
             <Route path="/firma" element={<AdminRoute><FirmaPage /></AdminRoute>} />
             <Route path="/smtp" element={<SmtpSettingsPage />} />
             <Route path="/notifications" element={<NotificationSettingsPage />} />

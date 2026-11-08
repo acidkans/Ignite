@@ -1,3 +1,20 @@
+## 2026-11-08 — feat(uzytkownicy): tabela ubrań roboczych z rozmiarówką, nowymi pozycjami i eksportem Excel; prognoza realizacji liczona z planu budżetu (v2026.11.08.1842)
+
+### schema.prisma
+- dodano model `schema-model` `UserWorkwear` (`item`, `sizeScale`, `size`, unikalne `userId` + `item`) oraz relację `schema-relacja` `User.workwear` — rozmiary ubrań roboczych pracowników; migracja `20261108180000_user_workwear`
+- dodano model `schema-model` `WorkwearItem` (`name` unikalne) — pozycje ubrania dodane przez użytkownika; migracja `20261108190000_workwear_items`
+
+### architektura / API
+- dodano `back-modul` `WorkwearModule` (tylko ADMIN), `back-endpoint` `GET /workwear/overview`, `POST /workwear/items` {name} i `PUT /workwear/users/:userId/items/:item` {sizeScale, size}
+- dodano `ui-widok` `WorkwearPage` pod `/ubrania-robocze`, pozycja „Ubrania robocze" w menu Użytkownicy, kafel na tablecie, dodawanie pozycji w modalu, eksport Excel przez `ExportChoiceModal` (pobranie lub mail)
+
+### słownik
+- dodano wpisy `WorkwearPage`, `NewWorkwearItemModal`, `buildWorkwearExcel`, `WorkwearItem`, kafel i widok tabletowy, `WorkwearModule`, `WorkwearController`, `WorkwearService`, `WORKWEAR_ITEMS`, `WORKWEAR_SCALES`, `UserWorkwear` i pola
+
+### wytyczne
+- `back-stala` `WORKWEAR_ITEMS` + `schema-model` `WorkwearItem` — razem tworzą listę pozycji; kolumny tabeli i eksportu idą z odpowiedzi `GET /workwear/overview`
+- `schema-pole` `UserWorkwear.size` — zmiana `sizeScale` zeruje rozmiar, bo wartość musi należeć do wybranej rozmiarówki
+
 ## 2026-11-07 — feat(realizacja): załączniki w mailach wątku — Ctrl+V zrzutu ekranu, przeciąganie i „+ Załącznik”, obrazki w treści maila, zapis obrazków i plików z odpowiedzi klienta (v2026.11.07.2245)
 
 ### schema.prisma

@@ -56,6 +56,8 @@ model User {
   /// @anchor user-created-user-tasks
   createdUserTasks  UserTask[]         @relation("UserTaskCreatedBy")
   msTodoSyncState   MsTodoSyncState?
+  /// @anchor user-workwear-entries
+  workwear          UserWorkwear[]
   /// @anchor user-leaves
   leaves            Leave[]
   /// @anchor user-leave-requests
@@ -1632,9 +1634,9 @@ model LeafActual {
   scope        String?
   /// @anchor leaf-actual-status
   /// Status wpisu: PLANNED (planowy) — koszt poniesiony w ramach planu, UNPLANNED (pozaplanowy) —
-  /// poniesiony ponad plan (dawne `isSurplus`), FORECAST (prognozowany) — koszt, który dopiero
-  /// przyjdzie, z kwotą szacowaną. Wszystkie trzy razem dają koszt całkowity do wyniku zamówienia;
-  /// po przyjściu faktury prognozowany przestawia się na planowy albo pozaplanowy.
+  /// poniesiony ponad plan (dawne `isSurplus`), FORECAST (prognozowany) — niesie tylko termin
+  /// dostawy, jego kwota nie wchodzi do kosztu: prognozę pozycji wylicza `realizationOf` jako
+  /// plan budżetu − wpisy PLANNED. Wpisy UNPLANNED powiększają pokazany plan wydatków.
   status       LeafActualStatus @default(PLANNED)
   /// @anchor leaf-actual-supplier-id
   supplierId String?
@@ -2555,6 +2557,39 @@ model UserTraining {
   @@unique([userId, trainingTypeId])
   @@index([trainingTypeId])
   @@map("user_trainings")
+}
+
+/// @anchor workwear-item
+/// Element ubrania dodany przez użytkownika — kolumna tabeli za stałymi z WORKWEAR_ITEMS.
+model WorkwearItem {
+  id        String   @id @default(uuid())
+  /// @anchor workwear-item-name
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  @@map("workwear_items")
+}
+
+/// @anchor user-workwear
+/// Rozmiar elementu ubrania roboczego — jeden wpis na parę pracownik × element.
+model UserWorkwear {
+  id        String   @id @default(uuid())
+  userId    String
+  /// @anchor user-workwear-item
+  /// Klucz z back-stala WORKWEAR_ITEMS (bluza, spodnie, kurtka, okulary) albo WorkwearItem.id.
+  item      String
+  /// @anchor user-workwear-size-scale
+  /// Rozmiarówka wybrana dla tego elementu: LETTER (S–XXL) albo NUMERIC (48, 50, 52…).
+  sizeScale String   @default("LETTER")
+  /// @anchor user-workwear-size
+  /// NULL = rozmiar jeszcze niewybrany; zmiana rozmiarówki go zeruje.
+  size      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, item])
+  @@map("user_workwear")
 }
 
 /// @anchor user-order

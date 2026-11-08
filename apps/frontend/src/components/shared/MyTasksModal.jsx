@@ -51,6 +51,14 @@ export function CyclicAlarmEditor({ taskId, plannedEnd, onClose }) {
             .catch(() => {});
     }, [taskId]);
 
+    // @anchor alarm-handle-start-change — start przesunięty na koniec serii lub za niego popycha
+    // koniec o jeden interwał: sama data startu dałaby pustą serię i zablokowany zapis.
+    const handleStartChange = (e) => {
+        const value = e.target.value;
+        setStart(value);
+        if (value && end <= value) setEnd(toLocalInput(new Date(new Date(value).getTime() + intervalMinutes * 60000)));
+    };
+
     // liczba wystąpień w oknie — podgląd
     const count = (() => {
         const s = new Date(start).getTime();
@@ -97,7 +105,7 @@ export function CyclicAlarmEditor({ taskId, plannedEnd, onClose }) {
             <div className="grid grid-cols-2 gap-2">
                 <label className="flex flex-col gap-1 text-[10px] text-gray-400">
                     Od
-                    <input type="datetime-local" value={start} onChange={e => setStart(e.target.value)}
+                    <input type="datetime-local" value={start} onChange={handleStartChange}
                         className="px-2 py-1.5 rounded-md bg-white/[0.05] border border-white/10 text-[11px] text-white [color-scheme:dark] focus:outline-none focus:border-indigo-500/50" />
                 </label>
                 <label className="flex flex-col gap-1 text-[10px] text-gray-400">

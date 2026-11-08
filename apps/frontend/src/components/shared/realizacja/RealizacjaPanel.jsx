@@ -1285,7 +1285,7 @@ function Macierz({ grupy, rowOf, actualsOf, sygnaly, pelne, canSeeMoney, onOtwor
                         )}
                         {liscie.map(l => {
                             const { r, planValue } = rowOf(l);
-                            const roznica = r.value ? r.value - planValue : 0;
+                            const roznica = r.value ? r.koszt - planValue : 0;
                             const prognozy = actualsOf(l).filter(e => entryStatusOf(e) === 'FORECAST' && e.entryDate).map(e => new Date(e.entryDate)).sort((a, b) => a - b);
                             return (
                                 <React.Fragment key={l.id}>
@@ -1295,7 +1295,7 @@ function Macierz({ grupy, rowOf, actualsOf, sygnaly, pelne, canSeeMoney, onOtwor
                                             <span className="typ">{TYPE_META[l.type]?.label || l.type}{l.owner ? ` · ${l.owner}` : ''}</span>
                                         </td>
                                         <td><DrogaPasek node={l} /></td>
-                                        {canSeeMoney && <td className="num">{fmtZl(planValue)}</td>}
+                                        {canSeeMoney && <td className="num">{fmtZl(r.planWydatkow)}</td>}
                                         {canSeeMoney && <td className="num">{r.value ? fmtZl(r.value) : '—'}</td>}
                                         {canSeeMoney && <td className="num" style={{ fontSize: 12 }}>
                                             {r.value ? <span className={roznica > 0.005 ? 'dpos' : roznica < -0.005 ? 'dneg' : 'muted'}>{roznica > 0 ? '+' : ''}{fmtZl(roznica)}</span> : <span className="muted">—</span>}
@@ -1344,7 +1344,7 @@ function RozwinietaPozycja({ node, r, planValue, card, zakupyApi, canEdit, canSe
                     {hasExecAxis(node.type) && <OsWybor node={node} axis="exec" readOnly={!canEdit} saveAxis={saveAxis} />}
                     {canSeeMoney && (
                         <>
-                            <Wiersz l="Plan" v={`${fmtZl(planValue)} zł`} />
+                            <Wiersz l="Plan wydatków" v={`${fmtZl(r.planWydatkow)} zł`} />
                             <Wiersz l="Poniesione planowo" v={`${fmtZl(r.byStatus.PLANNED)} zł`} />
                             <Wiersz l="Pozaplanowo" v={`${fmtZl(r.byStatus.UNPLANNED)} zł`} />
                             <Wiersz l="Prognoza" v={`${fmtZl(r.byStatus.FORECAST)} zł`} />
@@ -1412,14 +1412,14 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
     const k = useMemo(() => {
         // @anchor realizacja-kokpit-wynik — przychód z oferty (`offerPriceOf`, ta sama formuła co Budżet),
         // zysk planowany = przychód − koszt planowany; prognoza zysku liczy koszt każdej pozycji jako
-        // większy z planu i poniesionego (z prognozą) — przekroczenie obniża wynik, oszczędność nie.
-        let plan = 0, real = 0, prognoza = 0, wykonane = 0, przychod = 0, kosztOczek = 0;
+        // większy z planu i kosztu całkowitego — przekroczenie obniża wynik, oszczędność nie.
+        let plan = 0, planWydatkow = 0, real = 0, prognoza = 0, wykonane = 0, przychod = 0, kosztOczek = 0;
         const roots = new Set();
         for (const l of liscie) {
             const { r, planValue } = rowOf(l);
-            plan += planValue; real += r.value; prognoza += r.byStatus.FORECAST;
+            plan += planValue; planWydatkow += r.planWydatkow; real += r.value; prognoza += r.byStatus.FORECAST;
             przychod += offerPriceOf(l);
-            kosztOczek += Math.max(planValue, r.value);
+            kosztOczek += Math.max(planValue, r.koszt);
             roots.add(l.sourceWbsNodeId || l.id);
             // Zaawansowanie wartościowe: wykonane/odebrane = 100 %, w toku = 50 %.
             if (['DONE', 'HANDED_OVER', 'INVOICED', 'UNFINISHED'].includes(l.execStatus)) wykonane += planValue;
@@ -1430,7 +1430,7 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
         for (const p of protocols) for (const it of p.items || []) if (roots.has(it.wbsRootId)) odebrano += Number(it.wartosc) || 0;
         const zysk = przychod - plan;
         return {
-            plan, real, prognoza, odebrano, pct: plan > 0 ? Math.round(wykonane / plan * 100) : 0,
+            plan, planWydatkow, real, prognoza, odebrano, pct: plan > 0 ? Math.round(wykonane / plan * 100) : 0,
             przychod, zysk, marza: przychod > 0 ? Math.round(zysk / przychod * 1000) / 10 : null,
             zyskProg: przychod - kosztOczek,
         };
@@ -1458,12 +1458,12 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
         <>
             <div className="kpis">
                 {canSeeMoney && <Kafel l="Przychód (oferta)" v={`${fmtZl(k.przychod)} zł`} s="cena ofertowa pozycji" />}
-                {canSeeMoney && <Kafel l="Plan (baseline)" v={`${fmtZl(k.plan)} zł`} s={`${liscie.length} pozycji`} />}
+                {canSeeMoney && <Kafel l="Plan wydatków" v={`${fmtZl(k.planWydatkow)} zł`} s={`budżet ${fmtZl(k.plan)} zł + pozaplanowe ${fmtZl(k.planWydatkow - k.plan)} zł`} />}
                 {canSeeMoney && <Kafel l="Zysk planowany" v={`${fmtZl(k.zysk)} zł`}
                     s={`${k.marza != null ? `marża ${String(k.marza).replace('.', ',')}% · ` : ''}prognoza ${fmtZl(k.zyskProg)} zł`}
-                    t="Zysk planowany = przychód − plan. Prognoza: koszt każdej pozycji = większy z planu i poniesionego (z prognozowanymi)."
+                    t="Zysk planowany = przychód − budżet. Prognoza: koszt każdej pozycji = większy z budżetu i kosztu całkowitego (zakupy + prognoza)."
                     alarm={k.zysk < 0} alarmS={k.zyskProg < k.zysk - 0.005} />}
-                {canSeeMoney && <Kafel l="Poniesione" v={`${fmtZl(k.real)} zł`} s={`w tym prognoza ${fmtZl(k.prognoza)} zł`} />}
+                {canSeeMoney && <Kafel l="Poniesione" v={`${fmtZl(k.real)} zł`} s={`prognoza jeszcze ${fmtZl(k.prognoza)} zł`} />}
                 <Kafel l="Zaawansowanie" v={`${k.pct}%`} s="wartościowo, z osi robót" />
                 {canSeeMoney && <Kafel l="Odebrano" v={`${fmtZl(k.odebrano)} zł`} s="protokołami" />}
                 <Kafel l="Blokery" v={sygFokus.blok} s={`${sygFokus.pyt} pytań otwartych${sygFokus.kol ? ` · ${sygFokus.kol} kolizji dostaw` : ''}${sygFokus.kms ? ` · ${sygFokus.kms} kolizji z milestone'em` : ''}`} alarm={sygFokus.blok > 0} alarmS={sygFokus.kol > 0 || sygFokus.kms > 0} />
