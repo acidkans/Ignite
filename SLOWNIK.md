@@ -1598,6 +1598,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stan | editUserTask | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-edit-user-task |
 | ui-stan | newTaskDate | apps/frontend/src/components/shared/wbs/TasksCalendarSection.jsx | @anchor tasks-calendar-new-task-date |
 | ui-modal | OrderTeamModal | apps/frontend/src/components/shared/OrderTeamModal.jsx | @anchor order-team-modal |
+| ui-modal | NewContactModal | apps/frontend/src/components/shared/NewContactModal.jsx | @anchor new-contact-modal |
+| ui-stan | contactModalOpen (RequirementsTab) | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-contact-modal-open |
 | ui-stan | teamStep (AddNodeModal) | apps/frontend/src/components/shared/AddNodeModal.jsx | @anchor add-node-team-step |
 | ui-funkcja | createNode (AddNodeModal) | apps/frontend/src/components/shared/AddNodeModal.jsx | @anchor add-node-create |
 | ui-stan | orderTeam (RequirementsTab) | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-order-team |

@@ -6,6 +6,7 @@ import { buildRequirementsArtifact } from '../../utils/requirementsPdfExport';
 import ExportChoiceModal from './ExportChoiceModal';
 import MarkdownEditor from './MarkdownEditor';
 import OrderTeamModal from './OrderTeamModal';
+import NewContactModal from './NewContactModal';
 import { shortCompanyName } from './wbs/realizationShared';
 import { fuzzyMatch } from './trainings/trainingsShared';
 
@@ -363,11 +364,14 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
         }
     };
 
-    const addContact = () => {
-        setForm(prev => ({
-            ...prev,
-            clientContacts: [...prev.clientContacts, { id: crypto.randomUUID(), name: '', company: '', nip: '', role: '', phone: '', email: '' }]
-        }));
+    // @anchor requirements-contact-modal-open
+    const [contactModalOpen, setContactModalOpen] = useState(false);
+
+    const addContact = (contact) => {
+        const updatedContacts = [...form.clientContacts, contact];
+        setForm(prev => ({ ...prev, clientContacts: updatedContacts }));
+        setContactModalOpen(false);
+        handleSave(null, updatedContacts);
     };
 
     const updateContact = (id, field, value) => {
@@ -381,11 +385,10 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
         const removed = form.clientContacts.find(c => c.id === id);
         const member = removed && teamMemberFor(removed.email);
         if (member && member.id !== orderTeam?.ownerId) removeFromTeam(member.id);
-        setForm(prev => ({
-            ...prev,
-            clientContacts: prev.clientContacts.filter(c => c.id !== id)
-        }));
+        const updatedContacts = form.clientContacts.filter(c => c.id !== id);
+        setForm(prev => ({ ...prev, clientContacts: updatedContacts }));
         setContactSuggest(prev => { const n = { ...prev }; delete n[id]; return n; });
+        handleSave(null, updatedContacts);
     };
 
     // @anchor requirements-nip-lookup — NIP → dane firmy. `POST /suppliers` robi dwie rzeczy
@@ -534,7 +537,6 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
     const handleContactNameChange = (contactId, value) => {
         if (!value.trim()) {
             removeContact(contactId);
-            setTimeout(handleSave, 50);
             return;
         }
         updateContact(contactId, 'name', value);
@@ -653,6 +655,15 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
 
     return (
         <div className="animate-fade-in flex flex-col gap-4 w-full h-full min-h-[800px]">
+            {contactModalOpen && (
+                <NewContactModal
+                    suggestUsers={suggestUsers}
+                    lookupNip={pobierzFirmePoNip}
+                    renderNipStatus={statusNip}
+                    onSubmit={addContact}
+                    onClose={() => setContactModalOpen(false)}
+                />
+            )}
             {pendingExport && (
                 <ExportChoiceModal
                     open={!!pendingExport}
@@ -970,7 +981,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                                 <div className="flex-1 flex flex-col min-h-0">
                                     <div className="flex items-center justify-between mb-2 shrink-0">
                                         <label className={`${labelCls} mb-0`}>Dodatkowe Kontakty</label>
-                                        <button onClick={addContact} className="p-1 rounded bg-white/5 hover:bg-white/10 text-gray-300 transition-colors">
+                                        <button onClick={() => setContactModalOpen(true)} title="Nowy kontakt" className="p-1 rounded bg-white/5 hover:bg-white/10 text-gray-300 transition-colors">
                                             <Plus size={14} />
                                         </button>
                                     </div>
@@ -995,7 +1006,7 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                                                             />
                                                         </div>
                                                         <button
-                                                            onClick={() => { removeContact(contact.id); setTimeout(handleSave, 100); }}
+                                                            onClick={() => removeContact(contact.id)}
                                                             className="p-1 text-red-400/50 hover:text-red-400 transition-all rounded hover:bg-red-400/10 shrink-0"
                                                         >
                                                             <Trash2 size={12} />
