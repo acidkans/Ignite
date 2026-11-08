@@ -47,7 +47,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }) {
 
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
-            <div className="bg-[#1a1c1e] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-slide-up">
+            <div className="bg-[#1a1c1e] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl max-h-[90dvh] overflow-y-auto animate-slide-up">
                 <div className="p-6 border-b border-white/5 flex justify-between items-center bg-gradient-to-r from-blue-600/10 to-transparent">
                     <h3 className="text-xl font-bold text-white">Dodaj Nowego Pracownika</h3>
                     <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors text-2xl">&times;</button>
