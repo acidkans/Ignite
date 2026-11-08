@@ -585,7 +585,7 @@ export default function RealizationNewTab({
     const exportRows = useMemo(() => visibleLeaves.map(node => ({
         node,
         card: cardOf(node),
-        realization: realizationOf(node, actualsOf(node)),
+        realization: realizationOf(node, actualsOf(node), cardOf(node)),
     })), [visibleLeaves, cardOf, actualsOf]);
 
     // @anchor realization-new-orphan-entries — wpisy, których pozycji NIE MA w wersji planu
@@ -626,8 +626,8 @@ export default function RealizationNewTab({
             // Wiersze w kształcie { node, card, realization } — tym samym, którym posługuje się
             // eksport, protokół i bilans wykonania. Liczone RAZ i podawane dalej, żeby trzy
             // rachunki nie mogły rozejść się na tej samej pozycji.
-            const wiersze = leaves.map(n => ({ node: n, card: cardOf(n), realization: realizationOf(n, actualsOf(n)) }));
-            let plan = 0, real = 0, wpisow = 0, zRealizacja = 0, dniPlan = 0, dniWyk = 0, przychod = 0, przychodPoAkceptacji = 0;
+            const wiersze = leaves.map(n => { const card = cardOf(n); return { node: n, card, realization: realizationOf(n, actualsOf(n), card) }; });
+            let plan = 0, real = 0, planWydatkow = 0, poniesione = 0, wpisow = 0, zRealizacja = 0, dniPlan = 0, dniWyk = 0, przychod = 0, przychodPoAkceptacji = 0;
             const wgStatusu = { PLANNED: 0, UNPLANNED: 0, FORECAST: 0 };
             // @anchor realization-new-stage-dist — rozkład osi liczony w KWOTACH wyceny, nie
             // w sztukach pozycji. Sztuki zrównywały pozycję za 100 zł z pozycją za 100 000 zł,
@@ -643,7 +643,9 @@ export default function RealizationNewTab({
             const dist = { purchase: pustyRozklad(), exec: pustyRozklad() };
             for (const { node: n, card, realization: r } of wiersze) {
                 plan += planValueOf(n, card);
-                real += r.value;
+                real += r.koszt;
+                planWydatkow += r.planWydatkow;
+                poniesione += r.value;
                 przychod += offerPriceOf(n);
                 if (n._outOfBaseline) przychodPoAkceptacji += offerPriceOf({ ...n, _outOfBaseline: false });
                 for (const k of Object.keys(wgStatusu)) wgStatusu[k] += r.byStatus[k];
@@ -661,7 +663,8 @@ export default function RealizationNewTab({
                 }
             }
             return {
-                plan: round2(plan), real: round2(real), wpisow, zRealizacja, pozycji: leaves.length,
+                plan: round2(plan), real: round2(real), planWydatkow: round2(planWydatkow), poniesione: round2(poniesione),
+                wpisow, zRealizacja, pozycji: leaves.length,
                 // @anchor realization-new-result — przychód z oferty i koszty wg statusów wpisów;
                 // koszt całkowity = planowy + pozaplanowy + prognozowany (= `real`).
                 przychod: round2(przychod),
@@ -969,8 +972,10 @@ function BranchTree({ idx, rootId, level, selected, onSelect, cardOf, actualsOf,
     // Sumy liczą się TYLKO wtedy, gdy jest je komu pokazać — przy zamkniętej analizie kwotowej
     // przebieg po wszystkich liściach każdej gałęzi byłby pracą na wynik, który i tak nie wychodzi
     // na ekran.
-    const plan = showMoney ? leaves.reduce((s, n) => s + planValueOf(n, cardOf(n)), 0) : 0;
-    const real = showMoney ? leaves.reduce((s, n) => s + realizationOf(n, actualsOf(n)).value, 0) : 0;
+    const { plan, real } = (showMoney ? leaves : []).reduce((s, n) => {
+        const r = realizationOf(n, actualsOf(n), cardOf(n));
+        return { plan: s.plan + r.planWydatkow, real: s.real + r.value };
+    }, { plan: 0, real: 0 });
     const waiting = leaves.some(isUnfinished);
     const children = idx.childrenOf[rootId] || [];
 
@@ -996,7 +1001,7 @@ function BranchTree({ idx, rootId, level, selected, onSelect, cardOf, actualsOf,
                 <span className="min-w-0 flex-1 truncate">{node.name}</span>
                 {waiting && <span title={`${node.name} — są pozycje bez pełnego pokrycia zakupami`} className="size-1.5 shrink-0 rounded-full bg-amber-400" />}
                 <span className="w-9 shrink-0 text-right text-gray-500 tabular-nums" title={`${node.name} — ${leaves.length} pozycji kosztowych`}>{leaves.length}</span>
-                {showMoney && <span className="w-24 shrink-0 text-right text-orange-400 tabular-nums" title={`${node.name} — wycena gałęzi`}>{fmtZl(plan)}</span>}
+                {showMoney && <span className="w-24 shrink-0 text-right text-orange-400 tabular-nums" title={`${node.name} — plan wydatków gałęzi (budżet + zakupy pozaplanowe)`}>{fmtZl(plan)}</span>}
                 {showMoney && <span className="w-24 shrink-0 text-right text-red-400 tabular-nums" title={`${node.name} — zakupy zrealizowane`}>{fmtZl(real)}</span>}
             </div>
             {children.map(c => (
@@ -1048,24 +1053,31 @@ export function PositionsTable({
     // wyłącznie przez zakup ma szufladę zawężoną do pasujących wpisów (`realization-new-drawer-search`),
     // więc do sumy wchodzą tylko te wpisy, a wycena — tylko część pokryta ich ilością (pozaplanowe
     // nie pokrywają wyceny, ilość ponad plan też nie).
-    let sumPlan = 0, sumReal = 0;
+    let sumPlan = 0, sumReal = 0, sumDelta = 0, sumPrognoza = 0;
     const rows = leaves.map(node => {
         const data = rowOf(node);
         const zawezone = searchTerms.length > 0 && !leafMatchesSearch(node, data.card, searchTerms, data.r.entries);
         if (!zawezone) {
-            sumPlan += data.planValue;
+            sumPlan += data.r.planWydatkow;
             sumReal += data.r.value;
+            sumDelta += data.r.koszt - data.planValue;
+            sumPrognoza += data.r.byStatus.FORECAST;
         } else {
-            const wpisy = data.r.entries.filter(e => entryMatchesSearch(e, searchTerms));
+            const wpisy = data.r.entries.filter(e => entryStatusOf(e) !== ENTRY_STATUS.FORECAST && entryMatchesSearch(e, searchTerms));
             const kwota = (e) => (Number(e.qty) || 0) * (Number(e.unitCost) || 0);
-            sumReal += wpisy.reduce((s, e) => s + kwota(e), 0);
-            const ileWOfercie = wpisy.filter(e => entryStatusOf(e) !== ENTRY_STATUS.UNPLANNED).reduce((s, e) => s + (Number(e.qty) || 0), 0);
-            if (data.r.plan > 0) sumPlan += Math.min(ileWOfercie, data.r.plan) / data.r.plan * data.planValue;
+            const zakupy = wpisy.reduce((s, e) => s + kwota(e), 0);
+            const ileWOfercie = wpisy.filter(e => entryStatusOf(e) === ENTRY_STATUS.PLANNED).reduce((s, e) => s + (Number(e.qty) || 0), 0);
+            const czescPlanu = data.r.plan > 0 ? Math.min(ileWOfercie, data.r.plan) / data.r.plan * data.planValue : 0;
+            sumReal += zakupy;
+            sumPlan += czescPlanu;
+            sumDelta += zakupy - czescPlanu;
         }
         return { node, ...data };
     });
     sumPlan = round2(sumPlan);
     sumReal = round2(sumReal);
+    sumDelta = round2(sumDelta);
+    sumPrognoza = round2(sumPrognoza);
 
     return (
         <table ref={tableRef} className="w-full table-fixed border-separate border-spacing-0 text-[length:var(--rn-xl)]">
@@ -1166,7 +1178,8 @@ export function PositionsTable({
                                 <>
                                     <div className="font-semibold text-orange-400">{fmtZl(sumPlan)}</div>
                                     <div className="font-semibold text-red-400">{fmtZl(sumReal)}</div>
-                                    <DeltaLine value={sumReal - sumPlan} />
+                                    {sumPrognoza > 0 && <div className="whitespace-nowrap text-[length:var(--rn-md)] text-amber-300">prognoza {fmtZl(sumPrognoza)}</div>}
+                                    <DeltaLine value={sumDelta} />
                                 </>
                             )}
                         </td>
@@ -1218,14 +1231,14 @@ function Cell({ colKey, node, card, r, planValue, readOnly, onSaveAxis, onSaveCo
         case 'total':
             return (
                 <>
-                    <div className="text-orange-400">{fmtZl(planValue)}</div>
-                    <div className="text-red-400">{fmtZl(r.value)}</div>
+                    <div className="text-orange-400" title={r.byStatus.UNPLANNED > 0 ? `Plan wydatków: budżet ${fmtZl(planValue)} + zakupy pozaplanowe ${fmtZl(r.byStatus.UNPLANNED)}` : 'Plan wydatków z budżetu'}>{fmtZl(r.planWydatkow)}</div>
+                    <div className="text-red-400" title="Zakupy poniesione (planowe i pozaplanowe)">{fmtZl(r.value)}</div>
                     {r.byStatus.FORECAST > 0 && (
-                        <div className="whitespace-nowrap text-[length:var(--rn-md)] text-amber-300" title="Część kosztu całkowitego, która dopiero przyjdzie">
-                            w tym prognoza {fmtZl(r.byStatus.FORECAST)}
+                        <div className="whitespace-nowrap text-[length:var(--rn-md)] text-amber-300" title="Plan budżetu minus zakupy planowe — koszt, który dopiero przyjdzie">
+                            prognoza {fmtZl(r.byStatus.FORECAST)}
                         </div>
                     )}
-                    {(r.qty > 0 || node.realizationClosed) && <DeltaLine value={r.value - planValue} />}
+                    {(r.qty > 0 || node.realizationClosed) && <DeltaLine value={r.koszt - planValue} />}
                 </>
             );
         case 'status': {
@@ -1341,6 +1354,9 @@ function CommentCell({ node, readOnly, onSave }) {
 export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms = [], onAdd, onUpdate, onDelete, addSignal = 0 }) {
     const withCard = TYPE_META[node.type]?.hasCard;
     const [adding, setAdding] = useState(false);
+    // @anchor purchase-drawer-forecast-prefill — cena podpowiedziana przez „Zamień na zakup”;
+    // `null` przy zwykłym dodawaniu, gdzie koszt jedn. celowo zostaje pusty.
+    const [cenaZPrognozy, setCenaZPrognozy] = useState(null);
     // @anchor purchase-drawer-add-signal
     useEffect(() => { if (addSignal && !readOnly) setAdding(true); }, [addSignal, readOnly]);
     // @anchor realization-new-drawer-search — wyszukiwarka nagłówka zawęża WPISY szuflady, gdy
@@ -1350,15 +1366,16 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
     const zawezone = searchTerms.length > 0 && !wszystkie && !leafMatchesSearch(node, card, searchTerms, r.entries);
     const wpisy = zawezone ? r.entries.filter(e => entryMatchesSearch(e, searchTerms)) : r.entries;
     const ukryte = r.entries.length - wpisy.length;
-    const delta = round2(r.value - planValue);
+    const delta = round2(r.koszt - planValue);
     // @anchor realization-new-surplus-split — podział wpisów wg `LeafActual.status`. Wycenę pokrywają
-    // wpisy planowe (i prognozowane, które dopiero przyjdą); pozaplanowe w całości powiększają koszt.
+    // wpisy planowe; pozaplanowe w całości powiększają koszt i plan wydatków.
     const nadmiar = r.entries.filter(e => entryStatusOf(e) === ENTRY_STATUS.UNPLANNED);
     const qtyNadmiar = Math.round(nadmiar.reduce((s, e) => s + (Number(e.qty) || 0), 0) * 1000) / 1000;
     const valNadmiar = round2(nadmiar.reduce((s, e) => s + (Number(e.qty) || 0) * (Number(e.unitCost) || 0), 0));
     const qtyWOfercie = Math.round((r.qty - qtyNadmiar) * 1000) / 1000;
     // Domyślna ilość nowego wpisu = ile brakuje do planu. Koszt jedn. zostaje PUSTY świadomie:
     // podpowiedziana cena zapisywała się kwotą, której nikt nie przeczytał, a to rozliczenie.
+    // Wyjątek to „Zamień na zakup”: tam cena z planu jest tym, o co użytkownik sam prosi.
     const brakujaco = Math.round(Math.max(0, r.plan - qtyWOfercie) * 1000) / 1000;
 
     // @anchor realization-new-drawer-cols — [klucz, etykieta, szerokość w em (0 = elastyczna), liczbowa].
@@ -1391,15 +1408,9 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
                     pozaplanowe +{fmtZl(valNadmiar)} zł
                 </span>
             )}
-            {r.byStatus.FORECAST > 0 && (
-                <span className="rounded border border-dashed border-amber-400/60 bg-amber-500/10 px-2 py-0.5 text-[length:var(--rn-md)] text-amber-300"
-                    title="Koszty prognozowane — jeszcze nie poniesione, wchodzą do kosztu całkowitego i wyniku">
-                    prognozowane +{fmtZl(r.byStatus.FORECAST)} zł
-                </span>
-            )}
             {!readOnly && (
                 <button data-entry-cancel={adding || undefined}
-                    onClick={(e) => { e.stopPropagation(); setAdding(v => !v); }}
+                    onClick={(e) => { e.stopPropagation(); setCenaZPrognozy(null); setAdding(v => !v); }}
                     className={`flex shrink-0 items-center gap-1.5 rounded border px-3 py-1 text-[length:var(--rn-xl)] transition-colors ${
                         adding ? 'border-white/[.14] text-gray-400 hover:text-gray-200'
                                : 'border-teal-500/30 text-teal-300 hover:bg-teal-500/10'}`}>
@@ -1443,6 +1454,22 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
         <div data-entry-drawer className={`${DRAWER.card} ${DRAWER.accent.real.card}`}
             onClick={e => e.stopPropagation()}>
             {head}
+            {r.byStatus.FORECAST > 0 && (
+                <div className="flex flex-wrap items-center gap-3 border-t border-dashed border-amber-400/30 bg-amber-500/[.05] px-3 py-1.5 text-[length:var(--rn-lg)] text-amber-300">
+                    <span>Prognoza <b className="tabular-nums">{fmtZl(r.byStatus.FORECAST)} zł</b></span>
+                    <span className="text-[length:var(--rn-md)] text-gray-500">plan budżetu {fmtZl(planValue)} zł − zakupy planowe {fmtZl(r.byStatus.PLANNED)} zł</span>
+                    {!readOnly && !adding && (
+                        <button onClick={(e) => {
+                            e.stopPropagation();
+                            // Gdy ilość jest już kupiona, reszta prognozy idzie jednym wpisem na 1 szt.
+                            setCenaZPrognozy(brakujaco > 0 ? planUnitOf(node, card) : r.byStatus.FORECAST);
+                            setAdding(true);
+                        }} className="ml-auto rounded border border-amber-400/40 px-2.5 py-0.5 text-[length:var(--rn-md)] text-amber-200 hover:bg-amber-500/15">
+                            Zamień na zakup
+                        </button>
+                    )}
+                </div>
+            )}
             {!r.entries.length && pusta()}
             {(r.entries.length > 0 || adding) && (
                 <table className="w-full table-fixed border-separate border-spacing-0 text-[length:var(--rn-lg)]"
@@ -1464,8 +1491,9 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
                                 readOnly={readOnly} onSave={onUpdate} onDelete={onDelete} />
                         ))}
                         {adding && (
-                            <EntryForm node={node} cols={COLS} withCard={withCard} defaultQty={brakujaco || 1}
-                                onAdd={onAdd} onClose={() => setAdding(false)} />
+                            <EntryForm key={cenaZPrognozy ?? 'nowy'} node={node} cols={COLS} withCard={withCard} defaultQty={brakujaco || 1}
+                                defaultUnitCost={cenaZPrognozy}
+                                onAdd={onAdd} onClose={() => { setAdding(false); setCenaZPrognozy(null); }} />
                         )}
                     </tbody>
                     {r.entries.length > 0 && (
@@ -1640,12 +1668,12 @@ const BRAK_ETYKIETY_NEW = {
     qty: 'ilość', unitCost: 'koszt jedn.', manufacturer: 'producent', model: 'model', scope: 'zakres',
 };
 
-function EntryForm({ node, cols, withCard, defaultQty, onAdd, onClose }) {
+function EntryForm({ node, cols, withCard, defaultQty, defaultUnitCost = null, onAdd, onClose }) {
     const dzis = new Date().toISOString().slice(0, 10);
     const [start] = useState(() => ({
         entryDate: dzis,
         qty: defaultQty != null ? String(defaultQty) : '1',
-        unitCost: '',
+        unitCost: defaultUnitCost != null ? String(defaultUnitCost) : '',
         comment: '', docNumber: '', supplierId: null,
         manufacturer: '', model: '', ean: '', scope: '',
         // Domyślnie planowy — pozaplanowy i prognozowany wybiera się świadomie.
@@ -1847,7 +1875,7 @@ function UnsavedEntryModal({ boxRef, nazwa, onSave, onDiscard, onBack }) {
 // a bez niego nie widać, co ma przyjść.
 function LeafCard({ node, card, r, planValue, readOnly, token, onRefreshCard, onToggleClosed }) {
     const t = TYPE_META[node.type];
-    const delta = round2(r.value - planValue);
+    const delta = round2(r.koszt - planValue);
     const proposals = card?.proposals || [];
     const offer = proposals.find(p => p.isOffer) || null;
     const purchase = proposals.find(p => p.isPurchase) || null;
@@ -2170,7 +2198,7 @@ function WynikZamowienia({ c }) {
     const kafle = [
         { k: 'PLANNED', label: 'Koszt planowy', note: 'poniesiony w planie', color: 'text-orange-400' },
         { k: 'UNPLANNED', label: 'Koszt pozaplanowy', note: 'poniesiony ponad plan', color: ENTRY_STATUS_META.UNPLANNED.text },
-        { k: 'FORECAST', label: 'Koszt prognozowany', note: 'jeszcze przyjdzie', color: ENTRY_STATUS_META.FORECAST.text },
+        { k: 'FORECAST', label: 'Koszt prognozowany', note: 'budżet − zakupy planowe', color: ENTRY_STATUS_META.FORECAST.text },
     ];
     return (
         <div className="mb-3 rounded border border-white/[.08] bg-white/[.02] p-2.5">
@@ -2179,6 +2207,7 @@ function WynikZamowienia({ c }) {
                     <Tile key={k} label={label} value={`${fmtZl(s[k])} zł`} color={color} note={note} />
                 ))}
                 <Tile label="Koszt całkowity" value={`${fmtZl(koszt)} zł`} color="text-red-400" note="suma trzech statusów" />
+                <Tile label="Plan wydatków" value={`${fmtZl(c.planWydatkow)} zł`} color="text-orange-400" note={`budżet ${fmtZl(c.plan)} zł + pozaplanowe ${fmtZl(s.UNPLANNED)} zł`} />
                 <Tile label="Przychód z oferty" value={`${fmtZl(c.przychod)} zł`} color="text-emerald-200"
                     note={c.przychod > 0
                         ? `wynik planowany ${fmtZl(wynikPlan)} zł · ${fmtPct(marzaPlan)}${c.przychodPoAkceptacji > 0 ? ` · bez ${fmtZl(c.przychodPoAkceptacji)} zł z pozycji dodanych po akceptacji` : ''}`
@@ -2288,14 +2317,14 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec, kpiOpen
                                     return (
                                         <tr key={g.id}>
                                             <td className="truncate border-b border-white/[.05] px-2 py-1" title={g.nazwa}>{g.nazwa}</td>
-                                            <td className="border-b border-white/[.05] px-2 py-1"><CoverageBar real={g.real} plan={g.plan} /></td>
+                                            <td className="border-b border-white/[.05] px-2 py-1"><CoverageBar real={g.poniesione} plan={g.plan} /></td>
                                             <td className="border-b border-white/[.05] px-2 py-1"><StageBar dist={g.osZakupu} title={`Zakup materiałów w zakresie „${g.nazwa}" — udział kwot wyceny`} /></td>
                                             <td className="border-b border-white/[.05] px-2 py-1"><StageBar dist={g.osWykonania} title={`Stopień wykonania prac w zakresie „${g.nazwa}" — udział kwot wyceny`} /></td>
-                                            <td className="border-b border-white/[.05] px-2 py-1 text-right tabular-nums text-orange-400">{fmtZl(g.plan)}</td>
+                                            <td className="border-b border-white/[.05] px-2 py-1 text-right tabular-nums text-orange-400">{fmtZl(g.planWydatkow)}</td>
                                             <td className="border-b border-white/[.05] px-2 py-1 text-right tabular-nums text-red-400">
-                                                {g.real ? fmtZl(g.real) : <span className="text-gray-600">—</span>}</td>
+                                                {g.poniesione ? fmtZl(g.poniesione) : <span className="text-gray-600">—</span>}</td>
                                             <td className="border-b border-white/[.05] px-2 py-1 text-right tabular-nums">
-                                                {g.real
+                                                {g.poniesione
                                                     ? <span className={d <= 0 ? 'text-emerald-300' : 'text-[#d03b3b]'}>{d > 0 ? '+' : ''}{fmtZl(d)}</span>
                                                     : <span className="text-gray-600">—</span>}</td>
                                         </tr>
@@ -2305,11 +2334,11 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec, kpiOpen
                             <tfoot>
                                 <tr className="font-semibold">
                                     <td className="border-t border-white/[.14] px-2 py-1">Razem</td>
-                                    <td className="border-t border-white/[.14] px-2 py-1"><CoverageBar real={c.real} plan={c.plan} /></td>
+                                    <td className="border-t border-white/[.14] px-2 py-1"><CoverageBar real={c.poniesione} plan={c.plan} /></td>
                                     <td className="border-t border-white/[.14] px-2 py-1"><StageBar dist={c.osZakupu} title="Zakup materiałów — całe zamówienie, udział kwot wyceny" /></td>
                                     <td className="border-t border-white/[.14] px-2 py-1"><StageBar dist={c.osWykonania} title="Stopień wykonania prac — całe zamówienie, udział kwot wyceny" /></td>
-                                    <td className="border-t border-white/[.14] px-2 py-1 text-right tabular-nums text-orange-400">{fmtZl(c.plan)}</td>
-                                    <td className="border-t border-white/[.14] px-2 py-1 text-right tabular-nums text-red-400">{fmtZl(c.real)}</td>
+                                    <td className="border-t border-white/[.14] px-2 py-1 text-right tabular-nums text-orange-400">{fmtZl(c.planWydatkow)}</td>
+                                    <td className="border-t border-white/[.14] px-2 py-1 text-right tabular-nums text-red-400">{fmtZl(c.poniesione)}</td>
                                     <td className={`border-t border-white/[.14] px-2 py-1 text-right tabular-nums ${dTotal <= 0 ? 'text-emerald-300' : 'text-[#d03b3b]'}`}>
                                         {dTotal > 0 ? '+' : ''}{fmtZl(dTotal)}</td>
                                 </tr>
@@ -2331,7 +2360,8 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec, kpiOpen
 function BilansZamkniete({ c }) {
     const z = c.zamkniete;
     const dLacznie = round2(z.lacznie.real - z.lacznie.plan);
-    const dTotal = round2(c.real - c.plan);
+    // Bilans sumuje zakupy poniesione, więc wiersz „Razem" musi domykać się tą samą miarą.
+    const dTotal = round2(c.poniesione - c.plan);
     const nierozpoczete = z.nierozpoczete;
     const Th = ({ children, right, w }) => (
         <th className={`${w || ''} border-b border-white/[.14] px-2 py-1 ${right ? 'text-right' : 'text-left'}`}>{children}</th>
@@ -2424,10 +2454,10 @@ function BilansZamkniete({ c }) {
                             <td className="border-t border-white/[.14] px-2 py-1.5"
                                 title="Sprawdzenie: domknięte + w realizacji + nierozpoczęte daje całe zamówienie. Ta sama kwota, co w kafelku „Wycena zamówienia” nad tabelą.">
                                 Razem zamówienie</td>
-                            <td className="border-t border-white/[.14] px-2 py-1.5"><CoverageBar real={c.real} plan={c.plan} /></td>
+                            <td className="border-t border-white/[.14] px-2 py-1.5"><CoverageBar real={c.poniesione} plan={c.plan} /></td>
                             <td className="border-t border-white/[.14] px-2 py-1.5 text-right tabular-nums">{c.pozycji}</td>
                             <td className="border-t border-white/[.14] px-2 py-1.5 text-right tabular-nums text-orange-400">{fmtZl(c.plan)}</td>
-                            <td className="border-t border-white/[.14] px-2 py-1.5 text-right tabular-nums text-red-400">{fmtZl(c.real)}</td>
+                            <td className="border-t border-white/[.14] px-2 py-1.5 text-right tabular-nums text-red-400">{fmtZl(c.poniesione)}</td>
                             <td className={`border-t border-white/[.14] px-2 py-1.5 text-right tabular-nums ${dTotal <= 0 ? 'text-emerald-300' : 'text-[#d03b3b]'}`}>
                                 {dTotal > 0 ? '+' : ''}{fmtZl(dTotal)}</td>
                             <td className="border-t border-white/[.14] px-2 py-1.5 text-right tabular-nums">100,0%</td>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Briefcase, Network, AlertTriangle, GraduationCap, MessageCircle, LogOut } from 'lucide-react';
+import { Briefcase, Network, AlertTriangle, GraduationCap, MessageCircle, LogOut, Shirt } from 'lucide-react';
 import { useNetwork } from '../../hooks/useNetwork';
 import { API_URL } from '../../config';
 import { getOrphanedAttachments } from '../../services/repos/outboxRepo';
@@ -7,7 +7,7 @@ import OrphanAttachmentsPanel from '../shared/OrphanAttachmentsPanel';
 import SyncWarningBanner from '../shared/SyncWarningBanner';
 
 // @anchor mobile-home
-export default function MobileHome({ onNavigate, onLogout, showTrainings = false }) {
+export default function MobileHome({ onNavigate, onLogout, showTrainings = false, showWorkwear = false }) {
     const { isOnline } = useNetwork();
     // @anchor mobile-home-logout — jedyne miejsce wylogowania w widoku mobilnym; pozostałe widoki mają strzałkę powrotu do menu.
     const handleLogoutClick = () => {
@@ -153,6 +153,25 @@ export default function MobileHome({ onNavigate, onLogout, showTrainings = false
                             <div>
                                 <h2 className="font-bold text-base text-gray-100 group-active:text-amber-400 transition-colors">Szkolenia</h2>
                                 <p className="text-[11px] text-gray-500 mt-0.5">Ważność szkoleń pracowników i alerty</p>
+                            </div>
+                        </div>
+                    </button>
+                )}
+
+                {/* @anchor mobile-home-tile-workwear — Ubrania robocze na tablecie (tylko ADMIN) */}
+                {showWorkwear && (
+                    <button
+                        onClick={() => onNavigate('workwear')}
+                        className="bg-gray-900/60 border border-white/5 rounded-3xl p-6 active:scale-[0.97] transition-all shadow-xl hover:bg-gray-900/80 active:bg-teal-600/5 text-left relative overflow-hidden group"
+                    >
+                        <div className="absolute top-0 right-0 w-40 h-40 bg-teal-500/5 rounded-full blur-3xl -mr-10 -mt-10" />
+                        <div className="flex items-center gap-4 relative z-10">
+                            <div className="p-3.5 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex-shrink-0">
+                                <Shirt size={26} className="text-teal-400" />
+                            </div>
+                            <div>
+                                <h2 className="font-bold text-base text-gray-100 group-active:text-teal-400 transition-colors">Ubrania robocze</h2>
+                                <p className="text-[11px] text-gray-500 mt-0.5">Rozmiary ubrań pracowników</p>
                             </div>
                         </div>
                     </button>

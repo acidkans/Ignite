@@ -233,8 +233,8 @@ export const ROZLICZENIE = {
 };
 
 // @anchor leaf-entry-status — status wpisu `LeafActual.status`. Planowy i pozaplanowy to koszty
-// poniesione, prognozowany — koszt, który dopiero przyjdzie (kwota szacowana). Suma wszystkich
-// trzech to koszt całkowity pozycji, z którego liczy się wynik zamówienia.
+// poniesione. Wpis prognozowany niesie już tylko termin dostawy: jego kwota nie wchodzi do
+// rachunku, bo prognozę pozycji zawsze wylicza `realizationOf` z planu budżetu.
 export const ENTRY_STATUS = { PLANNED: 'PLANNED', UNPLANNED: 'UNPLANNED', FORECAST: 'FORECAST' };
 export const ENTRY_STATUS_META = {
     PLANNED:   { label: 'planowy',      text: 'text-teal-300',  chip: 'border-teal-400/40 bg-teal-500/10 text-teal-300',  dot: 'bg-teal-400' },
@@ -301,14 +301,23 @@ export function rozliczenieOf(node, card, entry) {
 // `avg` to średnia ważona (każdy wpis ma własny koszt jedn.), `state` steruje kolorem:
 // none → nic nie zrobione, part → w trakcie, full → plan wykonany, over → ponad plan,
 // closed → pozycja rozliczona ręcznie mimo niedowykonania.
-export function realizationOf(node, entries) {
+// `card` jest potrzebna do kwot planu (`planUnitOf`); bez niej działają ilość i zakupy.
+export function realizationOf(node, entries, card = null) {
     const list = entries || [];
-    const qty = Math.round(list.reduce((s, e) => s + (Number(e.qty) || 0), 0) * 1000) / 1000;
-    const value = Math.round(list.reduce((s, e) => s + (Number(e.qty) || 0) * (Number(e.unitCost) || 0), 0) * 100) / 100;
-    // @anchor realization-by-status — koszt pozycji rozbity na statusy wpisów; `value` to ich suma.
+    // Tylko wpisy poniesione: `qty`, `value` i średnia nie mogą liczyć terminu dostawy jak zakupu.
+    const zakupy = list.filter(e => entryStatusOf(e) !== ENTRY_STATUS.FORECAST);
+    const qty = Math.round(zakupy.reduce((s, e) => s + (Number(e.qty) || 0), 0) * 1000) / 1000;
+    const value = Math.round(zakupy.reduce((s, e) => s + (Number(e.qty) || 0) * (Number(e.unitCost) || 0), 0) * 100) / 100;
+    // @anchor realization-by-status — koszt pozycji wg statusów: planowy i pozaplanowy z wpisów,
+    // prognozowany = plan budżetu − zakupy planowe (nie mniej niż 0; pozycja zamknięta nie ma
+    // już czego prognozować). Zakupy pozaplanowe nie zjadają prognozy, tylko powiększają
+    // `planWydatkow`, a `koszt` = zakupy + prognoza to koszt całkowity pozycji.
     const byStatus = { PLANNED: 0, UNPLANNED: 0, FORECAST: 0 };
-    for (const e of list) byStatus[entryStatusOf(e)] += (Number(e.qty) || 0) * (Number(e.unitCost) || 0);
+    for (const e of zakupy) byStatus[entryStatusOf(e)] += (Number(e.qty) || 0) * (Number(e.unitCost) || 0);
+    byStatus.FORECAST = node?.realizationClosed ? 0 : Math.max(0, planValueOf(node, card) - byStatus.PLANNED);
     for (const k of Object.keys(byStatus)) byStatus[k] = Math.round(byStatus[k] * 100) / 100;
+    const planWydatkow = Math.round((planValueOf(node, card) + byStatus.UNPLANNED) * 100) / 100;
+    const koszt = Math.round((value + byStatus.FORECAST) * 100) / 100;
     const plan = Number(node?.quantity) || 0;
     const pct = plan > 0 ? Math.round((qty / plan) * 100) : (qty > 0 ? 100 : 0);
     const state = node?.realizationClosed ? 'closed'
@@ -320,11 +329,13 @@ export function realizationOf(node, entries) {
         entries: list,
         qty,
         value,
+        koszt,
+        planWydatkow,
         byStatus,
         plan,
         pct,
         state,
         avg: qty > 0 ? Math.round((value / qty) * 100) / 100 : null,
-        mixedPrices: list.length > 1 && list.some(e => Number(e.unitCost) !== Number(list[0].unitCost)),
+        mixedPrices: zakupy.length > 1 && zakupy.some(e => Number(e.unitCost) !== Number(zakupy[0].unitCost)),
     };
 }

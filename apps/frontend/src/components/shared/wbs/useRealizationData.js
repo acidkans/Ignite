@@ -396,7 +396,7 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
     // trzy panele nie mogły pokazać trzech różnych wyników dla tej samej pozycji.
     const rowOf = useCallback((node) => {
         const card = cardOf(node);
-        const r = realizationOf(node, actualsOf(node));
+        const r = realizationOf(node, actualsOf(node), card);
         return { card, r, planValue: planValueOf(node, card) };
     }, [cardOf, actualsOf]);
 

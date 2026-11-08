@@ -51,6 +51,7 @@ import { GoogleCalendarModule } from './google-calendar/google-calendar.module';
 import { LeafActualsModule } from './leaf-actuals/leaf-actuals.module';
 import { ConstraintsModule } from './constraints/constraints.module';
 import { TrainingsModule } from './trainings/trainings.module';
+import { WorkwearModule } from './workwear/workwear.module';
 
 @Module({
   imports: [
@@ -108,6 +109,7 @@ import { TrainingsModule } from './trainings/trainings.module';
     LeafActualsModule,
     ConstraintsModule,
     TrainingsModule,
+    WorkwearModule,
   ],
   controllers: [AppController],
   providers: [
