@@ -1330,7 +1330,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
         {/* Modal podglądu PDF */}
         {pdfPreviewUrl && createPortal(
             <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80" onClick={closePdfPreview}>
-                <div className="bg-[#0d1520] border border-white/15 rounded-2xl shadow-2xl flex flex-col" style={{ width: '90vw', height: '90vh' }} onClick={e => e.stopPropagation()}>
+                <div className="bg-[#0d1520] border border-white/15 rounded-2xl shadow-2xl flex flex-col" style={{ width: 'calc(90vw / var(--app-zoom, 1))', height: 'calc(90vh / var(--app-zoom, 1))' }} onClick={e => e.stopPropagation()}>
                     <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
                         <div className="flex items-center gap-2 text-[10px] text-teal-400 uppercase tracking-widest font-bold">
                             <FileText size={12} /> Karta katalogowa (PDF)

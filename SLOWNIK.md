@@ -236,6 +236,11 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-zakladka | realizacja (TAB_META) | apps/frontend/src/DashboardPage.jsx | @anchor tab-realizacja |
 | ui-stan | tabsPinned / tabsOpen (pasek zakładek chowany do listwy, wysuwany po najechaniu; pinezka przypina) | apps/frontend/src/DashboardPage.jsx | @anchor tabs-bar-autohide |
 | ui-stan | tabsBarRef (strefa wysuwania paska zakładek szersza niż uchwyt, liczona z pozycji kursora) | apps/frontend/src/DashboardPage.jsx | @anchor tabs-bar-hot-zone |
+| ui-stan | systemOpen (menu System w sidebarze zwijane, wybór w localStorage) | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-system-open |
+| ui-funkcja | appZoom (skalowanie aplikacji do szerokości okna, nakładki na współrzędne) | apps/frontend/src/utils/appZoom.js | @anchor app-zoom |
+| ui-stala | ZOOM_STOPS (progi: szerokość okna → skala) | apps/frontend/src/utils/appZoom.js | @anchor app-zoom-stops |
+| ui-funkcja | zoomForWidth | apps/frontend/src/utils/appZoom.js | @anchor app-zoom-for-width |
+| ui-funkcja | appZoomViewportUnits (wtyczka PostCSS: vh/vw dzielone przez skalę) | apps/frontend/postcss.config.js | @anchor app-zoom-viewport-units |
 | ui-modal | krok „Baseline zapisany” w modalu akceptacji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-accept-done-step |
 | ui-modal | Cofnąć uruchomienie realizacji? | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-stop-realization-modal |
 | ui-stan | branchNav | apps/frontend/src/components/Layout/MainLayout.jsx | @anchor main-layout-branch-nav |

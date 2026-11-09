@@ -25,6 +25,15 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
     const [filter, setFilter] = useState('');
     // @anchor sidebar-users-drawer-open — szuflada „Użytkownicy” otwarta na start, gdy jesteśmy w jednej z jej stron
     const [usersDrawerOpen, setUsersDrawerOpen] = useState(() => ['/users', '/szkolenia', '/ubrania-robocze'].includes(location.pathname));
+    // @anchor sidebar-system-open — menu „System” domyślnie zwinięte, wybór pamiętany; rozwinięte na stronach z tego menu
+    const [systemOpen, setSystemOpen] = useState(() => {
+        try { if (localStorage.getItem('sidebarSystemOpen') === '1') return true; } catch { /* tryb prywatny */ }
+        return ['/users', '/szkolenia', '/ubrania-robocze', '/firma', '/urlopy', '/process-tree', '/smtp', '/notifications'].includes(location.pathname);
+    });
+    const toggleSystem = () => setSystemOpen(v => {
+        try { localStorage.setItem('sidebarSystemOpen', v ? '0' : '1'); } catch { /* tryb prywatny */ }
+        return !v;
+    });
     // @anchor sidebar-drag-id
     const [dragId, setDragId] = useState(null);
     // @anchor sidebar-drag-over-id
@@ -73,7 +82,7 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
         return (
             <div className="px-4 py-8 text-center text-gray-500">
                 <div className="inline-block w-6 h-6 border-2 border-gray-500/30 border-t-gray-500 rounded-full animate-spin"></div>
-                <p className="mt-2 text-[16px]">Ładowanie...</p>
+                <p className="mt-2 text-xs">Ładowanie...</p>
             </div>
         );
     }
@@ -98,12 +107,12 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                             value={filter}
                             onChange={e => setFilter(e.target.value)}
                             placeholder="Szukaj..."
-                            className="w-full bg-transparent border-none text-[14px] font-bold text-gray-400 uppercase tracking-widest placeholder:text-gray-500 placeholder:font-bold placeholder:uppercase placeholder:tracking-widest focus:outline-none"
+                            className="w-full bg-transparent border-none text-[10px] font-bold text-gray-400 uppercase tracking-widest placeholder:text-gray-500 placeholder:font-bold placeholder:uppercase placeholder:tracking-widest focus:outline-none"
                         />
                     </div>
                     <div className="space-y-0.5">
                         {visibleAreas.length === 0
-                            ? <p className="px-3 py-2 text-[15px] text-gray-600 italic">Brak wyników</p>
+                            ? <p className="px-3 py-2 text-[11px] text-gray-600 italic">Brak wyników</p>
                             : visibleAreas.map(area => (
                                 <AreaWithChildren
                                     key={area.id}
@@ -134,14 +143,17 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
 
             {/* Static System Menu */}
             <div>
-                <p className="px-2 py-1.5 text-[14px] font-bold text-gray-500 uppercase tracking-widest bg-white/[0.03] border-y border-white/[0.05] mb-1">System</p>
-                <div className="space-y-0.5">
+                <button onClick={toggleSystem} aria-expanded={systemOpen} title={systemOpen ? 'Zwiń menu System' : 'Rozwiń menu System'} className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold text-gray-500 hover:text-gray-300 uppercase tracking-widest bg-white/[0.03] border-y border-white/[0.05] mb-1 transition-colors">
+                    <span className={`text-[8px] transition-transform ${systemOpen ? 'rotate-90' : ''}`}>▶</span>
+                    System
+                </button>
+                <div className={`space-y-0.5 ${systemOpen ? '' : 'hidden'}`}>
                     {/* @anchor sidebar-my-account-button — dla każdego: okno „Moje konto” (połączenie z kontem Microsoft) */}
                     {onOpenMyAccount && (
                         <button
                             onClick={onOpenMyAccount}
                             title="Moje konto — połączenie z kontem Microsoft (To Do, kalendarz Outlook, OneDrive)"
-                            className="w-full text-left px-2 py-1.5 text-[16px] transition-colors rounded-md text-gray-400 hover:text-gray-200 hover:bg-white/5"
+                            className="w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md text-gray-400 hover:text-gray-200 hover:bg-white/5"
                         >
                             Moje konto
                         </button>
@@ -152,14 +164,14 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                             onClick={() => setUsersDrawerOpen(v => !v)}
                             title="Użytkownicy"
                             aria-expanded={usersDrawerOpen}
-                            className={`w-full text-left px-2 py-1.5 text-[16px] transition-colors rounded-md flex items-center gap-1.5
+                            className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md flex items-center gap-1.5
                                 ${['/users', '/szkolenia', '/ubrania-robocze'].includes(location.pathname) && !usersDrawerOpen
                                     ? 'text-blue-400 bg-blue-500/10'
                                     : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
                                 }
                             `}
                         >
-                            <span className={`text-[12px] text-gray-500 transition-transform ${usersDrawerOpen ? 'rotate-90' : ''}`}>▶</span>
+                            <span className={`text-[8px] text-gray-500 transition-transform ${usersDrawerOpen ? 'rotate-90' : ''}`}>▶</span>
                             Użytkownicy
                         </button>
                     )}
@@ -177,7 +189,7 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                                     key={item.path}
                                     onClick={() => navigate(item.path)}
                                     title={item.label}
-                                    className={`w-full text-left pl-3 pr-2 py-1.5 text-[16px] transition-colors
+                                    className={`w-full text-left pl-3 pr-2 py-1.5 text-xs transition-colors
                                         ${location.pathname === item.path
                                             ? 'text-teal-300 bg-teal-500/10'
                                             : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
@@ -194,7 +206,7 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                         <button
                             onClick={() => navigate('/firma')}
                             title="Firma"
-                            className={`w-full text-left px-2 py-1.5 text-[16px] transition-colors rounded-md
+                            className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md
                                 ${location.pathname === '/firma'
                                     ? 'text-blue-400 bg-blue-500/10'
                                     : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
@@ -209,7 +221,7 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                         <button
                             onClick={() => navigate('/urlopy')}
                             title="Urlopy"
-                            className={`w-full text-left px-2 py-1.5 text-[16px] transition-colors rounded-md
+                            className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md
                                 ${location.pathname === '/urlopy'
                                     ? 'text-blue-400 bg-blue-500/10'
                                     : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
@@ -223,7 +235,7 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                         <button
                             onClick={() => navigate('/process-tree')}
                             title="Zarządzanie Drzewem"
-                            className={`w-full text-left px-2 py-1.5 text-[16px] transition-colors rounded-md
+                            className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md
                                 ${location.pathname === '/process-tree'
                                     ? 'text-blue-400 bg-blue-500/10'
                                     : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
@@ -238,7 +250,7 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                         <button
                             onClick={() => navigate('/smtp')}
                             title="Konfiguracja poczty wychodzącej (SMTP)"
-                            className={`w-full text-left px-2 py-1.5 text-[16px] transition-colors rounded-md
+                            className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md
                                 ${location.pathname === '/smtp'
                                     ? 'text-blue-400 bg-blue-500/10'
                                     : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
@@ -253,7 +265,7 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                         <button
                             onClick={() => navigate('/notifications')}
                             title="Powiadomienia (Web Push, Microsoft To Do, alarmy)"
-                            className={`w-full text-left px-2 py-1.5 text-[16px] transition-colors rounded-md
+                            className={`w-full text-left px-2 py-1.5 text-xs transition-colors rounded-md
                                 ${location.pathname === '/notifications'
                                     ? 'text-blue-400 bg-blue-500/10'
                                     : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
@@ -387,7 +399,7 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                     {/* Expand/Collapse button */}
                     {hasChildren ? (
                         <span
-                            className="text-[14px] w-4 h-4 flex items-center justify-center hover:bg-white/20 rounded-sm cursor-pointer flex-shrink-0"
+                            className="text-[10px] w-4 h-4 flex items-center justify-center hover:bg-white/20 rounded-sm cursor-pointer flex-shrink-0"
                             onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
                         >
                             {isExpanded ? '▼' : '▶'}
@@ -395,7 +407,7 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                     ) : (
                         <span className="w-4 h-4 flex-shrink-0" />
                     )}
-                    <span className={`text-[16px] scale-90 flex-shrink-0${isLogistykArea ? ' opacity-60 saturate-0' : ''}`}
+                    <span className={`text-xs scale-90 flex-shrink-0${isLogistykArea ? ' opacity-60 saturate-0' : ''}`}
                         style={isLogistykArea ? { filter: 'sepia(1) hue-rotate(180deg) saturate(3) brightness(1.2)' } : undefined}
                     >{getIcon(node.type)}</span>
                     {editing ? (
@@ -410,11 +422,11 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                                 e.stopPropagation();
                             }}
                             onClick={e => e.stopPropagation()}
-                            className="flex-1 bg-black/40 border border-blue-500/50 rounded px-1.5 py-0.5 text-[17px] text-white focus:outline-none focus:border-blue-400 min-w-0"
+                            className="flex-1 bg-black/40 border border-blue-500/50 rounded px-1.5 py-0.5 text-[13px] text-white focus:outline-none focus:border-blue-400 min-w-0"
                         />
                     ) : (
                         <span
-                            className={`font-medium flex-1 text-[17px] truncate flex items-center gap-1.5 ${hasBranchToggles ? 'basis-[80px]' : ''}`}
+                            className={`font-medium flex-1 text-[13px] truncate flex items-center gap-1.5 ${hasBranchToggles ? 'basis-[80px]' : ''}`}
                             onDoubleClick={startEditing}
                             title="Podwójne kliknięcie — zmień nazwę"
                         >
@@ -432,7 +444,7 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                         tabIndex={0}
                         onClick={(e) => { e.stopPropagation(); onAddNode(node); }}
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onAddNode(node); } }}
-                        className="w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-green-500/30 text-green-400 rounded transition-all text-[14px] flex-shrink-0 cursor-pointer"
+                        className="w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-green-500/30 text-green-400 rounded transition-all text-[10px] flex-shrink-0 cursor-pointer"
                         title="Dodaj podgałąź"
                     >
                         +
