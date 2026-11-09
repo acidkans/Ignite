@@ -11,7 +11,7 @@ import { nazwaWyswietlana } from '../shared/realizacja/realizacjaShared';
 export function SidebarBranchToggles({ nav }) {
     const stop = (e) => e.stopPropagation();
     return (
-        <span className="flex shrink-0 items-center gap-2 text-[10px] font-normal text-gray-400" onClick={stop} onDoubleClick={stop}>
+        <span className="flex shrink-0 items-center gap-2 text-[14px] font-normal text-gray-400" onClick={stop} onDoubleClick={stop}>
             <label title="Pokaż tylko gałęzie i pozycje z blokerami, kolizjami dostaw, zagrożonymi milestone'ami, pytaniami albo zadaniami po terminie" className="flex cursor-pointer items-center gap-1">
                 <input type="checkbox" checked={!!nav.sygnaly} onChange={e => nav.onSygnaly(e.target.checked)} className="accent-fuchsia-500" /> sygnały
             </label>
@@ -53,15 +53,15 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
     // @anchor sidebar-branch-tree-pozycja — wiersz pozycji (liścia): klik = podgląd w środku.
     const wierszPozycji = (p, d) => (
         <div key={p.id} onClick={() => nav.onPozycja?.(p.id)} title={`${p.name} · ${p.typ}`}
-            className={`flex cursor-pointer items-center gap-1 rounded-md py-0.5 pr-1.5 text-[11.5px] transition-colors ${wybrany === p.id
+            className={`flex cursor-pointer items-center gap-1 rounded-md py-0.5 pr-1.5 text-[15.5px] transition-colors ${wybrany === p.id
                 ? 'bg-sky-500/15 text-white ring-1 ring-inset ring-sky-500/30' : 'text-gray-500 hover:bg-white/5 hover:text-gray-200'}`}
             style={pad(d)}>
             <span className="flex size-4 shrink-0 items-center justify-center"><span className="size-1 rounded-full bg-gray-600" /></span>
             <span className={`min-w-0 flex-1 ${nav.pelne ? 'whitespace-normal leading-tight' : 'truncate'}`}>{nazwaWyswietlana(p, nav.pelne)}</span>
-            {p.syg.blok > 0 && <span title="Otwarte blokery" className="shrink-0 rounded bg-red-500/20 px-1 font-mono text-[10px] text-red-300">{p.syg.blok}</span>}
-            {p.syg.kol > 0 && <span title="Kolizja dostawy" className="shrink-0 rounded bg-orange-500/20 px-1 font-mono text-[10px] text-orange-300">{p.syg.kol}K</span>}
-            {p.syg.kms > 0 && <span title="Kolizja z milestone'em: start przed końcem milestone'a" className="shrink-0 rounded bg-violet-500/20 px-1 font-mono text-[10px] text-violet-300">◆K</span>}
-            {p.syg.pyt > 0 && <span title="Pytania bez odpowiedzi" className="shrink-0 rounded bg-amber-500/20 px-1 font-mono text-[10px] text-amber-300">{p.syg.pyt}?</span>}
+            {p.syg.blok > 0 && <span title="Otwarte blokery" className="shrink-0 rounded bg-red-500/20 px-1 font-mono text-[14px] text-red-300">{p.syg.blok}</span>}
+            {p.syg.kol > 0 && <span title="Kolizja dostawy" className="shrink-0 rounded bg-orange-500/20 px-1 font-mono text-[14px] text-orange-300">{p.syg.kol}K</span>}
+            {p.syg.kms > 0 && <span title="Kolizja z milestone'em: start przed końcem milestone'a" className="shrink-0 rounded bg-violet-500/20 px-1 font-mono text-[14px] text-violet-300">◆K</span>}
+            {p.syg.pyt > 0 && <span title="Pytania bez odpowiedzi" className="shrink-0 rounded bg-amber-500/20 px-1 font-mono text-[14px] text-amber-300">{p.syg.pyt}?</span>}
             {p.syg.poTerminie > 0 && <span title="Zadania po terminie" className="size-1.5 shrink-0 rounded-full bg-red-400" />}
         </div>
     );
@@ -82,7 +82,7 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
         return (
             <div key={g.id}>
                 <div onClick={() => nav.onFocus(g.id)} title={g.name}
-                    className={`group flex cursor-pointer items-center gap-1 rounded-md py-1 pr-1.5 text-[12px] transition-colors ${wybrana
+                    className={`group flex cursor-pointer items-center gap-1 rounded-md py-1 pr-1.5 text-[16px] transition-colors ${wybrana
                         ? 'bg-fuchsia-500/15 text-white ring-1 ring-inset ring-fuchsia-500/30' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}
                     style={pad(d)}>
                     <span onClick={(e) => {
@@ -100,18 +100,18 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
                             onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') zapiszEdycje(); if (e.key === 'Escape') setEdycja(null); }}
                             onClick={e => e.stopPropagation()}
                             placeholder={nazwaWyswietlana({ name: g.name })}
-                            className="min-w-0 flex-1 rounded border border-fuchsia-500/50 bg-black/40 px-1 text-[12px] text-white focus:outline-none" />
+                            className="min-w-0 flex-1 rounded border border-fuchsia-500/50 bg-black/40 px-1 text-[16px] text-white focus:outline-none" />
                     ) : (
                         <span className={`min-w-0 flex-1 ${nav.pelne ? 'whitespace-normal leading-tight' : 'truncate'}`}
                             onDoubleClick={nav.canRename ? (e) => { e.stopPropagation(); setEdycja({ id: g.id, value: g.shortName || '' }); } : undefined}>
                             {nazwaWyswietlana(g, nav.pelne)}
                         </span>
                     )}
-                    {g.syg.blok > 0 && <span title="Otwarte blokery (rejestr blokerów i pilne wpisy czatu)" className="shrink-0 rounded bg-red-500/20 px-1 font-mono text-[10px] text-red-300">{g.syg.blok}</span>}
-                    {g.syg.kol > 0 && <span title="Kolizje dostaw: dostawa za blisko startu robót" className="shrink-0 rounded bg-orange-500/20 px-1 font-mono text-[10px] text-orange-300">{g.syg.kol}K</span>}
+                    {g.syg.blok > 0 && <span title="Otwarte blokery (rejestr blokerów i pilne wpisy czatu)" className="shrink-0 rounded bg-red-500/20 px-1 font-mono text-[14px] text-red-300">{g.syg.blok}</span>}
+                    {g.syg.kol > 0 && <span title="Kolizje dostaw: dostawa za blisko startu robót" className="shrink-0 rounded bg-orange-500/20 px-1 font-mono text-[14px] text-orange-300">{g.syg.kol}K</span>}
                     {/* @anchor sidebar-branch-tree-ms — zagrożone milestone'y gałęzi (poślizg, prognoza z blokerów, kolizja) */}
-                    {(g.syg.ms > 0 || g.syg.kms > 0) && <span title={`Zagrożone milestone'y: ${g.syg.ms}${g.syg.kms ? ` · pozycje w kolizji z milestone'em: ${g.syg.kms}` : ''}`} className="shrink-0 rounded bg-violet-500/20 px-1 font-mono text-[10px] text-violet-300">◆{g.syg.ms || ''}</span>}
-                    {g.syg.pyt > 0 && <span title="Pytania bez odpowiedzi" className="shrink-0 rounded bg-amber-500/20 px-1 font-mono text-[10px] text-amber-300">{g.syg.pyt}?</span>}
+                    {(g.syg.ms > 0 || g.syg.kms > 0) && <span title={`Zagrożone milestone'y: ${g.syg.ms}${g.syg.kms ? ` · pozycje w kolizji z milestone'em: ${g.syg.kms}` : ''}`} className="shrink-0 rounded bg-violet-500/20 px-1 font-mono text-[14px] text-violet-300">◆{g.syg.ms || ''}</span>}
+                    {g.syg.pyt > 0 && <span title="Pytania bez odpowiedzi" className="shrink-0 rounded bg-amber-500/20 px-1 font-mono text-[14px] text-amber-300">{g.syg.pyt}?</span>}
                     {g.syg.poTerminie > 0 && <span title="Zadania po terminie" className="size-1.5 shrink-0 rounded-full bg-red-400" />}
                 </div>
                 {maDzieci && otwarte && (dzieci[g.id] || [])
@@ -130,7 +130,7 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
     return (
         <div className="mt-0.5 mb-1 border-l border-fuchsia-500/20 ml-3">
             {focus && byId[focus] && (
-                <div className="flex flex-wrap items-center gap-x-1 px-2 pb-1 text-[11px]">
+                <div className="flex flex-wrap items-center gap-x-1 px-2 pb-1 text-[15px]">
                     <button onClick={() => nav.onFocus(nav.rootId)} className="text-sky-300/80 hover:text-sky-200">↑ całe zamówienie</button>
                     {sciezka.slice(0, -1).map(s => (
                         <span key={s.id} className="flex items-center gap-1">
@@ -142,7 +142,7 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
             )}
             {widok.filter(g => !tylkoSyg || maSyg(g) || sciezka.some(s => s.id === g.id)).map(g => wiersz(g, 0))}
             {(pozycjeOf[nav.rootId] || []).filter(p => !tylkoSyg || maSyg(p)).map(p => wierszPozycji(p, 0))}
-            {!widok.length && !(pozycjeOf[nav.rootId] || []).length && <p className="px-3 py-1 text-[11px] italic text-gray-600">Zamówienie nie ma gałęzi.</p>}
+            {!widok.length && !(pozycjeOf[nav.rootId] || []).length && <p className="px-3 py-1 text-[15px] italic text-gray-600">Zamówienie nie ma gałęzi.</p>}
         </div>
     );
 }
