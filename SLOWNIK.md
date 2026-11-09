@@ -237,6 +237,12 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stan | tabsPinned / tabsOpen (pasek zakładek chowany do listwy, wysuwany po najechaniu; pinezka przypina) | apps/frontend/src/DashboardPage.jsx | @anchor tabs-bar-autohide |
 | ui-stan | tabsBarRef (strefa wysuwania paska zakładek szersza niż uchwyt, liczona z pozycji kursora) | apps/frontend/src/DashboardPage.jsx | @anchor tabs-bar-hot-zone |
 | ui-stan | systemOpen (menu System w sidebarze zwijane, wybór w localStorage) | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-system-open |
+| ui-sekcja | OrderMailDomainsPanel (tabela: domena poczty każdego zamówienia) | apps/frontend/src/components/shared/OrderMailDomainsPanel.jsx | @anchor order-mail-domains-panel |
+| ui-funkcja | assign (zapis domeny zamówienia z wiersza tabeli) | apps/frontend/src/components/shared/OrderMailDomainsPanel.jsx | @anchor order-mail-domains-assign |
+| back-endpoint | GET /mail-domains/orders | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor get-mail-domain-orders |
+| back-endpoint | PATCH /mail-domains/orders/:orderId | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor patch-mail-domain-order |
+| back-funkcja | MailboxesService.listOrderDomains | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-list-order-domains |
+| back-funkcja | MailboxesService.setOrderDomain | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-set-order-domain |
 | ui-funkcja | appZoom (skalowanie aplikacji do szerokości okna, nakładki na współrzędne) | apps/frontend/src/utils/appZoom.js | @anchor app-zoom |
 | ui-stala | ZOOM_STOPS (progi: szerokość okna → skala) | apps/frontend/src/utils/appZoom.js | @anchor app-zoom-stops |
 | ui-funkcja | zoomForWidth | apps/frontend/src/utils/appZoom.js | @anchor app-zoom-for-width |
@@ -3632,12 +3638,10 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-funkcja | MailboxesService.createMine | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-create-mine |
 | back-funkcja | MailboxesService.updateMine | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-update-mine |
 | back-funkcja | MailboxesService.deleteMine | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-delete-mine |
-| back-funkcja | MailboxesService.coverage | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-coverage |
 | back-funkcja | MailboxesService.testMine | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-test-mine |
 | back-funkcja | MailboxesService.sendTestMine | apps/backend/src/mailboxes/mailboxes.service.ts | @anchor mailboxes-send-test-mine |
 | back-controller | MailDomainsController | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor mail-domains-controller |
 | back-endpoint | GET /mail-domains | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor get-mail-domains |
-| back-endpoint | GET /mail-domains/:id/coverage | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor get-mail-domain-coverage |
 | back-endpoint | POST /mail-domains | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor post-mail-domains |
 | back-endpoint | PATCH /mail-domains/:id | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor patch-mail-domain |
 | back-endpoint | DELETE /mail-domains/:id | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor delete-mail-domain |
@@ -3649,7 +3653,6 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-endpoint | POST /mailboxes/me/:id/test | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor post-my-mailbox-test |
 | back-endpoint | POST /mailboxes/me/:id/send-test | apps/backend/src/mailboxes/mailboxes.controller.ts | @anchor post-my-mailbox-send-test |
 | back-modul | MailboxesModule | apps/backend/src/mailboxes/mailboxes.module.ts | @anchor mailboxes-module |
-| back-dto | UpsertOrderRequirementsDto.mailDomainId | apps/backend/src/order-requirements/dto/order-requirements.dto.ts | @anchor upsert-order-requirements-mail-domain-id |
 | ui-sekcja | MailDomainsPanel | apps/frontend/src/components/shared/MailDomainsPanel.jsx | @anchor mail-domains-panel |
 | ui-funkcja | MailDomainsPanel.save | apps/frontend/src/components/shared/MailDomainsPanel.jsx | @anchor mail-domains-save |
 | ui-panel | MyMailboxesPanel | apps/frontend/src/components/shared/MyMailboxesPanel.jsx | @anchor my-mailboxes-panel |
@@ -3787,9 +3790,6 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-modal | QaMailAutoNotice | apps/frontend/src/components/shared/wbs/QaMailAutoNotice.jsx | @anchor qa-mail-auto-notice |
 | ui-funkcja | collectMailQuestions | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor collect-mail-questions |
 | ui-funkcja | applyQaMailSent | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor apply-qa-mail-sent |
-| ui-stan | mailDomains | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-domains |
-| ui-stan | mailCoverage | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-coverage |
-| ui-dropdown | requirements-mail-domain-bar | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-mail-domain-bar |
 | ui-stala | STRATEGY_TOKEN_RE | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor strategy-token-re |
 | ui-funkcja | newQaId | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor new-qa-id |
 | ui-funkcja | ensureQaIds | apps/frontend/src/components/shared/wbs/strategyQuestions.js | @anchor ensure-qa-ids |

@@ -71,10 +71,4 @@ export class UpsertOrderRequirementsDto {
     @IsOptional()
     @IsString()
     wbsTree?: string;
-
-    // @anchor upsert-order-requirements-mail-domain-id
-    // Pusty string = wyczyść domenę (null).
-    @IsOptional()
-    @IsString()
-    mailDomainId?: string;
 }

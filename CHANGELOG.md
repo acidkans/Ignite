@@ -1,3 +1,17 @@
+## 2026-11-09 — feat(poczta): przypisanie domeny poczty do zamówień przeniesione do Poczty SMTP
+
+### architektura / API
+- dodano `back-endpoint` `GET /mail-domains/orders` i `PATCH /mail-domains/orders/:orderId` {mailDomainId} (tylko ADMIN) — tabela zamówień z domeną i zespołem w `ui-sekcja` `OrderMailDomainsPanel` na stronie System → Poczta SMTP
+- usunięto `back-endpoint` `GET /mail-domains/:id/coverage` — brakujące skrzynki liczy teraz `GET /mail-domains/orders`
+- usunięto pole `back-dto` `UpsertOrderRequirementsDto.mailDomainId` i pasek domeny z `ui-sekcja` `RequirementsTab`; Zespół zamówienia zostaje w Informacjach o zamówieniu
+
+### słownik
+- dodano `OrderMailDomainsPanel`, `assign`, `GET /mail-domains/orders`, `PATCH /mail-domains/orders/:orderId`, `MailboxesService.listOrderDomains`, `MailboxesService.setOrderDomain`
+- usunięto `MailboxesService.coverage`, `GET /mail-domains/:id/coverage`, `UpsertOrderRequirementsDto.mailDomainId`, `mailDomains`, `mailCoverage`, `requirements-mail-domain-bar`
+
+### wytyczne
+- `schema-pole` `OrderRequirements.mailDomainId` — ustawia wyłącznie ADMIN w Poczcie SMTP, zapis zawsze w wierszu baseline (`versionId = null`)
+
 ## 2026-11-08 — feat(uzytkownicy): tabela ubrań roboczych z rozmiarówką, nowymi pozycjami i eksportem Excel; prognoza realizacji liczona z planu budżetu (v2026.11.08.1842)
 
 ### schema.prisma

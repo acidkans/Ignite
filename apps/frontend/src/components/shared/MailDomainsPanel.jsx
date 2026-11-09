@@ -10,7 +10,7 @@ const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem('to
 // ADMIN — domeny pocztowe firm (Airtel, Europrim…) z serwerem SMTP i IMAP wspólnym dla domeny.
 // Użytkownicy dopisują w „Moje konto” tylko swój adres i hasło w tych domenach, a zamówienie
 // wybiera domenę, z której wychodzą jego maile.
-export default function MailDomainsPanel() {
+export default function MailDomainsPanel({ onChanged }) {
   const [domains, setDomains] = useState([]);
   const [loading, setLoading] = useState(true);
   const [edit, setEdit] = useState(null);       // { id?, ...pola } — otwarty formularz
@@ -42,6 +42,7 @@ export default function MailDomainsPanel() {
       if (!res.ok) { setError(d.message || `Błąd (${res.status})`); return; }
       setEdit(null); setSavedId(d.id); setTimeout(() => setSavedId(null), 2500);
       load();
+      onChanged?.();
     } catch {
       setError('Błąd połączenia z serwerem.');
     } finally {
@@ -52,7 +53,7 @@ export default function MailDomainsPanel() {
   const remove = async (d) => {
     setConfirmDelete(null);
     const res = await fetch(`${API_URL}/mail-domains/${d.id}`, { method: 'DELETE', headers: authHeaders() });
-    if (res.ok) load();
+    if (res.ok) { load(); onChanged?.(); }
   };
 
   const set = (k) => (e) => {

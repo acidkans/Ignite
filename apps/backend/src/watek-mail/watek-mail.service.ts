@@ -49,7 +49,7 @@ export class WatekMailService {
   async context(userId: string, processNodeId: string, wbsNodeId: string) {
     const { orderId, orderName, req } = await this.orderInfo(processNodeId);
     const { domain, sender, senderError: err } = await this.mailboxes.orderSender(userId, orderId);
-    const senderError = domain ? err : 'Zamówienie nie ma ustawionej domeny poczty — wybierz ją w „Informacjach o zamówieniu” (Kontakty).';
+    const senderError = domain ? err : 'Zamówienie nie ma ustawionej domeny poczty — administrator ustawia ją w „System → Poczta SMTP”.';
     const recipients: { name: string; email: string; company?: string; role?: string; group: 'klient' | 'zespol' }[] = [];
     const push = (r: any, group: 'klient' | 'zespol') => {
       const email = String(r?.email || '').trim().toLowerCase();
@@ -106,7 +106,7 @@ export class WatekMailService {
     const wbsNodeId = String(dto?.wbsNodeId || '');
     if (!wbsNodeId) throw new BadRequestException('Brak węzła wątku.');
     const { orderId, orderName, req } = await this.orderInfo(String(dto?.processNodeId || ''));
-    if (!req?.mailDomainId) throw new BadRequestException('Zamówienie nie ma ustawionej domeny poczty — wybierz ją w „Informacjach o zamówieniu”.');
+    if (!req?.mailDomainId) throw new BadRequestException('Zamówienie nie ma ustawionej domeny poczty — administrator ustawia ją w „System → Poczta SMTP”.');
     const m = await this.mailboxes.senderFor(userId, req.mailDomainId);
     const to = normalizeMailList(dto?.to);
     const cc = normalizeMailList(dto?.cc).filter(e => !to.includes(e));

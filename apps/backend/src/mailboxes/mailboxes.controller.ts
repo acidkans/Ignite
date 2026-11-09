@@ -18,10 +18,18 @@ export class MailDomainsController {
     return this.mailboxes.listDomains(all === 'true');
   }
 
-  // @anchor get-mail-domain-coverage
-  @Get(':id/coverage')
-  coverage(@Param('id') id: string) {
-    return this.mailboxes.coverage(id);
+  // @anchor get-mail-domain-orders
+  @Get('orders')
+  @Roles('ADMIN')
+  listOrders() {
+    return this.mailboxes.listOrderDomains();
+  }
+
+  // @anchor patch-mail-domain-order
+  @Patch('orders/:orderId')
+  @Roles('ADMIN')
+  setOrderDomain(@Param('orderId') orderId: string, @Body() dto: any) {
+    return this.mailboxes.setOrderDomain(orderId, dto?.mailDomainId);
   }
 
   // @anchor post-mail-domains
