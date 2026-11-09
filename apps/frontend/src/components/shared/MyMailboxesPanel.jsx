@@ -152,7 +152,7 @@ function SignatureEditor({ value, onChange }) {
 
 // @anchor my-mailboxes-panel
 // „Moje konto” → skrzynki firmowe użytkownika, po jednej na domenę (airtel.pl, europrim.pl…).
-// Maile zamówienia wychodzą ze skrzynki w domenie ustawionej w „Informacjach o zamówieniu”.
+// Maile zamówienia wychodzą ze skrzynki w domenie przypisanej w „System → Poczta SMTP”.
 // Hasło write-only; „Testuj” loguje się do SMTP i IMAP i znajduje folder „Wysłane”.
 export default function MyMailboxesPanel() {
   const [boxes, setBoxes] = useState([]);
@@ -268,7 +268,7 @@ export default function MyMailboxesPanel() {
           <button onClick={openNew} className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg border border-teal-500/40 text-teal-200 hover:bg-teal-500/10"><Plus size={12} /> Dodaj</button>
         )}
       </div>
-      <p className="text-[11px] text-gray-500 -mt-1">Z tych adresów Ignite wysyła maile zamówień — z domeny wybranej w „Informacjach o zamówieniu”. Kopie lądują w „Wysłanych”, więc widzisz je w Outlooku.</p>
+      <p className="text-[11px] text-gray-500 -mt-1">Z tych adresów Ignite wysyła maile zamówień — z domeny przypisanej do zamówienia. Kopie lądują w „Wysłanych”, więc widzisz je w Outlooku.</p>
 
       {!domains.length && <p className="text-[12px] text-amber-300/80">Administrator nie dodał jeszcze domen pocztowych (Poczta SMTP → Domeny).</p>}
       {domains.length > 0 && !boxes.length && !form && <p className="text-[12px] text-gray-500 italic">Nie masz jeszcze żadnej skrzynki.</p>}

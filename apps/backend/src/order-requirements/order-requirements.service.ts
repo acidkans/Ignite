@@ -100,7 +100,6 @@ export class OrderRequirementsService {
             if (data.offerStatus !== undefined) requirementFields.offerStatus = data.offerStatus;
             if (data.offerStatusComment !== undefined) requirementFields.offerStatusComment = data.offerStatusComment;
             if (data.wbsTree !== undefined) requirementFields.wbsTree = data.wbsTree;
-            if (data.mailDomainId !== undefined) requirementFields.mailDomainId = data.mailDomainId || null;
 
             // Handle Name Synchronization if projectItems changed
             if (data.projectItems !== undefined && existing?.projectItems) {

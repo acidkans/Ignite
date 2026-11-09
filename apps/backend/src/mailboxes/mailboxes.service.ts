@@ -179,14 +179,52 @@ export class MailboxesService {
     return email;
   }
 
-  // @anchor mailboxes-coverage
-  // Kto z podanych użytkowników ma skrzynkę w domenie — do ostrzeżenia w „Informacjach o zamówieniu”.
-  async coverage(domainId: string) {
-    const rows = await this.prisma.userMailbox.findMany({
-      where: { domainId },
-      select: { userId: true, email: true, verifiedAt: true },
-    });
-    return rows;
+  // @anchor mailboxes-list-order-domains
+  // Tabela w „Poczcie SMTP”: zamówienia z ich domeną (wiersz baseline) i zespołem. `domainIds` członka
+  // zespołu pozwala pokazać brakujące skrzynki od razu po zmianie domeny, bez ponownego pobierania.
+  async listOrderDomains() {
+    const [orders, mailboxes] = await Promise.all([
+      this.prisma.processNode.findMany({
+        where: { type: 'order' },
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          parent: { select: { name: true } },
+          orderRequirements: { where: { versionId: null }, select: { mailDomainId: true } },
+          orderTeam: { select: { users: { select: { id: true, firstName: true, lastName: true, email: true } } } },
+        },
+      }),
+      this.prisma.userMailbox.findMany({ select: { userId: true, domainId: true } }),
+    ]);
+    const domainsOf = new Map<string, string[]>();
+    for (const m of mailboxes) domainsOf.set(m.userId, [...(domainsOf.get(m.userId) || []), m.domainId]);
+    return orders.map((o) => ({
+      id: o.id,
+      name: o.name,
+      parentName: o.parent?.name || null,
+      mailDomainId: o.orderRequirements[0]?.mailDomainId || null,
+      team: (o.orderTeam?.users || []).map((u) => ({
+        id: u.id,
+        name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email,
+        domainIds: domainsOf.get(u.id) || [],
+      })),
+    }));
+  }
+
+  // @anchor mailboxes-set-order-domain
+  // Domena zamówienia żyje w wierszu baseline (`versionId = null`); pusta wartość czyści przypisanie.
+  async setOrderDomain(orderId: string, value: unknown) {
+    const mailDomainId = String(value || '').trim() || null;
+    const order = await this.prisma.processNode.findFirst({ where: { id: orderId, type: 'order' }, select: { id: true } });
+    if (!order) throw new BadRequestException('Nie ma takiego zamówienia.');
+    if (mailDomainId && !(await this.prisma.mailDomain.findUnique({ where: { id: mailDomainId }, select: { id: true } }))) {
+      throw new BadRequestException('Nie ma takiej domeny.');
+    }
+    const existing = await this.prisma.orderRequirements.findFirst({ where: { nodeId: orderId, versionId: null }, select: { id: true } });
+    if (existing) await this.prisma.orderRequirements.update({ where: { id: existing.id }, data: { mailDomainId } });
+    else await this.prisma.orderRequirements.create({ data: { nodeId: orderId, mailDomainId } });
+    return { id: orderId, mailDomainId };
   }
 
   // ── Test połączenia ─────────────────────────────────────────────────────────
