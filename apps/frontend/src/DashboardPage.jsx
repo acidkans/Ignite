@@ -114,6 +114,24 @@ export default function DashboardPage() {
     const tabsCloseTimer = useRef(null);
     const openTabs = () => { clearTimeout(tabsCloseTimer.current); setTabsOpen(true); };
     const closeTabs = () => { clearTimeout(tabsCloseTimer.current); tabsCloseTimer.current = setTimeout(() => setTabsOpen(false), 250); };
+    // @anchor tabs-bar-hot-zone — strefa wysuwania paska zakładek szersza niż sam uchwyt (8 px): liczona z pozycji
+    // kursora, nie nakładką, więc nie blokuje kliknięć w nagłówek i treść wokół uchwytu.
+    const tabsBarRef = useRef(null);
+    useEffect(() => {
+        if (tabsPinned) return undefined;
+        const ZONE_DOWN = 30; // w górę strefa sięga do krawędzi ekranu
+        let inZone = false;
+        const onMove = (e) => {
+            if (e.pointerType !== 'mouse' || !tabsBarRef.current) return;
+            const r = tabsBarRef.current.getBoundingClientRect();
+            const hit = e.clientY <= r.top + 8 + ZONE_DOWN;
+            if (hit) openTabs();
+            else if (inZone && !tabsBarRef.current.contains(e.target)) closeTabs();
+            inZone = hit;
+        };
+        window.addEventListener('pointermove', onMove, { passive: true });
+        return () => window.removeEventListener('pointermove', onMove);
+    }, [tabsPinned]);
     const toggleTabsPinned = () => setTabsPinned(v => { const n = !v; try { localStorage.setItem('tabsBarPinned', n ? '1' : '0'); } catch { /* tryb prywatny */ } if (!n) setTabsOpen(false); return n; });
     const [searchQuery, setSearchQuery] = useState('');
     const [showComments, setShowComments] = useState(false);
@@ -1053,7 +1071,7 @@ export default function DashboardPage() {
             )}
 
             {/* TAB SELECTOR — chowany (tabs-bar-autohide) */}
-            <div className={`relative flex-shrink-0 z-30 ${tabsPinned ? '' : 'md:h-2'}`} onMouseEnter={openTabs} onMouseLeave={closeTabs}>
+            <div ref={tabsBarRef} className={`relative flex-shrink-0 z-30 ${tabsPinned ? '' : 'md:h-2'}`} onMouseEnter={openTabs} onMouseLeave={closeTabs}>
             {!tabsPinned && (
                 <div className={`hidden md:block absolute inset-x-0 top-0 h-2 border-b border-white/10 cursor-pointer transition-colors ${tabsOpen ? 'bg-white/[0.06]' : 'bg-white/[0.03] hover:bg-white/[0.06]'}`}
                     title="Najedź, aby pokazać zakładki" onClick={openTabs}>

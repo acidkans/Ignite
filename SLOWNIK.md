@@ -235,6 +235,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-przycisk | chip REALIZACJA + cofnięcie | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-realization-chip |
 | ui-zakladka | realizacja (TAB_META) | apps/frontend/src/DashboardPage.jsx | @anchor tab-realizacja |
 | ui-stan | tabsPinned / tabsOpen (pasek zakładek chowany do listwy, wysuwany po najechaniu; pinezka przypina) | apps/frontend/src/DashboardPage.jsx | @anchor tabs-bar-autohide |
+| ui-stan | tabsBarRef (strefa wysuwania paska zakładek szersza niż uchwyt, liczona z pozycji kursora) | apps/frontend/src/DashboardPage.jsx | @anchor tabs-bar-hot-zone |
 | ui-modal | krok „Baseline zapisany” w modalu akceptacji | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-accept-done-step |
 | ui-modal | Cofnąć uruchomienie realizacji? | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-stop-realization-modal |
 | ui-stan | branchNav | apps/frontend/src/components/Layout/MainLayout.jsx | @anchor main-layout-branch-nav |
@@ -854,6 +855,10 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | back-funkcja | utworzZadanie — zadanie dla nowego blokera | apps/backend/src/constraints/constraints.service.ts | @anchor constraints-create-task |
 | back-funkcja | przeniesienie zmian blokera na zadanie | apps/backend/src/constraints/constraints.service.ts | @anchor constraints-update-task |
 | ui-stan | qaOverrides (pary Q&A zapisane z Kokpitu w tej sesji) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-qa-overrides |
+| ui-stala | pytaniaZamowienia (wszystkie pytania Q&A zamówienia) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-qa-zamowienia |
+| ui-funkcja | qaWyslane (znacznik wysyłki na parach Q&A) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-qa-wyslane |
+| ui-sekcja | WyslijQaMailem (pasek filtra Q&A w wątku Kokpitu: wysyłka pytań zamówienia mailem) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wyslij-qa |
+| ui-propsy | noPreselect (QaMailModal bez zaznaczonych pytań) | apps/frontend/src/components/shared/wbs/QaMailModal.jsx | @anchor qa-mail-no-preselect |
 | ui-funkcja | zapiszQa (edycja pary Q&A z wątku Kokpitu, PATCH /wbs-nodes/:id { qa }) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zapisz-qa |
 | ui-stala | edycjaWatku (handlery edycji wpisu w Kokpicie) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-edycja-watku |
 | ui-sekcja | WpisEdycja (rozwinięty wpis wątku: Q&A, bloker, odpowiedź w czacie) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-edycja |

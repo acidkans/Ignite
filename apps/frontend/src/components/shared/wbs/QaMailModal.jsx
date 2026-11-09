@@ -18,10 +18,11 @@ const readLang = () => { try { return localStorage.getItem(LANG_KEY) === 'en' ? 
 // Wysyłka pytań z Q&A mailem do klienta (POST /qa-mail/send) ze skrzynki firmowej użytkownika
 // w domenie zamówienia. `questions` = [{ wbsNodeId, nodeName, pair }] — otwarte pytania węzła/gałęzi;
 // domyślnie zaznaczone te, których jeszcze nie wysłano. `onSent(result)` dostaje { mail, nodes }.
-export default function QaMailModal({ processNodeId, title, questions, onClose, onSent }) {
+// @anchor qa-mail-no-preselect — `noPreselect` (Kokpit realizacji): start bez zaznaczeń, użytkownik sam wybiera pytania.
+export default function QaMailModal({ processNodeId, title, questions, onClose, onSent, noPreselect = false }) {
     const [ctx, setCtx] = useState(null);
     const [loadError, setLoadError] = useState(null);
-    const [picked, setPicked] = useState(() => new Set(questions.filter(q => !q.pair.mailId).map(q => q.pair.id)));
+    const [picked, setPicked] = useState(() => new Set(noPreselect ? [] : questions.filter(q => !q.pair.mailId).map(q => q.pair.id)));
     const [toSel, setToSel] = useState(() => new Set());
     const [toExtra, setToExtra] = useState('');
     const [cc, setCc] = useState('');
@@ -168,7 +169,15 @@ export default function QaMailModal({ processNodeId, title, questions, onClose, 
                             </div>
 
                             <div>
-                                <div className="text-[12px] uppercase tracking-wider text-gray-500 mb-1">Pytania ({picked.size}/{questions.length})</div>
+                                <div className="flex items-center justify-between mb-1">
+                                    <div className="text-[12px] uppercase tracking-wider text-gray-500">Pytania ({picked.size}/{questions.length})</div>
+                                    {noPreselect && questions.length > 0 && (
+                                        <button type="button" onClick={() => setPicked(picked.size === questions.length ? new Set() : new Set(questions.map(q => q.pair.id)))}
+                                            className="px-2 py-0.5 rounded border border-white/10 text-[12px] text-gray-400 hover:bg-white/10">
+                                            {picked.size === questions.length ? 'Odznacz wszystkie' : 'Zaznacz wszystkie'}
+                                        </button>
+                                    )}
+                                </div>
                                 {questions.length === 0 && <div className="text-gray-500">Brak pytań bez odpowiedzi.</div>}
                                 <div className="flex flex-col gap-1">
                                     {questions.map(q => (
@@ -177,6 +186,7 @@ export default function QaMailModal({ processNodeId, title, questions, onClose, 
                                             <span className="min-w-0">
                                                 {multiNode && <span className="font-semibold text-gray-300">{q.nodeName}: </span>}
                                                 {q.pair.question}
+                                                {String(q.pair.answer || '').trim() && <span className="ml-1.5 text-emerald-300/70 text-[12px]" title={q.pair.answer}>ma odpowiedź</span>}
                                                 {q.pair.mailSentAt && <span className="ml-1.5 inline-flex items-center gap-1 text-sky-300/70 text-[12px]" title={`Wysłane do ${q.pair.mailTo || ''}`}><Mail size={11} /> wysłane {fmtDate(q.pair.mailSentAt)}</span>}
                                             </span>
                                         </label>

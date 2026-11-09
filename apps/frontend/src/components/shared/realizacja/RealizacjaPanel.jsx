@@ -8,6 +8,7 @@
 // krótką nazwę pozycji (`WbsNode.shortName`), wpisy czatu pozycji i blokery (`Constraint`).
 // Wpisy zakupów (`LeafActual`) i protokoły zostają w zakładce „Realizacja (tabela)".
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { useRealizationData } from '../wbs/useRealizationData';
@@ -28,6 +29,8 @@ import {
 import Harmonogram from '../harmonogram/Harmonogram';
 import AutoResizeTextarea from '../wbs/AutoResizeTextarea';
 import TaskModal from '../wbs/TaskModal';
+import QaMailModal from '../wbs/QaMailModal';
+import { ensureQaIds } from '../wbs/strategyQuestions';
 import {
     zaleznyOdMilestone, pierwszyDozwolonyDzien, przesunORobocze, roznicaDniRoboczych, DAY_MS,
 } from '../harmonogram/harmonogramCzas';
@@ -289,6 +292,21 @@ export default function RealizacjaPanel({
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         setQaOverrides(prev => ({ ...prev, [wbsNodeId]: qa }));
+        window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
+    }, []);
+    // @anchor realizacja-qa-zamowienia — wszystkie pytania Q&A całego zamówienia (widoczne węzły, niezależnie
+    // od zaznaczonej gałęzi): najpierw bez odpowiedzi; kształt `questions` z `QaMailModal`.
+    const pytaniaZamowienia = useMemo(() => {
+        const widoczne = idsPoddrzewa(SYNTHETIC_ROOT);
+        const lista = nodes.filter(n => widoczne.has(n.id)).flatMap(n => ensureQaIds(parseQa(n.qa))
+            .filter(p => String(p.question || '').trim())
+            .map(pair => ({ wbsNodeId: n.id, node: n, nodeName: nazwaWyswietlana(n, true), pair, otwarte: !String(pair.answer || '').trim() })));
+        return [...lista.filter(q => q.otwarte), ...lista.filter(q => !q.otwarte)];
+    }, [nodes, idsPoddrzewa]);
+    // @anchor realizacja-qa-wyslane — znacznik wysyłki z backendu (już zapisany) nakładany na pary węzłów.
+    const qaWyslane = useCallback((wynik) => {
+        const nowe = Object.fromEntries((wynik?.nodes || []).map(n => [n.id, n.qa]));
+        setQaOverrides(prev => ({ ...prev, ...nowe }));
         window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
     }, []);
     // @anchor realizacja-edycja-watku — czym wątek edytuje wpis w miejscu i dodaje nowe (`NowyWpis`).
@@ -569,6 +587,7 @@ export default function RealizacjaPanel({
                         milestony={milestonyPoddrzewa(focusId).map(m => ({ m, ...(msAnaliza.info[m.id] || {}) }))}
                         kolizjeMs={msAnaliza.kolizjeMs.filter(k => idsPoddrzewa(focusId).has(k.id) || idsPoddrzewa(focusId).has(k.msId))}
                         galazId={focusId !== SYNTHETIC_ROOT ? focusId : null} wyslij={wyslij} dodajBloker={dodajBloker} ownerUsers={ownerUsers}
+                        pytaniaZamowienia={pytaniaZamowienia} orderId={nodeId} orderName={orderName} onQaWyslane={qaWyslane}
                     />
                 )}
                 {/* @anchor realizacja-kokpit-harmonogram — na dużych ekranach pod Kokpitem harmonogram
@@ -1106,7 +1125,8 @@ const kolejnoscDecyzji = (a, b) => {
 // @anchor realizacja-watek-karta — wspólna karta wątku gałęzi, pozycji i milestone'a: w nagłówku chipy
 // wszystkich rodzajów wpisów (filtr), pod listą formularz nowego wpisu WYBRANEGO rodzaju (`NowyWpis`).
 // Filtr może być sterowany z zewnątrz (Kokpit pamięta go między gałęziami), inaczej własny stan karty.
-function WatekKarta({ tytul, prawa, wpisy, wbsNodeId, gdzie, edycja, onZakup, renderWpis, filtr: filtrZew, setFiltr: setFiltrZew, maxHeight = 420 }) {
+// `qaMail` (Kokpit) = pod filtrem Q&A pasek wysyłki pytań zamówienia mailem.
+function WatekKarta({ tytul, prawa, wpisy, wbsNodeId, gdzie, edycja, onZakup, renderWpis, filtr: filtrZew, setFiltr: setFiltrZew, maxHeight = 420, qaMail = null }) {
     const [filtrWew, setFiltrWew] = useState('all');
     const filtr = filtrZew ?? filtrWew;
     const setFiltr = setFiltrZew ?? setFiltrWew;
@@ -1115,12 +1135,32 @@ function WatekKarta({ tytul, prawa, wpisy, wbsNodeId, gdzie, edycja, onZakup, re
     return (
         <Karta tytul={tytul} prawa={prawa ?? `${wpisy.length} wpisów`}>
             <FiltryWatku wpisy={wpisy} filtr={filtr} setFiltr={setFiltr} />
+            {filtr === 'qa' && qaMail && edycja?.canEdit && <WyslijQaMailem {...qaMail} />}
             <div className="feed scroll" style={{ maxHeight }}>
                 {widoczne.length ? widoczne.map(renderWpis)
                     : <Pusto>{wpisy.length ? 'Brak wpisów tego rodzaju — nowy dodasz poniżej.' : 'Brak wpisów — pierwszy dodasz poniżej.'}</Pusto>}
             </div>
             <NowyWpis rodzaj={filtr} wbsNodeId={wbsNodeId} gdzie={gdzie} edycja={edycja} onZakup={onZakup} />
         </Karta>
+    );
+}
+
+// @anchor realizacja-wyslij-qa — pasek filtra Q&A w wątku Kokpitu: „Wyślij mailem” otwiera `QaMailModal`
+// z migawką wszystkich pytań zamówienia i bez zaznaczeń — pytania do wysyłki wybiera użytkownik.
+function WyslijQaMailem({ pytania, orderId, orderName, onWyslano }) {
+    const [doWysylki, setDoWysylki] = useState(null);
+    const otwarte = pytania.filter(q => q.otwarte).length;
+    return (
+        <div className="chips" style={{ alignItems: 'center', justifyContent: 'space-between' }}>
+            <span className="muted">Całe zamówienie — pytania: {pytania.length} · bez odpowiedzi: {otwarte}</span>
+            <button className="btn" disabled={!pytania.length} onClick={() => setDoWysylki(pytania)}>Wyślij mailem</button>
+            {/* Portal: style `.rz button` nadpisałyby kolory okna. */}
+            {doWysylki && createPortal(
+                <QaMailModal processNodeId={orderId} title={orderName || 'Całe zamówienie'} questions={doWysylki} noPreselect
+                    onClose={() => setDoWysylki(null)} onSent={onWyslano} />,
+                document.body,
+            )}
+        </div>
     );
 }
 
@@ -1408,7 +1448,7 @@ function OsWybor({ node, axis, readOnly, saveAxis }) {
 // ─── Kokpit ──────────────────────────────────────────────────────────────────
 
 // @anchor realizacja-kokpit — KPI gałęzi, blokery i decyzje, najbliższe 14 dni z gotowością, wątek gałęzi.
-function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMoney, canEdit, nodeById, pelne, filtr, setFiltr, onOtworz, akcje, gotowosc, edycja, kolizje = [], milestony = [], kolizjeMs = [], galazId = null, wyslij, dodajBloker, ownerUsers = [] }) {
+function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMoney, canEdit, nodeById, pelne, filtr, setFiltr, onOtworz, akcje, gotowosc, edycja, kolizje = [], milestony = [], kolizjeMs = [], galazId = null, wyslij, dodajBloker, ownerUsers = [], pytaniaZamowienia = [], orderId, orderName, onQaWyslane }) {
     const k = useMemo(() => {
         // @anchor realizacja-kokpit-wynik — przychód z oferty (`offerPriceOf`, ta sama formuła co Budżet),
         // zysk planowany = przychód − koszt planowany; prognoza zysku liczy koszt każdej pozycji jako
@@ -1476,6 +1516,7 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
                     na całym zamówieniu nie ma węzła — wtedy podpowiedź zamiast formularza. */}
                 <WatekKarta tytul="Wątek gałęzi" prawa={`wszystko z ${liscie.length} pozycji`} wpisy={wpisy} wbsNodeId={galazId} gdzie="gałęzi"
                     filtr={filtr} setFiltr={setFiltr} edycja={edycja} maxHeight={560}
+                    qaMail={{ pytania: pytaniaZamowienia, orderId, orderName, onWyslano: onQaWyslane }}
                     renderWpis={w => <Wpis key={w.id} w={w} nazwaPozycji={nazwa(w.nodeId)} onPozycja={() => onOtworz(w.nodeId)} akcje={canEdit ? akcje : null} edycja={edycja} />} />
                 </>}
                 prawa={<>

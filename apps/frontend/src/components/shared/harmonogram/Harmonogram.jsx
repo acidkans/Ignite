@@ -206,7 +206,7 @@ export default function Harmonogram({
         const komunikaty = [];
         const min = tryb !== 'r' ? minOdOf(l, galazId) : null;
         if (min && dzien0(od) < min) {
-            if (tryb === 'l') od = min;
+            if (tryb === 'l' || tryb === 'oba') od = min;
             else ({ od, ost } = przesunWg({ ...l, planOd: od, planDo: ost }, 'move', roznicaDni(min, od), w));
             if (dzien0(ost) < dzien0(od)) ost = od;
             const ms = msWezly?.[msZaleznosc?.[l.id]];
@@ -291,14 +291,23 @@ export default function Harmonogram({
         const { od, ost } = przesunWg(l, 'move', delta, wowOf(galazId));
         zapisz(l, galazId, od, ost, 'move');
     };
-    const zapiszZPola = (l, galazId, pole, v) => {
+    // Wyjście fokusu z pary pól Od/Do: jeden zapis, tylko gdy data się zmieniła. Przejście między polami nie zamyka edycji.
+    const zapiszZPol = (l, galazId, vOd, vDo) => {
         setEdycjaDat(null);
-        if (!v) return;
-        const d = dzien0(v);
-        if (isNaN(d)) return;
-        let od = dzien0(l.planOd), ost = dzien0(l.planDo);
-        if (pole === 'od') { od = d; if (ost < od) ost = od; } else { ost = d; if (ost < od) od = ost; }
-        zapisz(l, galazId, od, ost, pole === 'od' ? 'l' : 'r');
+        if (!vOd || !vDo) return;
+        let od = dzien0(vOd), ost = dzien0(vDo);
+        if (isNaN(od) || isNaN(ost)) return;
+        const zmOd = +od !== +dzien0(l.planOd), zmDo = +ost !== +dzien0(l.planDo);
+        if (!zmOd && !zmDo) return;
+        if (ost < od) { if (zmDo && !zmOd) od = ost; else ost = od; }
+        zapisz(l, galazId, od, ost, zmOd && zmDo ? 'oba' : zmOd ? 'l' : 'r');
+    };
+    const klawiszDaty = (e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') {
+            e.currentTarget.parentElement.querySelectorAll('input').forEach(i => { i.value = i.defaultValue; });
+            e.currentTarget.blur();
+        }
     };
 
     // @anchor harmonogram-rysuj-milestone — romb (termin = ostatni dzień okna) i ewentualne okno
@@ -594,9 +603,13 @@ export default function Harmonogram({
                                                         </span>
                                                     )}
                                                     {pasek && ed && (
-                                                        <span className="daty-in">
-                                                            <input type="date" defaultValue={doInputu(l.planOd)} onBlur={e => zapiszZPola(l, galaz?.id, 'od', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEdycjaDat(null); }} autoFocus />
-                                                            <input type="date" defaultValue={doInputu(l.planDo)} onBlur={e => zapiszZPola(l, galaz?.id, 'do', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEdycjaDat(null); }} />
+                                                        <span className="daty-in" onBlur={e => {
+                                                            if (e.currentTarget.contains(e.relatedTarget)) return;
+                                                            const [od, ost] = e.currentTarget.querySelectorAll('input');
+                                                            zapiszZPol(l, galaz?.id, od.value, ost.value);
+                                                        }}>
+                                                            <input type="date" defaultValue={doInputu(l.planOd)} onKeyDown={klawiszDaty} autoFocus />
+                                                            <input type="date" defaultValue={doInputu(l.planDo)} onKeyDown={klawiszDaty} />
                                                         </span>
                                                     )}
                                                     {gotowosc && GotowoscChipy && <GotowoscChipy g={gotowosc(l)} />}
