@@ -6607,7 +6607,7 @@ ${ganttSectionHtml}
             <div
                 key={key}
                 className={`flex flex-col glass-panel border border-white/5 transition-all duration-300 shadow-2xl overflow-hidden ${isCompactSection && isActive ? 'rounded-none flex-1 min-h-0' : 'rounded-2xl'} ${isActive ? 'bg-white/[0.04]' : 'bg-white/[0.02] hover:bg-white/[0.03] cursor-pointer'}`}
-                style={isActive && !isCompactSection ? { minHeight: 'calc(100vh - 200px)' } : isHidden ? { display: 'none' } : {}}
+                style={isActive && !isCompactSection ? { minHeight: 'calc(100vh / var(--app-zoom, 1) - 200px)' } : isHidden ? { display: 'none' } : {}}
             >
                 {/* @anchor section-head — nagłówek sekcji. Rozwinięta sekcja dostaje stonowaną,
                     lekko przezroczystą zieleń i grubszą krawędź od spodu: nagłówek ma odcinać się

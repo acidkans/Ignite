@@ -943,11 +943,11 @@ export default function MarkerDetailsPanel({ marker, onClose, onRefresh, nodeId,
         <div className="fixed inset-0 z-[9999] bg-black/95 flex flex-col items-center justify-center" onClick={() => setLightboxAtt(null)}>
             <button className="absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white" onClick={() => setLightboxAtt(null)}><X size={24} /></button>
             <button className="absolute top-4 left-4 p-2 bg-white/10 rounded-full text-blue-400" onClick={(e) => { e.stopPropagation(); downloadFile(lightboxAtt); }}><Download size={24} /></button>
-            <div style={{ display: 'grid', gridTemplateRows: '1fr', maxWidth: '90vw', maxHeight: '85vh' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'grid', gridTemplateRows: '1fr', maxWidth: 'calc(90vw / var(--app-zoom, 1))', maxHeight: 'calc(85vh / var(--app-zoom, 1))' }} onClick={e => e.stopPropagation()}>
                 {isVideoAtt(lightboxAtt) ? (
-                    <video src={lightboxAtt.isPending ? lightboxAtt.fileUrl : getFileUrl(lightboxAtt.fileUrl)} controls autoPlay style={{ gridRow: 1, gridColumn: 1, maxWidth: '90vw', maxHeight: '85vh', display: 'block', background: '#000' }} />
+                    <video src={lightboxAtt.isPending ? lightboxAtt.fileUrl : getFileUrl(lightboxAtt.fileUrl)} controls autoPlay style={{ gridRow: 1, gridColumn: 1, maxWidth: 'calc(90vw / var(--app-zoom, 1))', maxHeight: 'calc(85vh / var(--app-zoom, 1))', display: 'block', background: '#000' }} />
                 ) : (
-                    <img src={lightboxAtt.isPending ? lightboxAtt.fileUrl : getFileUrl(lightboxAtt.fileUrl)} alt="podgląd" style={{ gridRow: 1, gridColumn: 1, maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', display: 'block' }} />
+                    <img src={lightboxAtt.isPending ? lightboxAtt.fileUrl : getFileUrl(lightboxAtt.fileUrl)} alt="podgląd" style={{ gridRow: 1, gridColumn: 1, maxWidth: 'calc(90vw / var(--app-zoom, 1))', maxHeight: 'calc(85vh / var(--app-zoom, 1))', objectFit: 'contain', display: 'block' }} />
                 )}
                 {lightboxAtt.note && (
                     <div style={{ gridRow: 1, gridColumn: 1, alignSelf: 'end', background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)', color: '#fff', padding: '20px 16px 12px', fontSize: '13px', lineHeight: 1.4, pointerEvents: 'none' }}>
