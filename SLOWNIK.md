@@ -3819,6 +3819,7 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-funkcja | rozmowy mailowe w zbudujWatek (pierwszy mail → odpowiedzi → kolejne maile) | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor watek-mail-rozmowy |
 | ui-funkcja | bezPodpisu (front) | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor watek-bez-podpisu |
 | back-funkcja | bezPodpisu | apps/backend/src/common/mail-podpis.util.ts | @anchor mail-bez-podpisu |
+| back-funkcja | czyLogoStopki | apps/backend/src/common/mail-podpis.util.ts | @anchor czy-logo-stopki |
 | ui-sekcja | RozmowaMaila / WiadomoscMaila | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-rozmowa-maila |
 | ui-funkcja | TekstZLinkami | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor tekst-z-linkami |
 | ui-funkcja | dataPelna | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-data-pelna |

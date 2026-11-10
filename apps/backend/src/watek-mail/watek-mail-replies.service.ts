@@ -5,7 +5,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PushService } from '../push/push.service';
 import { decryptSecret } from '../common/secret-crypto.util';
 import { WATEK_KEY_RE, tematBezKlucza } from './watek-mail.service';
-import { bezPodpisu } from '../common/mail-podpis.util';
+import { bezPodpisu, czyLogoStopki } from '../common/mail-podpis.util';
 import { ZAL_MAX_BYTES, czyZakazany, zapiszBufor } from './zalaczniki.storage';
 
 // mailparser nie ma typów — tylko simpleParser.
@@ -145,7 +145,7 @@ export class WatekMailRepliesService {
     const text = String(parsed.text || '').slice(0, MAX_TEXT);
     const fromName: string | null = from.name || null;
     const fromEmail = String(from.address || '').toLowerCase();
-    const zal = this.zapiszZalaczniki(parsed.attachments || []);
+    const zal = this.zapiszZalaczniki(parsed.attachments || [], typeof parsed.html === 'string' ? parsed.html : '');
     const reply = await this.prisma.watekMailReply.create({
       data: {
         watekMailId: mail.id, processNodeId: mail.processNodeId, wbsNodeId: mail.wbsNodeId, messageId, matchedBy,
@@ -170,9 +170,9 @@ export class WatekMailRepliesService {
   }
 
   // @anchor watek-mail-replies-zalaczniki
-  // Załączniki odpowiedzi → uploads/watek-mail. Pomijane: obrazki osadzone w treści mniejsze niż 20 KB (logo,
-  // ikonki ze stopki), pliki ponad limit, pliki wykonywalne. Zrzut ekranu wklejony w treść waży więcej, więc zostaje.
-  private zapiszZalaczniki(atts: any[]): { fileName: string; name: string; mime: string; size: number }[] {
+  // Załączniki odpowiedzi → uploads/watek-mail. Pomijane: logo i ikonki ze stopki (`czyLogoStopki` — małe albo
+  // szerokie i niskie obrazki osadzone w treści), pliki ponad limit, pliki wykonywalne. Zrzut ekranu wklejony w treść zostaje.
+  private zapiszZalaczniki(atts: any[], html = ''): { fileName: string; name: string; mime: string; size: number }[] {
     const out: { fileName: string; name: string; mime: string; size: number }[] = [];
     let n = 0;
     for (const a of atts) {
@@ -180,7 +180,7 @@ export class WatekMailRepliesService {
       if (!buf?.length || buf.length > ZAL_MAX_BYTES) continue;
       const mime = String(a.contentType || '');
       const inline = a.related || a.contentDisposition === 'inline' || !!a.cid;
-      if (/^image\//i.test(mime) && inline && buf.length < 20 * 1024) continue;
+      if (czyLogoStopki(buf, mime, inline, a.cid, html)) continue;
       const name = String(a.filename || `obrazek-${++n}.${(mime.split('/')[1] || 'bin').replace('jpeg', 'jpg')}`).slice(0, 200);
       if (czyZakazany(name)) continue;
       try { out.push({ fileName: zapiszBufor(buf, name, mime), name, mime, size: buf.length }); }
