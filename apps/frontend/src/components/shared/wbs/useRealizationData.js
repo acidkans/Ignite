@@ -108,6 +108,28 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
 
     useEffect(() => { fetchAll(); }, [fetchAll]);
 
+    // @anchor realization-odswiez-qa — ciche dociągnięcie samych par Q&A węzłów (np. odpowiedzi z maila
+    // wpisane przez cron), bez przeładowania kart i zakupów. Zmienia stan tylko, gdy Q&A się różni.
+    const odswiezQa = useCallback(async () => {
+        if (!nodeId) return;
+        try {
+            const q = versionId ? `?versionId=${versionId}` : '';
+            const r = await fetch(`${API_URL}/wbs-nodes/unified/${nodeId}${q}`, { headers: { Authorization: `Bearer ${token}` } });
+            if (!r.ok) return;
+            const qaPoId = new Map(flattenWbsNodes((await r.json()).items || []).map(n => [n.id, n.qa]));
+            const s = (v) => (typeof v === 'string' ? v : JSON.stringify(v ?? null));
+            setWbsNodes(prev => {
+                let zmiana = false;
+                const next = prev.map(n => {
+                    if (!qaPoId.has(n.id) || s(qaPoId.get(n.id)) === s(n.qa)) return n;
+                    zmiana = true;
+                    return { ...n, qa: qaPoId.get(n.id) };
+                });
+                return zmiana ? next : prev;
+            });
+        } catch { /* następna próba przy kolejnym odświeżeniu */ }
+    }, [nodeId, versionId, token]);
+
     // ─ Mutacje ───────────────────────────────────────────────────────────────
     // Te same endpointy co w `RealizationTab`: `PATCH /wbs-nodes/:id`, `POST|PATCH|DELETE
     // /leaf-actuals`, `PATCH /leaf-actuals/close/:id`. Logika siedzi w ciele komponentu po obu
@@ -411,7 +433,7 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
 
     return {
         loading, wbsNodes, cards, actuals,
-        fetchAll, fetchActuals, fetchCards,
+        fetchAll, fetchActuals, fetchCards, odswiezQa,
         saveComment, saveOwner, saveAxis, savePlanDates, savePlanDatesBatch, zapiszKolejnosc, addActual, updateActual, deleteActual, setClosed, toggleClosed,
         actualsOf, cardOf, rowOf, ownerOptions,
         // @anchor realization-owner-users — konta zespołu zamówienia (właściciel blokera = `User`)

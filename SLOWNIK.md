@@ -289,6 +289,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | kiedyTekst | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor kiedy-tekst |
 | ui-hook | useWatekRealizacji | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor use-watek-realizacji |
 | ui-funkcja | wyslij | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-wyslij |
+| ui-funkcja | odswiezQa (ciche odświeżenie Q&A węzłów) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-odswiez-qa |
 | ui-funkcja | odpowiedziQa (odpowiedzi czatu pod pytaniem Q&A) | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor watek-odpowiedzi-qa |
 | ui-sekcja | odpowiedzi czatu pod wpisem Q&A | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-qa-odpowiedzi-czat |
 | ui-hook | auto-odświeżanie wątku (push, powrót do karty, co 60 s) | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-auto-odswiez |
