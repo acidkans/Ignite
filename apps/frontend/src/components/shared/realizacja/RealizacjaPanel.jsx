@@ -741,6 +741,27 @@ function ukladWpisu(w, { termin }) {
     }
 }
 
+// @anchor tekst-z-linkami — tekst wpisu (czat, mail, Q&A) z klikalnymi adresami http(s)://, www. i e-mail;
+// reszta zostaje zwykłym tekstem (pre-wrap w `.wpis-tresc`). Klik w link nie rozwija wpisu.
+const LINK_RE = /(https?:\/\/[^\s<>"'\]]+|www\.[^\s<>"'\]]+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+)/gi;
+function TekstZLinkami({ tekst }) {
+    if (tekst == null) return null;
+    const s = String(tekst);
+    const out = [];
+    let last = 0;
+    for (const m of s.matchAll(LINK_RE)) {
+        let url = m[0];
+        const trail = url.match(/[.,;:!?)]+$/);      // interpunkcja na końcu zdania nie jest częścią linku
+        if (trail && !(trail[0].startsWith(')') && url.includes('('))) url = url.slice(0, -trail[0].length);
+        if (m.index > last) out.push(s.slice(last, m.index));
+        const href = url.includes('@') && !/^https?:|^www\./i.test(url) ? `mailto:${url}` : /^www\./i.test(url) ? `https://${url}` : url;
+        out.push(<a key={m.index} href={href} target="_blank" rel="noopener noreferrer" className="wpis-link" onClick={e => e.stopPropagation()}>{url}</a>);
+        last = m.index + url.length;
+    }
+    if (last < s.length) out.push(s.slice(last));
+    return <>{out}</>;
+}
+
 // @anchor realizacja-rozmowa-maila — rozmowa mailowa w jednym wpisie: pierwszy mail, pod nim (wcięte)
 // odpowiedzi i kolejne maile, po kolei. Każda wiadomość: temat, Od/Do/DW, data, treść (odpowiedź bez cytatu
 // i podpisu — „cały mail” pokazuje oryginał).
@@ -760,7 +781,7 @@ function WiadomoscMaila({ m, pierwsza }) {
                     <span className="os">{dataPelna(m.kiedy)}</span>
                     {m.pelnaTresc && <button className="mini-btn" onClick={() => setCaly(v => !v)} title="Pokaż mail razem z cytatem, podpisem i adresatami">{caly ? 'skrót' : 'cały mail'}</button>}
                 </div>
-                {(caly && m.pelnaTresc ? m.pelnaTresc : m.tresc) && <div className="wpis-tresc">{caly && m.pelnaTresc ? m.pelnaTresc : m.tresc}</div>}
+                {(caly && m.pelnaTresc ? m.pelnaTresc : m.tresc) && <div className="wpis-tresc"><TekstZLinkami tekst={caly && m.pelnaTresc ? m.pelnaTresc : m.tresc} /></div>}
                 <ZalacznikiMaila lista={m.zalaczniki} />
             </div>
         );
@@ -776,7 +797,7 @@ function WiadomoscMaila({ m, pierwsza }) {
             <div className="wpis-meta" title={[m.od && `Od: ${m.od}`, m.doKogo && `Do: ${m.doKogo}`, m.dw && `DW: ${m.dw}`].filter(Boolean).join('\n')}>
                 <span className="l">{m.kierunek === 'in' ? 'Odebrano' : 'Wysłano'}</span><span>{dataPelna(m.kiedy)}</span>
             </div>
-            {m.tresc && <div className="wpis-tresc">{caly && m.pelnaTresc ? m.pelnaTresc : m.tresc}</div>}
+            {m.tresc && <div className="wpis-tresc"><TekstZLinkami tekst={caly && m.pelnaTresc ? m.pelnaTresc : m.tresc} /></div>}
             <ZalacznikiMaila lista={m.zalaczniki} />
         </div>
     );
@@ -871,7 +892,7 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
                 {/* @anchor realizacja-wpis-blok — treść wpisu w jednym układzie dla każdego rodzaju (jak mail):
                     temat (pogrubiony) → szczegóły „etykieta: wartość” (właściciel, termin, …) → treść pod spodem. */}
                 {roz ? <RozmowaMaila rozmowa={roz} /> : <div className={`wpis-blok ${r.cls}`} onClick={klikTresci}>
-                    {uklad.temat && <div className={`wpis-temat${w.rodzaj === 'qa' ? ' qa-p' : ''}`}>{uklad.temat}</div>}
+                    {uklad.temat && <div className={`wpis-temat${w.rodzaj === 'qa' ? ' qa-p' : ''}`}><TekstZLinkami tekst={uklad.temat} /></div>}
                     {uklad.meta.length > 0 && (
                         <div className="wpis-meta">
                             {uklad.meta.map(([l, v, cls]) => (
@@ -879,7 +900,7 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
                             ))}
                         </div>
                     )}
-                    {uklad.tresc && !(rozwiniety && w.rodzaj === 'qa') && <div className={`wpis-tresc${w.rodzaj === 'qa' ? ' qa-o' : ''}`}>{uklad.tresc}</div>}
+                    {uklad.tresc && !(rozwiniety && w.rodzaj === 'qa') && <div className={`wpis-tresc${w.rodzaj === 'qa' ? ' qa-o' : ''}`}><TekstZLinkami tekst={uklad.tresc} /></div>}
                 </div>}
                 {/* @anchor realizacja-qa-odpowiedzi-czat — wiadomości czatu wysłane spod pytania (`Comment.qaId`). */}
                 {w.odpowiedziCzat?.length > 0 && w.odpowiedziCzat.map(m => (
@@ -889,7 +910,7 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
                             {m.kto && <span className="msg-kto">{m.kto}</span>}
                             <span className="os">{dataPelna(m.kiedy)}</span>
                         </div>
-                        <div className="wpis-tresc">{m.tekst}</div>
+                        <div className="wpis-tresc"><TekstZLinkami tekst={m.tekst} /></div>
                     </div>
                 ))}
                 {odpMail && odpowiedzMail && <MailForm wbsNodeId={w.nodeId} odpowiedz={odpowiedzMail} onWyslano={() => setOdpMail(false)} onAnuluj={() => setOdpMail(false)} />}

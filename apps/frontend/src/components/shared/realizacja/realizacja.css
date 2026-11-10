@@ -134,7 +134,7 @@
 .rz tr.exp td { background: var(--sunk); padding: 0; cursor: default; }
 .rz .expin { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; padding: 12px; }
 @media (max-width: 1200px) { .rz .expin { grid-template-columns: 1fr; } }
-.rz .mini { padding: 8px 12px; font-size: 12.5px; display: flex; flex-direction: column; gap: 6px; }
+.rz .mini { padding: 8px 12px; font-size: 12.5px; display: flex; flex-direction: column; gap: 6px; max-width: 560px; }
 .rz .mini .r { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
 .rz .mini .r > span:first-child { color: var(--muted); }
 .rz .mini .lab { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
@@ -318,3 +318,5 @@
 .rz .zal-plik b { font-weight: 600; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rz .zal-usun { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; line-height: 16px; border-radius: 50%; border: 0; background: rgba(0,0,0,.65); color: #fff; cursor: pointer; font-size: 13px; padding: 0; }
 .rz .zal-plik .zal-usun { position: static; background: none; color: var(--muted); }
+.rz .wpis-link { color: var(--info); text-decoration: underline; text-underline-offset: 2px; }
+.rz .wpis-link:hover { color: var(--ink); }
