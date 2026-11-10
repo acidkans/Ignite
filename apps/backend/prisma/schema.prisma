@@ -102,6 +102,10 @@ model Comment {
   /// Obrazki wiadomości — nazwy plików w `UPLOADS_ROOT/chat/` (wysyłane przez POST /comments/order/:orderId/images).
   images           String[] @default([])
   replyToId        String?
+  /// @anchor comment-qa-id
+  /// Odpowiedź na pytanie Q&A — `id` pary z `WbsNode.qa` (JSON, nie FK). Wątek Realizacji pokazuje
+  /// taką wiadomość pod pytaniem, a nie jako osobny wpis czatu.
+  qaId             String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

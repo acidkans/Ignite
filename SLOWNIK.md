@@ -289,6 +289,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | kiedyTekst | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor kiedy-tekst |
 | ui-hook | useWatekRealizacji | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor use-watek-realizacji |
 | ui-funkcja | wyslij | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-wyslij |
+| ui-funkcja | odpowiedziQa (odpowiedzi czatu pod pytaniem Q&A) | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor watek-odpowiedzi-qa |
+| ui-sekcja | odpowiedzi czatu pod wpisem Q&A | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-qa-odpowiedzi-czat |
 | ui-hook | auto-odświeżanie wątku (push, powrót do karty, co 60 s) | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-auto-odswiez |
 | back-funkcja | push odpowiedzi Q&A — pytanie (`qaQuestion`) w treści powiadomienia | apps/backend/src/comments/comments.controller.ts | @anchor comment-push-qa-question |
 | ui-funkcja | zamknijBloker | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-zamknij-bloker |
@@ -707,6 +709,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-sekcja | nagłówek wątku czatu (status + zamknij/otwórz) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-chat-thread-header |
 | ui-stala | DRAWER.chatBar | apps/frontend/src/components/shared/wbs/wbsConstants.js | @anchor drawer-chat-bar |
 | schema-pole | Comment.wbsNodeId | apps/backend/prisma/schema.prisma | @anchor comment-wbs-node-id |
+| schema-pole | Comment.qaId | apps/backend/prisma/schema.prisma | @anchor comment-qa-id |
 | schema-pole | Comment.images | apps/backend/prisma/schema.prisma | @anchor comment-images |
 | schema-model | WbsChatThread | apps/backend/prisma/schema.prisma | @anchor wbs-chat-thread |
 | schema-pole | WbsChatThread.status | apps/backend/prisma/schema.prisma | @anchor wbs-chat-thread-status |

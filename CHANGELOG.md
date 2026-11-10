@@ -1,3 +1,18 @@
+## 2026-11-10 — feat(realizacja): odpowiedź w czacie spod pytania Q&A widoczna pod tym pytaniem (v2026.11.10.0957)
+
+### schema.prisma
+- dodano pole `schema-pole` `Comment.qaId` (String?) — id pary z `WbsNode.qa`, na którą odpowiada wiadomość czatu; migracja `20261110090000_comment_qa_id`
+
+### architektura / API
+- `back-endpoint` `POST /comments/order/:orderId` przyjmuje `qaId` (zapisywane tylko przy `wbsNodeId`)
+- `ui-funkcja` `wyslij` (`useWatekRealizacji`) ma parametr `qaId`; `zbudujWatek` dokleja takie wiadomości do wpisu Q&A (`odpowiedziCzat`) zamiast osobnego wpisu czatu
+
+### słownik
+- dodano `Comment.qaId`, `odpowiedziQa`, sekcję odpowiedzi czatu pod wpisem Q&A
+
+### wytyczne
+- `schema-pole` `Comment.qaId` — wiadomość z `qaId` nie jest osobnym wpisem czatu w wątku Realizacji; pokazuje się pod pytaniem, które podbija w sortowaniu
+
 ## 2026-11-09 — feat(poczta): przypisanie domeny poczty do zamówień przeniesione do Poczty SMTP
 
 ### architektura / API

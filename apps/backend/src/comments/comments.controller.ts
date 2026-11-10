@@ -91,7 +91,7 @@ export class CommentsController {
     @Post('order/:orderId')
     // `qaQuestion` — treść pytania Q&A, gdy wiadomość jest odpowiedzią na nie (wątek Realizacji).
     // Nie trafia do bazy: służy tylko powiadomieniu, żeby odbiorca wiedział, na co padła odpowiedź.
-    async create(@Param('orderId') orderId: string, @Body() body: { text: string; requirementId?: string; type?: string; mentionedUserIds?: string[]; replyToId?: string; wbsNodeId?: string; images?: string[]; qaQuestion?: string }, @Request() req) {
+    async create(@Param('orderId') orderId: string, @Body() body: { text: string; requirementId?: string; type?: string; mentionedUserIds?: string[]; replyToId?: string; wbsNodeId?: string; images?: string[]; qaQuestion?: string; qaId?: string }, @Request() req) {
         // Obrazki tylko z nazwami nadanymi przez upload — nic spoza uploads/chat/.
         const images = (Array.isArray(body.images) ? body.images : []).filter(n => typeof n === 'string' && CHAT_IMAGE_NAME_RE.test(n));
         const text = (body.text ?? '').trim();

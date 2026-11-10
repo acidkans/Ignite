@@ -147,9 +147,20 @@ export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, con
             rozmowa: wiad, odpowiedzi: odp.length, ostatniaOdp: odp[odp.length - 1] || null,
         });
     }
+    // @anchor watek-odpowiedzi-qa — wiadomości czatu z `qaId` (odpowiedź pod pytaniem w Kokpicie) idą pod
+    // wpis pytania (`w.odpowiedziCzat`), nie jako osobny wpis czatu. Klucz: `${nodeId}|${qaId}`.
+    const pytania = new Set();
+    for (const n of wbsNodes || []) for (const q of parseQa(n.qa)) if (q.id) pytania.add(`${n.id}|${q.id}`);
+    const odpowiedziQa = new Map();
     for (const c of comments || []) {
         const nodeId = c.wbsNodeId ? klucz.get(c.wbsNodeId) : null;
         if (!nodeId) continue;
+        if (c.qaId && pytania.has(`${nodeId}|${c.qaId}`)) {
+            const k = `${nodeId}|${c.qaId}`;
+            if (!odpowiedziQa.has(k)) odpowiedziQa.set(k, []);
+            odpowiedziQa.get(k).push({ id: c.id, kto: osoba(c.user), kiedy: c.createdAt, tekst: c.text });
+            continue;
+        }
         if (c.type === 'MAIL_OUT' || c.type === 'MAIL_IN') {
             if (komentarzeMaili.has(c.id)) continue; // jest w rozmowie mailowej
             // Wpis maila bez danych `WatekMail` (np. usunięty) — sama treść jak wiadomość czatu.
@@ -169,9 +180,15 @@ export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, con
         for (const q of parseQa(n.qa)) {
             if (!String(q.question || '').trim()) continue;
             const odp = String(q.answer || '').trim();
+            const czat = (odpowiedziQa.get(`${n.id}|${q.id}`) || [])
+                .sort((a, b) => new Date(a.kiedy).getTime() - new Date(b.kiedy).getTime());
+            const kiedyQa = q.mailReplyAt || q.mailSentAt || null;
+            const ostCzat = czat.length ? czat[czat.length - 1].kiedy : null;
             wpisy.push({
                 id: `q-${n.id}-${q.id}`, qaId: q.id, rodzaj: 'qa', nodeId: n.id, blokerem: qaZBlokerem.has(q.id),
-                kiedy: q.mailReplyAt || q.mailSentAt || null, kto: q.mailSentAt ? 'pytanie do klienta' : 'pytanie',
+                kiedy: ostCzat && (!kiedyQa || new Date(ostCzat) > new Date(kiedyQa)) ? ostCzat : kiedyQa,
+                odpowiedziCzat: czat,
+                kto: q.mailSentAt ? 'pytanie do klienta' : 'pytanie',
                 tekst: q.question, odpowiedz: odp || null, otwarte: !odp,
                 mail: q.mailSentAt ? (q.mailReplyAt ? 'odpowiedź z maila' : 'wysłane mailem') : null,
             });

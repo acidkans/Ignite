@@ -297,7 +297,7 @@ export class CommentsService {
         return summary;
     }
 
-    async create(orderId: string, userId: string, dto: { text: string; requirementId?: string; type?: string; mentionedUserIds?: string[]; replyToId?: string; wbsNodeId?: string; images?: string[] }) {
+    async create(orderId: string, userId: string, dto: { text: string; requirementId?: string; type?: string; mentionedUserIds?: string[]; replyToId?: string; wbsNodeId?: string; images?: string[]; qaId?: string }) {
         return this.prisma.comment.create({
             data: {
                 orderId,
@@ -309,6 +309,7 @@ export class CommentsService {
                 type: dto.type ?? 'NOTE',
                 mentionedUserIds: dto.mentionedUserIds ?? [],
                 replyToId: dto.replyToId ?? null,
+                qaId: dto.wbsNodeId && typeof dto.qaId === 'string' && dto.qaId ? dto.qaId : null,
             },
             include: {
                 user: { select: this.userSelect },
