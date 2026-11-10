@@ -9,7 +9,7 @@
 // Wpisy zakupów (`LeafActual`) i protokoły zostają w zakładce „Realizacja (tabela)".
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { useRealizationData } from '../wbs/useRealizationData';
 import { buildBranchIndex, SYNTHETIC_ROOT, PurchaseDrawer } from '../RealizationNewTab';
@@ -294,6 +294,20 @@ export default function RealizacjaPanel({
         setQaOverrides(prev => ({ ...prev, [wbsNodeId]: qa }));
         window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
     }, []);
+    // @anchor realizacja-usun-qa — usunięcie pary Q&A (pytanie bez odpowiedzi) z wątku Kokpitu: wycina parę po `id`.
+    const usunQa = useCallback(async (wbsNodeId, qaId) => {
+        const n = nodesRef.current.find(x => x.id === wbsNodeId);
+        if (!n) throw new Error('brak węzła');
+        const qa = parseQa(n.qa).filter(p => p.id !== qaId);
+        const res = await fetch(`${API_URL}/wbs-nodes/${wbsNodeId}`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ qa }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setQaOverrides(prev => ({ ...prev, [wbsNodeId]: qa }));
+        window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
+    }, []);
     // @anchor realizacja-qa-zamowienia — wszystkie pytania Q&A całego zamówienia (widoczne węzły, niezależnie
     // od zaznaczonej gałęzi): najpierw bez odpowiedzi; kształt `questions` z `QaMailModal`.
     const pytaniaZamowienia = useMemo(() => {
@@ -310,8 +324,8 @@ export default function RealizacjaPanel({
         window.dispatchEvent(new CustomEvent('wbs-qa-imported'));
     }, []);
     // @anchor realizacja-edycja-watku — czym wątek edytuje wpis w miejscu i dodaje nowe (`NowyWpis`).
-    const edycjaWatku = useMemo(() => ({ wyslij, zapiszQa, dodajQa, zmienBloker, dodajBloker, ownerUsers, canEdit }),
-        [wyslij, zapiszQa, dodajQa, zmienBloker, dodajBloker, ownerUsers, canEdit]);
+    const edycjaWatku = useMemo(() => ({ wyslij, zapiszQa, dodajQa, usunQa, zmienBloker, dodajBloker, ownerUsers, canEdit }),
+        [wyslij, zapiszQa, dodajQa, usunQa, zmienBloker, dodajBloker, ownerUsers, canEdit]);
 
     // @anchor realizacja-akcje-blokera — zamknięcie blokera (Constraint albo dawny pilny wpis czatu)
     // i zamiana otwartego pytania Q&A w bloker „decyzja klienta".
@@ -778,6 +792,22 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
     // „odpowiedz mailem” odpowiada na OSTATNIĄ odpowiedź klienta (formularz pod rozmową, temat Re:, adresat = nadawca).
     const roz = w.rozmowa;
     const [odpMail, setOdpMail] = useState(false);
+    // @anchor realizacja-wpis-usun-qa — kosz przy pytaniu bez odpowiedzi; potwierdzenie TAK/NIE w nagłówku wpisu.
+    const usuwalnyQa = w.rodzaj === 'qa' && w.otwarte && w.qaId && w.nodeId && edycja?.canEdit && edycja?.usunQa;
+    const [potwUsun, setPotwUsun] = useState(false);
+    const [usuwanie, setUsuwanie] = useState(false);
+    const usunPytanie = async () => {
+        if (usuwanie) return;
+        setUsuwanie(true);
+        try {
+            await edycja.usunQa(w.nodeId, w.qaId);
+        } catch (e) {
+            console.error('[RealizacjaPanel] usuwanie Q&A:', e);
+            alert('Nie udało się usunąć pytania');
+            setUsuwanie(false);
+            setPotwUsun(false);
+        }
+    };
     const ost = w.ostatniaOdp;
     const odpowiedzMail = useMemo(() => (ost ? { replyId: ost.replyId, fromEmail: ost.fromEmail, temat: ost.temat } : null), [ost?.replyId, ost?.fromEmail, ost?.temat]);
     const st = statusWpisu(w);
@@ -822,6 +852,17 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
                         {rozwijalny && (
                             <button className="mini-btn" onClick={() => setRozwiniety(v => !v)}
                                 title={rozwiniety ? 'Zwiń' : 'Rozwiń — odpowiedz albo edytuj bez wchodzenia w pozycję'}>{rozwiniety ? 'zwiń' : 'rozwiń'}</button>
+                        )}
+                        {usuwalnyQa && !potwUsun && (
+                            <button className="mini-btn bad" onClick={() => setPotwUsun(true)} title="Usuń pytanie"
+                                style={{ display: 'inline-flex', alignItems: 'center' }}><Trash2 size={12} /></button>
+                        )}
+                        {usuwalnyQa && potwUsun && (
+                            <>
+                                <span className="os">usunąć pytanie?</span>
+                                <button className="mini-btn bad" onClick={usunPytanie} disabled={usuwanie}>{usuwanie ? '…' : 'TAK'}</button>
+                                <button className="mini-btn" onClick={() => setPotwUsun(false)} disabled={usuwanie}>NIE</button>
+                            </>
                         )}
                     </span>
                 </div>

@@ -340,6 +340,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-formularz | NowyWpis — formularz nowego wpisu rodzaju z filtra | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-nowy-wpis |
 | ui-formularz | NowePytanie — nowe pytanie Q&A z wątku | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-nowe-pytanie |
 | ui-funkcja | dodajQa | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-dodaj-qa |
+| ui-funkcja | usunQa | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-usun-qa |
+| ui-ikona | Wpis — kosz pytania bez odpowiedzi | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-usun-qa |
 | ui-stan | sygnalZakupu | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-sygnal-zakupu |
 | ui-propsy | PurchaseDrawer.addSignal | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor purchase-drawer-add-signal |
 | ui-sekcja | Harmonogram (wspólny widok robót Planowanie + Realizacja, wygląd Lookahead; zakres 14 dni / miesiąc / całość) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram |
