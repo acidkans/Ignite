@@ -1122,6 +1122,24 @@ const kolejnoscDecyzji = (a, b) => {
     return (b.wplywDni || 0) - (a.wplywDni || 0);
 };
 
+// @anchor realizacja-etap-wpisu — 0 = niewyjaśnione (otwarty bloker, Q&A bez odpowiedzi, otwarte zadanie,
+// mail czekający na odpowiedź), 1 = informacyjne (czat, zakupy, protokoły), 2 = wyjaśnione/zamknięte.
+const etapWpisu = (w) => {
+    if (w.rodzaj === 'mail') return w.rozmowa ? (w.odpowiedzi ? 2 : 0) : 1;
+    if (w.otwarte) return 0;
+    if (w.zamkniety || ['block', 'qa', 'task'].includes(w.rodzaj)) return 2;
+    return 1;
+};
+
+// @anchor realizacja-kolejnosc-watku — każdy filtr wątku: najpierw niewyjaśnione (po terminie, terminie
+// i wpływie jak `kolejnoscDecyzji`), potem informacyjne, na końcu zamknięte; w grupie zachowana kolejność
+// `zbudujWatek` (najnowsze na górze).
+const kolejnoscWatku = (a, b) => {
+    const ea = etapWpisu(a), eb = etapWpisu(b);
+    if (ea !== eb) return ea - eb;
+    return ea === 0 ? kolejnoscDecyzji(a, b) : 0;
+};
+
 // @anchor realizacja-watek-karta — wspólna karta wątku gałęzi, pozycji i milestone'a: w nagłówku chipy
 // wszystkich rodzajów wpisów (filtr), pod listą formularz nowego wpisu WYBRANEGO rodzaju (`NowyWpis`).
 // Filtr może być sterowany z zewnątrz (Kokpit pamięta go między gałęziami), inaczej własny stan karty.
@@ -1130,14 +1148,22 @@ function WatekKarta({ tytul, prawa, wpisy, wbsNodeId, gdzie, edycja, onZakup, re
     const [filtrWew, setFiltrWew] = useState('all');
     const filtr = filtrZew ?? filtrWew;
     const setFiltr = setFiltrZew ?? setFiltrWew;
-    const widoczne = wpisy.filter(w => filtr === 'all' || w.rodzaj === filtr);
-    if (filtr === 'block' || filtr === 'qa') widoczne.sort(kolejnoscDecyzji);
+    const widoczne = wpisy.filter(w => filtr === 'all' || w.rodzaj === filtr).sort(kolejnoscWatku);
+    // Granica między niewyjaśnionymi a resztą — separator tylko gdy są obie grupy.
+    const granica = widoczne.findIndex(w => etapWpisu(w) > 0);
+    const separator = granica > 0 ? widoczne[granica].id : null;
     return (
         <Karta tytul={tytul} prawa={prawa ?? `${wpisy.length} wpisów`}>
             <FiltryWatku wpisy={wpisy} filtr={filtr} setFiltr={setFiltr} />
             {filtr === 'qa' && qaMail && edycja?.canEdit && <WyslijQaMailem {...qaMail} />}
             <div className="feed scroll" style={{ maxHeight }}>
-                {widoczne.length ? widoczne.map(renderWpis)
+                {widoczne.length ? widoczne.map(w => (w.id === separator
+                    ? <React.Fragment key={`sep-${w.id}`}>
+                        <div className="muted" style={{ fontSize: 11, padding: '6px 2px 2px', borderTop: '1px dashed var(--line)', marginTop: 4 }}>
+                            Wyjaśnione i pozostałe</div>
+                        {renderWpis(w)}
+                    </React.Fragment>
+                    : renderWpis(w)))
                     : <Pusto>{wpisy.length ? 'Brak wpisów tego rodzaju — nowy dodasz poniżej.' : 'Brak wpisów — pierwszy dodasz poniżej.'}</Pusto>}
             </div>
             <NowyWpis rodzaj={filtr} wbsNodeId={wbsNodeId} gdzie={gdzie} edycja={edycja} onZakup={onZakup} />
