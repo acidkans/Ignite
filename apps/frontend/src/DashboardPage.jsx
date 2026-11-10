@@ -119,7 +119,9 @@ export default function DashboardPage() {
     const tabsBarRef = useRef(null);
     useEffect(() => {
         if (tabsPinned) return undefined;
-        const ZONE_DOWN = 30; // w górę strefa sięga do krawędzi ekranu
+        // w górę strefa sięga do krawędzi ekranu; w dół tylko 10 px — szersza (było 30) łapała ścieżkę
+        // „tu jesteś” Realizacji (~30 px pod listwą) i pasek wysuwał się nad nią przy każdym najechaniu.
+        const ZONE_DOWN = 10;
         let inZone = false;
         const onMove = (e) => {
             if (e.pointerType !== 'mouse' || !tabsBarRef.current) return;
