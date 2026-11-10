@@ -838,6 +838,17 @@ function Wpis({ w, nazwaPozycji, onPozycja, akcje, edycja }) {
                     )}
                     {uklad.tresc && !(rozwiniety && w.rodzaj === 'qa') && <div className={`wpis-tresc${w.rodzaj === 'qa' ? ' qa-o' : ''}`}>{uklad.tresc}</div>}
                 </div>}
+                {/* @anchor realizacja-qa-odpowiedzi-czat — wiadomości czatu wysłane spod pytania (`Comment.qaId`). */}
+                {w.odpowiedziCzat?.length > 0 && w.odpowiedziCzat.map(m => (
+                    <div key={m.id} className="wpis-blok k-chat msg msg-dalej">
+                        <div className="msg-gora">
+                            <span className="pill p-info" style={{ padding: '0 6px' }}>czat</span>
+                            {m.kto && <span className="msg-kto">{m.kto}</span>}
+                            <span className="os">{dataPelna(m.kiedy)}</span>
+                        </div>
+                        <div className="wpis-tresc">{m.tekst}</div>
+                    </div>
+                ))}
                 {odpMail && odpowiedzMail && <MailForm wbsNodeId={w.nodeId} odpowiedz={odpowiedzMail} onWyslano={() => setOdpMail(false)} onAnuluj={() => setOdpMail(false)} />}
                 {rozwiniety && <WpisEdycja w={w} edycja={edycja} onZamknij={() => setRozwiniety(false)} />}
             </div>
@@ -901,7 +912,7 @@ function WpisEdycja({ w, edycja, onZamknij }) {
                 </div>
             )}
             <PoleCzatu uzytkownicy={ownerUsers} placeholder="Odpowiedz w czacie pozycji… (@ oznacza osobę)"
-                onWyslij={(t, ids) => wyslij(w.nodeId, t, false, ids, w.rodzaj === 'qa' ? w.tekst : null)} />
+                onWyslij={(t, ids) => wyslij(w.nodeId, t, false, ids, w.rodzaj === 'qa' ? w.tekst : null, w.rodzaj === 'qa' ? w.qaId : null)} />
         </div>
     );
 }

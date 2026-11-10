@@ -58,11 +58,12 @@ export function useWatekRealizacji(nodeId) {
     // `pilne` = wpis typu URGENT, czyli bloker w MVP. `mentionedUserIds` = osoby oznaczone „@" —
     // backend wysyła im powiadomienie NEW_MENTION (`comments.controller.ts`).
     // `qaQuestion` = pytanie Q&A, na które odpowiada wiadomość — backend dokleja je do powiadomienia.
-    const wyslij = useCallback(async (wbsNodeId, text, pilne = false, mentionedUserIds = [], qaQuestion = null) => {
+    // `qaId` = id pary Q&A — wiadomość pokaże się pod tym pytaniem (`Comment.qaId`).
+    const wyslij = useCallback(async (wbsNodeId, text, pilne = false, mentionedUserIds = [], qaQuestion = null, qaId = null) => {
         const res = await fetch(`${API_URL}/comments/order/${nodeId}`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, wbsNodeId, type: pilne ? 'URGENT' : 'NOTE', mentionedUserIds, ...(qaQuestion ? { qaQuestion } : {}) }),
+            body: JSON.stringify({ text, wbsNodeId, type: pilne ? 'URGENT' : 'NOTE', mentionedUserIds, ...(qaQuestion ? { qaQuestion } : {}), ...(qaId ? { qaId } : {}) }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         await pobierz();
