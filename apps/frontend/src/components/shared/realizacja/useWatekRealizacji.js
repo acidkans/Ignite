@@ -1,11 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { API_URL } from '../../../config';
 
 // @anchor use-watek-realizacji — dane wątku pozycji, których nie niesie `useRealizationData`:
 // czat zamówienia (z wpisami pilnymi), zadania (wszystkie statusy), protokoły odbioru, blokery (`Constraint`)
 // i maile wątków (`WatekMail` z odpowiedziami — łączone z wpisami czatu MAIL_OUT/MAIL_IN po `commentId`).
 // Każde źródło jest opcjonalne — błąd jednego nie zeruje pozostałych.
-export function useWatekRealizacji(nodeId) {
+// `naOdswiez` — dodatkowe odświeżenie przy auto-odświeżaniu wątku (Kokpit: Q&A z drzewa WBS).
+export function useWatekRealizacji(nodeId, naOdswiez = null) {
+    const naOdswiezRef = useRef(naOdswiez);
+    naOdswiezRef.current = naOdswiez;
     const [comments, setComments] = useState([]);
     const [tasks, setTasks] = useState([]);
     const [protocols, setProtocols] = useState([]);
@@ -40,9 +43,10 @@ export function useWatekRealizacji(nodeId) {
     useEffect(() => {
         if (!nodeId) return;
         const widoczna = () => document.visibilityState === 'visible';
-        const naPowrot = () => { if (widoczna()) pobierz(); };
-        const naPush = (e) => { if (e.data?.type === 'NEW_NOTIFICATION' && (!e.data.orderId || e.data.orderId === nodeId)) pobierz(); };
-        const id = setInterval(() => { if (widoczna()) pobierz(); }, 60000);
+        const wszystko = () => { pobierz(); naOdswiezRef.current?.(); };
+        const naPowrot = () => { if (widoczna()) wszystko(); };
+        const naPush = (e) => { if (e.data?.type === 'NEW_NOTIFICATION' && (!e.data.orderId || e.data.orderId === nodeId)) wszystko(); };
+        const id = setInterval(() => { if (widoczna()) wszystko(); }, 60000);
         document.addEventListener('visibilitychange', naPowrot);
         window.addEventListener('focus', naPowrot);
         navigator.serviceWorker?.addEventListener('message', naPush);

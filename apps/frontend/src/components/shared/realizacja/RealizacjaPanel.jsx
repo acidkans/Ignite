@@ -116,12 +116,12 @@ export default function RealizacjaPanel({
     // Ta sama reguła co w „Realizacji (tabela)" (`realization-new-visible-types`).
     const visibleTypes = isManagerOrAdmin ? LEAF_TYPES : OPEN_LEAF_TYPES;
 
-    const { loading, wbsNodes, actuals, saveAxis, savePlanDates, savePlanDatesBatch, zapiszKolejnosc, actualsOf, rowOf, ownerUsers, addActual, updateActual, deleteActual } =
+    const { loading, wbsNodes, actuals, saveAxis, savePlanDates, savePlanDatesBatch, zapiszKolejnosc, actualsOf, rowOf, ownerUsers, addActual, updateActual, deleteActual, odswiezQa } =
         useRealizationData({ nodeId, versionId, acceptedAt, isManagerOrAdmin });
     // @anchor realizacja-zakupy-api — dodawanie/edycja/usuwanie wpisów zakupu (`LeafActual`), te same
     // funkcje co szuflada w „Realizacja (tabela)" (`realization-new-purchase-drawer`).
     const zakupyApi = useMemo(() => ({ add: addActual, update: updateActual, remove: deleteActual }), [addActual, updateActual, deleteActual]);
-    const { comments, tasks, protocols, constraints, maile, odswiez: odswiezWatek, wyslij, zamknijBloker, dodajBloker, zmienBloker } = useWatekRealizacji(nodeId);
+    const { comments, tasks, protocols, constraints, maile, odswiez: odswiezWatek, wyslij, zamknijBloker, dodajBloker, zmienBloker } = useWatekRealizacji(nodeId, odswiezQa);
 
     // @anchor realizacja-short-overrides — krótkie nazwy zapisane w tej sesji (bez przeładowania drzewa).
     const [shortOverrides, setShortOverrides] = useState({});
@@ -867,6 +867,20 @@ function WpisEdycja({ w, edycja, onZamknij }) {
         title: w.tekst || '', dueAt: w.termin ? String(w.termin).slice(0, 10) : '', impactDays: w.wplywDni ?? '',
     }));
     const [zapis, setZapis] = useState(false);
+    // Pytanie/odpowiedź zmienione na serwerze (np. odpowiedź z maila) przy otwartym formularzu —
+    // nietknięte pole przejmuje nową wartość, edytowane zostaje.
+    const bazaQa = useRef({ question: w.tekst || '', answer: w.odpowiedz || '' });
+    useEffect(() => {
+        if (w.rodzaj !== 'qa') return;
+        const stara = bazaQa.current;
+        const nowa = { question: w.tekst || '', answer: w.odpowiedz || '' };
+        bazaQa.current = nowa;
+        setF(prev => ({
+            ...prev,
+            question: prev.question === stara.question ? nowa.question : prev.question,
+            answer: prev.answer === stara.answer ? nowa.answer : prev.answer,
+        }));
+    }, [w.rodzaj, w.tekst, w.odpowiedz]);
     const ustaw = (k) => (e) => setF(prev => ({ ...prev, [k]: e.target.value }));
     const zapisz = async () => {
         if (zapis) return;
