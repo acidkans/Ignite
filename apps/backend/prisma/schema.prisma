@@ -284,6 +284,11 @@ model ProcessNode {
   /// @anchor process-node-task-list-slug
   taskListSlug              String?  @unique
   /// @anchor process-node-order-stage
+  /// @anchor process-node-currency
+  /// Waluta zamówienia (PLN | EUR) — wszystkie kwoty zamówienia (WBS, budżet, zakupy, protokoły) są
+  /// w tej walucie. Pole globalne zamówienia, nie wersji — dlatego nie wchodzi do `cloneVersionData`.
+  /// Zakup w innej walucie przelicza `LeafActual` przy zapisie (oryginał w `unitCostOriginal`).
+  currency                  String   @default("PLN")
   orderStage                String   @default("WYCENA") // WYCENA | ZAAKCEPTOWANE | REALIZACJA | ROZLICZONE — znaczące dla type='order'
   /// @anchor process-node-accepted-version-id
   acceptedVersionId         String? // pointer na zaakceptowany ProjectVersion (baseline) — z konstrukcji jedna zaakceptowana wersja
@@ -1642,6 +1647,17 @@ model LeafActual {
   /// dostawy, jego kwota nie wchodzi do kosztu: prognozę pozycji wylicza `realizationOf` jako
   /// plan budżetu − wpisy PLANNED. Wpisy UNPLANNED powiększają pokazany plan wydatków.
   status       LeafActualStatus @default(PLANNED)
+  /// @anchor leaf-actual-currency
+  /// Waluta oryginalna zakupu, gdy inna niż waluta zamówienia (`ProcessNode.currency`). NULL = wpis
+  /// w walucie zamówienia. `unitCost` jest ZAWSZE w walucie zamówienia — przeliczony przy zapisie
+  /// kursem NBP, dzięki czemu sumy i agregaty realizacji nie muszą nic przeliczać.
+  currency         String?
+  /// @anchor leaf-actual-unit-cost-original
+  unitCostOriginal Float? // koszt jedn. w walucie oryginalnej (np. 165 EUR)
+  /// @anchor leaf-actual-exchange-rate
+  exchangeRate     Float? // kurs waluta oryginalna → waluta zamówienia (NBP, tabela A, kurs krzyżowy przez PLN)
+  /// @anchor leaf-actual-rate-date
+  rateDate         DateTime? // data tabeli NBP — ostatni dzień roboczy przed `entryDate`
   /// @anchor leaf-actual-supplier-id
   supplierId String?
   /// @anchor leaf-actual-author-id

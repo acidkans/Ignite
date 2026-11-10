@@ -92,6 +92,19 @@ export class ProcessTreeController {
 
     // Zespół zamówienia — jedyne źródło widoczności zamówienia (odczyt: członkowie; zmiana: TREE_EDIT)
     // @anchor order-team-get-endpoint
+    // @anchor order-currency-get-endpoint — GET /process-tree/:id/currency → { currency } (PLN | EUR)
+    @Get(':id/currency')
+    getOrderCurrency(@Param('id') id: string) {
+        return this.processTreeService.getOrderCurrency(id);
+    }
+
+    // @anchor order-currency-set-endpoint — PATCH /process-tree/:id/currency { currency }
+    // Bez TREE_EDIT, jak zapis „Informacji o zamówieniu" (order-requirements), gdzie stoi przełącznik.
+    @Patch(':id/currency')
+    setOrderCurrency(@Param('id') id: string, @Body() body: { currency?: string }, @Req() req: any) {
+        return this.processTreeService.setOrderCurrency(id, body?.currency, req.user);
+    }
+
     @Get(':id/team')
     getOrderTeam(@Param('id') id: string, @Req() req: any) {
         return this.processTreeService.getOrderTeam(id, req.user);

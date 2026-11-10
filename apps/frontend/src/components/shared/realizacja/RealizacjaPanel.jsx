@@ -35,6 +35,7 @@ import {
     zaleznyOdMilestone, pierwszyDozwolonyDzien, przesunORobocze, roznicaDniRoboczych, DAY_MS,
 } from '../harmonogram/harmonogramCzas';
 import './realizacja.css';
+import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt } from '../../../utils/currency';
 
 const FOCUS_KEY = (nodeId) => `realizacja-focus-${nodeId}`;
 const WIDOK_KEY = 'realizacja-widok';
@@ -110,6 +111,7 @@ export default function RealizacjaPanel({
     nodeId, versionId, orderName = '', userRoles = [], planLabel = '', acceptedAt = null,
     stage = null, searchQuery = '', setBranchNav,
 }) {
+    useOrderCurrency(); // przerysowanie po wczytaniu/zmianie waluty zamówienia
     const isManagerOrAdmin = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
     const canEdit = userRoles.some(r => ['ADMIN', 'MANAGER', 'LOGISTYK'].includes(r));
     const canSeeMoney = canEdit;
@@ -1410,7 +1412,7 @@ function Macierz({ grupy, rowOf, actualsOf, sygnaly, pelne, canSeeMoney, onOtwor
                             <tr className="grp">
                                 <td colSpan={kolumn} title={galaz.name}>
                                     <button onClick={() => onZoom(galaz.id)} title={`${galaz.name} — pokaż tylko tę gałąź`}>{nazwaWyswietlana(galaz, pelne)}</button>
-                                    <span className="mono" style={{ fontWeight: 400 }}> · {liscie.length} poz.{canSeeMoney ? ` · ${fmtZl(liscie.reduce((s, l) => s + rowOf(l).planValue, 0))} zł` : ''}</span>
+                                    <span className="mono" style={{ fontWeight: 400 }}> · {liscie.length} poz.{canSeeMoney ? ` · ${fmtZl(liscie.reduce((s, l) => s + rowOf(l).planValue, 0))} ${currencySymbol()}` : ''}</span>
                                     <MilestonyChipy milestony={milestony} pelne={pelne} onOtworz={onOtworz} />
                                 </td>
                             </tr>
@@ -1476,10 +1478,10 @@ function RozwinietaPozycja({ node, r, planValue, card, zakupyApi, canEdit, canSe
                     {hasExecAxis(node.type) && <OsWybor node={node} axis="exec" readOnly={!canEdit} saveAxis={saveAxis} />}
                     {canSeeMoney && (
                         <>
-                            <Wiersz l="Plan wydatków" v={`${fmtZl(r.planWydatkow)} zł`} />
-                            <Wiersz l="Poniesione planowo" v={`${fmtZl(r.byStatus.PLANNED)} zł`} />
-                            <Wiersz l="Pozaplanowo" v={`${fmtZl(r.byStatus.UNPLANNED)} zł`} />
-                            <Wiersz l="Prognoza" v={`${fmtZl(r.byStatus.FORECAST)} zł`} />
+                            <Wiersz l="Plan wydatków" v={`${fmtZl(r.planWydatkow)} ${currencySymbol()}`} />
+                            <Wiersz l="Poniesione planowo" v={`${fmtZl(r.byStatus.PLANNED)} ${currencySymbol()}`} />
+                            <Wiersz l="Pozaplanowo" v={`${fmtZl(r.byStatus.UNPLANNED)} ${currencySymbol()}`} />
+                            <Wiersz l="Prognoza" v={`${fmtZl(r.byStatus.FORECAST)} ${currencySymbol()}`} />
                         </>
                     )}
                     <Wiersz l="Ilość" v={`${r.qty} z ${r.plan} ${node.unit || ''}`} />
@@ -1589,15 +1591,15 @@ function Kokpit({ liscie, rowOf, actualsOf, wpisy, protocols, sygFokus, canSeeMo
     return (
         <>
             <div className="kpis">
-                {canSeeMoney && <Kafel l="Przychód (oferta)" v={`${fmtZl(k.przychod)} zł`} s="cena ofertowa pozycji" />}
-                {canSeeMoney && <Kafel l="Plan wydatków" v={`${fmtZl(k.planWydatkow)} zł`} s={`budżet ${fmtZl(k.plan)} zł + pozaplanowe ${fmtZl(k.planWydatkow - k.plan)} zł`} />}
-                {canSeeMoney && <Kafel l="Zysk planowany" v={`${fmtZl(k.zysk)} zł`}
-                    s={`${k.marza != null ? `marża ${String(k.marza).replace('.', ',')}% · ` : ''}prognoza ${fmtZl(k.zyskProg)} zł`}
+                {canSeeMoney && <Kafel l="Przychód (oferta)" v={`${fmtZl(k.przychod)} ${currencySymbol()}`} s="cena ofertowa pozycji" />}
+                {canSeeMoney && <Kafel l="Plan wydatków" v={`${fmtZl(k.planWydatkow)} ${currencySymbol()}`} s={`budżet ${fmtZl(k.plan)} ${currencySymbol()} + pozaplanowe ${fmtZl(k.planWydatkow - k.plan)} ${currencySymbol()}`} />}
+                {canSeeMoney && <Kafel l="Zysk planowany" v={`${fmtZl(k.zysk)} ${currencySymbol()}`}
+                    s={`${k.marza != null ? `marża ${String(k.marza).replace('.', ',')}% · ` : ''}prognoza ${fmtZl(k.zyskProg)} ${currencySymbol()}`}
                     t="Zysk planowany = przychód − budżet. Prognoza: koszt każdej pozycji = większy z budżetu i kosztu całkowitego (zakupy + prognoza)."
                     alarm={k.zysk < 0} alarmS={k.zyskProg < k.zysk - 0.005} />}
-                {canSeeMoney && <Kafel l="Poniesione" v={`${fmtZl(k.real)} zł`} s={`prognoza jeszcze ${fmtZl(k.prognoza)} zł`} />}
+                {canSeeMoney && <Kafel l="Poniesione" v={`${fmtZl(k.real)} ${currencySymbol()}`} s={`prognoza jeszcze ${fmtZl(k.prognoza)} ${currencySymbol()}`} />}
                 <Kafel l="Zaawansowanie" v={`${k.pct}%`} s="wartościowo, z osi robót" />
-                {canSeeMoney && <Kafel l="Odebrano" v={`${fmtZl(k.odebrano)} zł`} s="protokołami" />}
+                {canSeeMoney && <Kafel l="Odebrano" v={`${fmtZl(k.odebrano)} ${currencySymbol()}`} s="protokołami" />}
                 <Kafel l="Blokery" v={sygFokus.blok} s={`${sygFokus.pyt} pytań otwartych${sygFokus.kol ? ` · ${sygFokus.kol} kolizji dostaw` : ''}${sygFokus.kms ? ` · ${sygFokus.kms} kolizji z milestone'em` : ''}`} alarm={sygFokus.blok > 0} alarmS={sygFokus.kol > 0 || sygFokus.kms > 0} />
                 <Kafel l="Zadania" v={sygFokus.zad} s={`${sygFokus.poTerminie} po terminie`} alarmS={sygFokus.poTerminie > 0} />
             </div>

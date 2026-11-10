@@ -3,6 +3,7 @@
 // AcceptanceProtocolItem i (etap 2) rejestr blokerów `Constraint`.
 import { wbsRootOf, entryStatusOf, ENTRY_STATUS_META, fmtZl } from '../wbs/realizationShared';
 import { hasPurchaseAxis, hasExecAxis } from '../wbs/wbsConstants';
+import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt } from '../../../utils/currency';
 
 // @anchor krotka-nazwa — skrócenie pełnej nazwy przedmiarowej, gdy pozycja nie ma `shortName`.
 // Ucina na pierwszym separatorze opisu („ — ”, „, ”, „ (”, „: ”), jeśli zostaje sensowny rdzeń,
@@ -214,7 +215,10 @@ export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, con
         const opis = [e.manufacturer, e.model, e.scope].filter(Boolean).join(' ');
         wpisy.push({
             id: `a-${e.id}`, rodzaj: 'buy', nodeId, kiedy: e.entryDate, kto: osoba(e.author),
-            tekst: `${st}: ${e.qty} × ${fmtZl(e.unitCost)} = ${fmtZl(wartosc)} zł`
+            // Zakup w walucie obcej: oryginał z faktury i kurs, po którym wszedł do sum zamówienia.
+            tekst: `${st}: ${e.qty} × ${e.currency && e.unitCostOriginal != null
+                ? `${fmtZl(e.unitCostOriginal)} ${currencySymbol(e.currency)} (kurs ${String(e.exchangeRate).replace('.', ',')}${e.rateDate ? ` NBP ${String(e.rateDate).slice(0, 10)}` : ''})`
+                : fmtZl(e.unitCost)} = ${fmtZl(wartosc)} ${currencySymbol()}`
                 + (opis ? ` · ${opis}` : '') + (e.docNumber ? ` · ${e.docNumber}` : '')
                 + (e.supplier?.name ? ` · ${e.supplier.name}` : '') + (e.comment ? ` · ${e.comment}` : ''),
             prognoza: entryStatusOf(e) === 'FORECAST',
@@ -226,7 +230,7 @@ export function zbudujWatek({ wbsNodes, comments, tasks, actuals, protocols, con
             if (!nodeId) continue;
             wpisy.push({
                 id: `p-${it.id}`, rodzaj: 'proto', nodeId, kiedy: p.createdAt, kto: osoba(p.author),
-                tekst: `Protokół ${p.numer} (${p.data}): ${fmtZl(it.wartosc)} zł${it.pelny ? ' — pozycja odebrana w całości' : ''}`,
+                tekst: `Protokół ${p.numer} (${p.data}): ${fmtZl(it.wartosc)} ${currencySymbol()}${it.pelny ? ' — pozycja odebrana w całości' : ''}`,
             });
         }
     }
@@ -368,22 +372,26 @@ const PODPIS_ZAMKNIECIE = [
   '(z\\s+)?(serdecznymi\\s+|najlepszymi\\s+)?pozdrowieniami', '(serdecznie\\s+|ciepło\\s+)?pozdrawiam', 'pozdrowienia', 'pozdro',
   'z\\s+poważaniem', 'z\\s+wyrazami\\s+szacunku', 'łączę\\s+(wyrazy\\s+szacunku|pozdrowienia)', 'dziękuję', 'dzięki', 'dziekuje',
   '(best|kind|warm|warmest|many)\\s+(regards|wishes|thanks)', 'regards', 'best', 'cheers', 'thanks', 'thank\\s+you', 'br', 'sincerely', 'yours\\s+(sincerely|truly|faithfully)',
-  'mit\\s+\\S+\\s+grü(ß|ss)en', '(viele|beste|liebe|freundliche|herzliche)\\s+grü(ß|ss)e', 'grü(ß|ss)e', 'gruß', 'gruss', 'mfg', 'lg', 'vg',
+  'mit\\s+\\S+\\s+grü(ß|ss)en?', '(viele|beste|liebe|freundliche|herzliche)n?\\s+grü(ß|ss)en?', 'grü(ß|ss)en?', 'gruß', 'gruss', 'mfg', 'lg', 'vg',
 ].join('|');
 const PODPIS_ZAMKNIECIE_RE = new RegExp(`^(?:${PODPIS_ZAMKNIECIE})(?:[\\s,.!;:/|–-]+(?:${PODPIS_ZAMKNIECIE}))*[\\s,.!;:]*$`, 'i');
-const PODPIS_KONIEC_RE = /^(--\s*|sent from\b.*|wysłane z\b.*|wysłano z\b.*|gesendet von\b.*|get outlook for\b.*)$/i;
+const PODPIS_DZIEKI_RE = /^(dziękuję|dzięki|dziekuje|thanks|thank\s+you)[\s,.!]*$/i;
+const PODPIS_KONIEC_RE = /^(--\s*|sent from\b.*|wysłane z\b.*|wysłano z\b.*|gesendet von\b.*|get outlook for\b.*|(uwaga|informacja|zastrzeżenie)\s*:\s*(niniejsza|ta|treść)\b.*|niniejsza wiadomość\b.*(poufn|zawiera|przeznaczona).*|confidentiality (notice|note|disclaimer)\b.*|disclaimer\s*:.*|this (e-?mail|message)\b.*\b(confidential|privileged|intended)\b.*|diese (e-?mail|nachricht)\b.*\b(vertraulich|bestimmt)\b.*)$/i;
 const PODPIS_KONTAKT_RE = /(\+?\d[\d\s().\/-]{6,}\d|@|www\.|https?:|<mailto:|\b(tel|mob|mobile|phone|fax|e-?mail|nip|vat|ust|steuer|regon|krs|ul|street|str|iban|swift)\b\.?|\b\d{2}-\d{3}\b|\bsp\.\s*z\s*o\.?\s*o|\bgmbh\b|\bllc\b|\bs\.a\.|\bsp\.\s*k\.)/i;
+const podpisBezLinkow = l => l.trim().replace(/^(<[^<>]*>\s*)+/, '').trim();
 
 export function bezPodpisu(t) {
   const lines = String(t || '').replace(/\r/g, '').split('\n').map(l => l.replace(/\s+$/, ''));
   let koniec = lines.length;
   let tresci = 0;
   for (let i = 0; i < lines.length; i++) {
-    const l = lines[i].trim();
+    const l = podpisBezLinkow(lines[i]);
     if (!l) continue;
-    if (PODPIS_KONIEC_RE.test(l) || (tresci > 0 && l.length <= 70 && PODPIS_ZAMKNIECIE_RE.test(l))) { koniec = i; break; }
+    const formula = l.length <= 70 && PODPIS_ZAMKNIECIE_RE.test(l) && (tresci > 0 || !PODPIS_DZIEKI_RE.test(l));
+    if (PODPIS_KONIEC_RE.test(l) || formula) { koniec = i; break; }
     tresci++;
   }
+  if (koniec < lines.length && tresci === 0) return '(brak treści)';
   let out = lines.slice(0, koniec);
   if (koniec === lines.length) {
     // Bez formuły — zdejmij blok kontaktowy z końca (co najmniej 2 linie kontaktowe, inaczej nic nie ruszaj).

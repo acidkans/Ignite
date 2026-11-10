@@ -348,6 +348,8 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
                 ean: draft.ean || null,
                 scope: draft.scope || null,
                 status: draft.status || ENTRY_STATUS.PLANNED,
+                currency: draft.currency || null,
+                unitCostOriginal: draft.unitCostOriginal ?? null,
             }),
         });
         if (!res.ok) {

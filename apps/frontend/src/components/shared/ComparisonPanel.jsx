@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react
 import ExcelJS from 'exceljs';
 import { Scale, RefreshCw, FileSpreadsheet } from 'lucide-react';
 import { API_URL } from '../../config';
+import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt } from '../../utils/currency';
 
 // @anchor comparison-dev-styles
 const DEV_STYLES = {
@@ -56,6 +57,7 @@ const fitTableFont = (wrap, table) => {
 // prawa = produkt `isPurchase` z wersji aktywnej. Pozycja bez produktu zakupu
 // nie dostaje żadnej prognozy — wprost „jeszcze nie zakupiony".
 export default function ComparisonPanel({ nodeId }) {
+    useOrderCurrency(); // przerysowanie po wczytaniu/zmianie waluty zamówienia
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
 
@@ -171,7 +173,7 @@ export default function ComparisonPanel({ nodeId }) {
     const deltaCls = k.deltaSum > 0 ? 'text-red-300' : k.deltaSum < 0 ? 'text-teal-300' : 'text-gray-300';
     // @anchor comparison-delta-summary — podsumowanie Δ siedzi w nagłówku kolumny Δ
     // (zamiast samej litery), żeby suma stała nad kolumną, którą sumuje.
-    const deltaSummary = `${k.deltaSum >= 0 ? '+' : ''}${zl(k.deltaSum)} zł${k.deltaPct != null ? ` (${k.deltaPct >= 0 ? '+' : ''}${k.deltaPct.toFixed(1).replace('.', ',')}%)` : ''}`;
+    const deltaSummary = `${k.deltaSum >= 0 ? '+' : ''}${zl(k.deltaSum)} ${currencySymbol()}${k.deltaPct != null ? ` (${k.deltaPct >= 0 ? '+' : ''}${k.deltaPct.toFixed(1).replace('.', ',')}%)` : ''}`;
 
     return (
         <div className="flex flex-col">
@@ -210,13 +212,13 @@ export default function ComparisonPanel({ nodeId }) {
                             <th colSpan={2} />
                             <th className={`text-right px-[0.5em] py-1 font-mono font-bold whitespace-nowrap ${OFFER_CLS}`}
                                 title="Σ wyceny: produkty isOffer z zaakceptowanego snapshotu">
-                                {zl(k.baselineSum)} zł
+                                {zl(k.baselineSum)} {currencySymbol()}
                             </th>
                             <th />
                             <th colSpan={2} />
                             <th className={`text-right px-[0.5em] py-1 font-mono font-bold whitespace-nowrap ${PURCHASE_CLS}`}
                                 title="Σ realizacji: wyłącznie pozycje z wpisami zakupu/wykonania albo rozliczone">
-                                {zl(k.currentSum)} zł
+                                {zl(k.currentSum)} {currencySymbol()}
                             </th>
                             <th />
                             <th rowSpan={2} className={`text-right px-[0.75em] py-2 font-mono font-bold whitespace-nowrap align-bottom ${deltaCls}`}

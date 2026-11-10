@@ -4,6 +4,7 @@
 
 import { API_URL } from '../config';
 import { TYPE_LABELS as WBS_TYPE_LABELS, wbsTypeFromAny, MATERIAL_STATUS_LABELS, stripRejectedNodes, applyGroupMultipliers, nodeCostOf, nodeOfferOf } from '../components/shared/wbs/wbsConstants';
+import { currencyCode } from './currency';
 
 const flattenWbsItems = (items) => {
     const result = [];
@@ -256,8 +257,8 @@ export async function buildProjectPdfArtifact({ nodeId, versionId, projectName, 
                 <tbody>${buildBudgetRows(budgetNodes, null, 0)}</tbody>
                 <tfoot><tr style="background:#1a1a2e;color:#fff;font-weight:bold">
                     <td colspan="5" style="text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;padding:6px 8px">Razem:</td>
-                    <td class="num" style="color:#fff">${fmtN(budgetTotalCost)} PLN</td>
-                    <td class="num" style="color:#fff">${fmtN(budgetTotalPrice)} PLN</td>
+                    <td class="num" style="color:#fff">${fmtN(budgetTotalCost)} ${currencyCode()}</td>
+                    <td class="num" style="color:#fff">${fmtN(budgetTotalPrice)} ${currencyCode()}</td>
                 </tr></tfoot>
             </table>` : '<div class="empty">Brak danych budżetowych.</div>'}
         </div>`;

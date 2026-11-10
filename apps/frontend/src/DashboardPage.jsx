@@ -19,6 +19,7 @@ import SnapshotEditGuard from './components/shared/SnapshotEditGuard';
 import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink, Coins, ThumbsUp, Undo2, Play, Pin, PinOff } from 'lucide-react';
 import { API_URL } from './config';
 import { APP_VERSION } from './version';
+import { loadOrderCurrency, useOrderCurrency, currencySymbol } from './utils/currency';
 import OneDriveBrowserModal from './components/shared/OneDriveBrowserModal';
 
 function getWeekNumber(date) {
@@ -249,6 +250,12 @@ export default function DashboardPage() {
         setAcceptance(null);
         if (isOrder) fetchAcceptance();
     }, [isOrder, fetchAcceptance]);
+
+    // @anchor dashboard-load-order-currency — waluta aktywnego zamówienia dla wszystkich zakładek i eksportów
+    const orderCurrency = useOrderCurrency();
+    useEffect(() => {
+        if (isOrder && activeAreaId) loadOrderCurrency(activeAreaId);
+    }, [isOrder, activeAreaId]);
 
     // Fetch requirements for comments #tags
     useEffect(() => {
@@ -1383,7 +1390,7 @@ export default function DashboardPage() {
                                 <div className="grid grid-cols-3 gap-2 text-center">
                                     <div className="bg-white/[0.03] border border-white/5 rounded-lg p-2">
                                         <div className="text-lg font-bold text-teal-300 font-mono">{acceptModal.preview.budgetSum.toLocaleString('pl-PL', { minimumFractionDigits: 2 })}</div>
-                                        <div className="text-[9px] text-gray-500 uppercase tracking-wider">budżet netto zł</div>
+                                        <div className="text-[9px] text-gray-500 uppercase tracking-wider">budżet netto {currencySymbol(orderCurrency)}</div>
                                     </div>
                                     <div className="bg-white/[0.03] border border-white/5 rounded-lg p-2">
                                         <div className="text-lg font-bold text-gray-200 font-mono">{acceptModal.preview.requirementsCount}</div>
@@ -1400,7 +1407,7 @@ export default function DashboardPage() {
                                 {acceptModal.preview.rejectedCount > 0 && (
                                     <p className="text-[10px] text-red-300/80 leading-relaxed">
                                         Poza baseline zostaje {acceptModal.preview.rejectedCount} odrzuconych pozycji
-                                        na {acceptModal.preview.rejectedSum.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} zł —
+                                        na {acceptModal.preview.rejectedSum.toLocaleString('pl-PL', { minimumFractionDigits: 2 })} {currencySymbol(orderCurrency)} —
                                         nie wejdą do zamrożonej kopii (razem z podpozycjami, jeśli je mają). W akceptowanej wersji
                                         zostają jako historia oferty.
                                     </p>
