@@ -331,6 +331,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-sekcja | GotowoscChipy | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-gotowosc-chipy |
 | ui-formularz | BlokerForm | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-bloker-form |
 | ui-funkcja | kolejnoscDecyzji (sortowanie blokerów i Q&A w wątku) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolejnosc-blokerow |
+| ui-funkcja | etapWpisu (niewyjaśnione / informacyjne / zamknięte — grupa wpisu wątku) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-etap-wpisu |
+| ui-funkcja | kolejnoscWatku (każdy filtr wątku: niewyjaśnione na górze) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolejnosc-watku |
 | ui-sekcja | WatekKarta — karta wątku z filtrami rodzajów i formularzem nowego wpisu | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-watek-karta |
 | ui-formularz | NowyWpis — formularz nowego wpisu rodzaju z filtra | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-nowy-wpis |
 | ui-formularz | NowePytanie — nowe pytanie Q&A z wątku | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-nowe-pytanie |
