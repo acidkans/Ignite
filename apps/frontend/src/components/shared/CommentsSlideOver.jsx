@@ -16,6 +16,46 @@ const TYPE_ICON = {
     URGENT:   <Zap size={11} />,
 };
 
+// @anchor comment-type-dropdown — wybór typu komentarza (Komentarz/Pytanie/Rozwiązane/Pilne)
+// jako lista w stylu aplikacji zamiast natywnego <select>, który na Windows rysował systemowe
+// białe menu. Stoi w stopce panelu, więc lista rozwija się W GÓRĘ.
+function CommentTypeDropdown({ value, onChange }) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef(null);
+    useEffect(() => {
+        if (!open) return;
+        const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        const k = (e) => { if (e.key === 'Escape') setOpen(false); };
+        document.addEventListener('mousedown', h);
+        document.addEventListener('keydown', k);
+        return () => { document.removeEventListener('mousedown', h); document.removeEventListener('keydown', k); };
+    }, [open]);
+    const cur = TYPE_CONFIG[value] || TYPE_CONFIG.NOTE;
+    return (
+        <div ref={ref} className="relative shrink-0">
+            <button type="button" onClick={() => setOpen(o => !o)}
+                className={`flex items-center gap-1.5 bg-black/30 border rounded-lg px-2 py-1 text-[10px] focus:outline-none cursor-pointer ${open ? 'border-teal-500' : 'border-white/10'} ${cur.color}`}>
+                {TYPE_ICON[value] || TYPE_ICON.NOTE}
+                <span>{cur.label}</span>
+                <ChevronDown size={11} className={`text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+            {open && (
+                <div role="listbox" className="absolute left-0 bottom-full mb-1 z-30 min-w-full bg-[#0b0f17] border border-white/15 rounded-lg shadow-xl py-1">
+                    {Object.entries(TYPE_CONFIG).map(([t, cfg]) => (
+                        <button key={t} type="button" role="option" aria-selected={t === value}
+                            onClick={() => { onChange(t); setOpen(false); }}
+                            className={`w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] whitespace-nowrap text-left hover:bg-white/5 ${cfg.color} ${t === value ? 'bg-white/5' : ''}`}>
+                            {TYPE_ICON[t]}
+                            <span className="flex-1">{cfg.label}</span>
+                            {t === value && <Check size={11} className="text-teal-400" />}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 function getInitials(user) {
     return ((user?.firstName?.[0] || '') + (user?.lastName?.[0] || '')).toUpperCase() || '?';
 }
@@ -337,12 +377,7 @@ export default function CommentsSlideOver({ orderId, orderName, requirements = [
             <div className="border-t border-white/5 bg-black/20 p-3 flex-shrink-0 space-y-2">
                 {/* Typ + oznaczenie wymagania */}
                 <div className="flex items-center gap-2">
-                    <select value={type} onChange={e => setType(e.target.value)}
-                        className="bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-[10px] text-gray-300 focus:outline-none focus:border-teal-500 cursor-pointer">
-                        {Object.entries(TYPE_CONFIG).map(([t, cfg]) => (
-                            <option key={t} value={t}>{cfg.label}</option>
-                        ))}
-                    </select>
+                    <CommentTypeDropdown value={type} onChange={setType} />
                     {requirements.length > 0 && (
                         <select value={requirementId} onChange={e => setRequirementId(e.target.value)}
                             className="flex-1 bg-[#0b0f17] border border-white/20 rounded-lg px-2 py-1 text-[10px] text-gray-200 focus:outline-none focus:border-teal-500 cursor-pointer">
