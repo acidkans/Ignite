@@ -42,6 +42,8 @@ import {
     sanitizeQtyInput, parsePriceInput, DRAWER,
 } from './wbs/wbsConstants';
 import { isMilestoneNode } from './wbs/wbsConstants';
+import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt } from '../../utils/currency';
+import { CurrencyPill, useRatePreview, ConvertedNote } from './wbs/CurrencyPill';
 import {
     TYPE_META, LEAF_TYPES, OPEN_LEAF_TYPES, getParentPath, leafNodesOf,
     wbsRootOf, shortCompanyName, purchaseUnitOf, realizationOf, planUnitOf, planValueOf, fmtQty, fmtZl, fmtDate,
@@ -366,9 +368,9 @@ const StageBar = ({ dist, title }) => {
     if (!dist.dotyczy) return <span className="text-[length:var(--rn-lg)] italic text-gray-600">oś nie dotyczy</span>;
     if (!dist.kwota) return <span className="text-[length:var(--rn-lg)] italic text-gray-600" title={`${title} — ${dist.dotyczy} pozycji, wszystkie z zerową wyceną`}>brak kwot</span>;
     const opis = STAGE_META.filter(s => dist[s.key]).map(s =>
-        `${s.label}: ${fmtZl(dist[s.key])} zł (${fmtPct(pct(dist[s.key], dist.kwota))}, ${dist.n?.[s.key] ?? 0} poz.)`).join(' · ');
+        `${s.label}: ${fmtZl(dist[s.key])} ${currencySymbol()} (${fmtPct(pct(dist[s.key], dist.kwota))}, ${dist.n?.[s.key] ?? 0} poz.)`).join(' · ');
     return (
-        <div className="flex h-2 w-full overflow-hidden rounded-sm bg-white/5" title={`${title} — ${opis} · razem ${fmtZl(dist.kwota)} zł na ${dist.dotyczy} pozycjach`}>
+        <div className="flex h-2 w-full overflow-hidden rounded-sm bg-white/5" title={`${title} — ${opis} · razem ${fmtZl(dist.kwota)} ${currencySymbol()} na ${dist.dotyczy} pozycjach`}>
             {STAGE_META.filter(s => dist[s.key]).map(s => (
                 <i key={s.key} style={{ width: `${pct(dist[s.key], dist.kwota)}%`, background: s.color }} />
             ))}
@@ -438,6 +440,7 @@ export default function RealizationNewTab({
     nodeId, versionId, orderName = '', userRoles = [], planLabel = '',
     accepted = false, acceptedAt = null, oneDriveFolderName = null, searchQuery = '',
 }) {
+    useOrderCurrency(); // przerysowanie po wczytaniu/zmianie waluty zamówienia
     const token = sessionStorage.getItem('token');
     const isManagerOrAdmin = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
     // Ta sama trójka ról co w `RealizationTab` — logistyk prowadzi zakupy, więc pisze,
@@ -1405,7 +1408,7 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
             {nadmiar.length > 0 && (
                 <span className="rounded border border-red-400/40 bg-red-500/10 px-2 py-0.5 text-[length:var(--rn-md)] text-red-300"
                     title="Zakupy pozaplanowe — bez wartości ofertowej, w całości powiększają koszt">
-                    pozaplanowe +{fmtZl(valNadmiar)} zł
+                    pozaplanowe +{fmtZl(valNadmiar)} {currencySymbol()}
                 </span>
             )}
             {!readOnly && (
@@ -1434,10 +1437,10 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
         const agreed = purchaseUnitOf(card);
         return (
             <div className="px-3 pb-2.5 text-[length:var(--rn-2xl)] text-gray-400">
-                Nic jeszcze nie dojechało. Pozycja wyceniona na <b className="text-gray-200">{fmtZl(planValue)} zł</b>.
+                Nic jeszcze nie dojechało. Pozycja wyceniona na <b className="text-gray-200">{fmtZl(planValue)} {currencySymbol()}</b>.
                 {pr && agreed != null && (
                     <>
-                        <br /><span className="text-teal-300">Cena uzgodniona</span> {fmtZl(agreed)} zł/{node.unit}
+                        <br /><span className="text-teal-300">Cena uzgodniona</span> {fmtZl(agreed)} {currencySymbol()}/{node.unit}
                         {pr.seller ? ` u ${shortCompanyName(pr.seller)}` : ''}
                         {pr.offerNumber ? ` (oferta ${pr.offerNumber})` : ''}
                         {pr.availability ? ` · dostępność ${pr.availability}` : ''}
@@ -1456,8 +1459,8 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
             {head}
             {r.byStatus.FORECAST > 0 && (
                 <div className="flex flex-wrap items-center gap-3 border-t border-dashed border-amber-400/30 bg-amber-500/[.05] px-3 py-1.5 text-[length:var(--rn-lg)] text-amber-300">
-                    <span>Prognoza <b className="tabular-nums">{fmtZl(r.byStatus.FORECAST)} zł</b></span>
-                    <span className="text-[length:var(--rn-md)] text-gray-500">plan budżetu {fmtZl(planValue)} zł − zakupy planowe {fmtZl(r.byStatus.PLANNED)} zł</span>
+                    <span>Prognoza <b className="tabular-nums">{fmtZl(r.byStatus.FORECAST)} {currencySymbol()}</b></span>
+                    <span className="text-[length:var(--rn-md)] text-gray-500">plan budżetu {fmtZl(planValue)} {currencySymbol()} − zakupy planowe {fmtZl(r.byStatus.PLANNED)} {currencySymbol()}</span>
                     {!readOnly && !adding && (
                         <button onClick={(e) => {
                             e.stopPropagation();
@@ -1480,8 +1483,7 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
                                 przebijała zwykłe `text-right` i nagłówki kwot stały nad pustym miejscem. */}
                             {COLS.map(c => (
                                 <th key={c[0]} style={{ width: widthOf(c) }}
-                                    className={`border-y border-white/[.07] px-2 py-1 text-sm font-bold uppercase tracking-wider text-gray-500 ${
-                                        c[3] ? '!text-right' : '!text-left'}`}>{c[1]}</th>
+                                    className="border-y border-white/[.07] px-2 py-1 align-middle text-sm font-bold uppercase tracking-wider text-gray-500 !text-center">{c[1]}</th>
                             ))}
                         </tr>
                     </thead>
@@ -1504,8 +1506,8 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
                                 <td className="border-t border-teal-300/35" />
                                 <td className="border-t border-teal-300/35 px-2 py-1.5 text-right font-semibold tabular-nums text-red-400">{fmtZl(r.value)}</td>
                                 <td colSpan={2} className="border-t border-teal-300/35 px-2 py-1.5 text-gray-500">
-                                    wycena {fmtZl(planValue)} zł · <span className={delta <= 0 ? 'text-emerald-300' : 'text-red-300'}>
-                                        {delta > 0 ? '+' : ''}{fmtZl(delta)} zł</span>
+                                    wycena {fmtZl(planValue)} {currencySymbol()} · <span className={delta <= 0 ? 'text-emerald-300' : 'text-red-300'}>
+                                        {delta > 0 ? '+' : ''}{fmtZl(delta)} {currencySymbol()}</span>
                                 </td>
                                 {!readOnly && <td className="border-t border-teal-300/35" />}
                             </tr>
@@ -1612,7 +1614,12 @@ function EntryRow({ entry, cols, readOnly, onSave, onDelete }) {
         onKeyDown: e => onKey(e, k),
     });
 
-    const wartosc = (parsePriceInput(get('qty')) || 0) * (parsePriceInput(get('unitCost')) || 0);
+    // Wpis w walucie obcej edytuje się w walucie faktury (`unitCostOriginal`); wartość w walucie
+    // zamówienia liczy się kursem zapisanym na wpisie — tym samym, którym przeliczył serwer.
+    const obca = !!entry.currency && entry.currency !== currencyCode();
+    const kosztPole = obca ? 'unitCostOriginal' : 'unitCost';
+    const unitZam = obca ? (parsePriceInput(get('unitCostOriginal')) || 0) * (entry.exchangeRate || 0) : (parsePriceInput(get('unitCost')) || 0);
+    const wartosc = (parsePriceInput(get('qty')) || 0) * unitZam;
 
     const cellOf = (key) => {
         switch (key) {
@@ -1628,7 +1635,17 @@ function EntryRow({ entry, cols, readOnly, onSave, onDelete }) {
             case 'ean':          return pole('ean', 'font-mono', { placeholder: 'EAN', label: 'Kod EAN' });
             case 'scope':        return pole('scope', '', { placeholder: 'zakres — co obejmuje', label: 'Zakres' });
             case 'qty':          return pole('qty', 'text-right font-mono', { label: 'Ilość wpisu', sanitize: true });
-            case 'unitCost':     return pole('unitCost', 'text-right font-mono', { label: 'Koszt jednostkowy', sanitize: true });
+            case 'unitCost':     return (
+                <>
+                    <div className="flex items-center gap-1">
+                        {pole(kosztPole, 'text-right font-mono', { label: obca ? `Koszt jednostkowy w ${entry.currency}` : 'Koszt jednostkowy', sanitize: true })}
+                        <CurrencyPill value={entry.currency || currencyCode()} disabled={readOnly}
+                            onChange={v => onSave(entry.id, v === currencyCode()
+                                ? { currency: null, unitCost: String(round2(unitZam)) }
+                                : { currency: v, unitCostOriginal: obca ? get('unitCostOriginal') : get('unitCost') })} />
+                    </div>
+                </>
+            );
             case 'wartosc':      return <span className="text-red-400">{fmtZl(wartosc)}</span>;
             case 'surplus':      return <StatusPicker value={entryStatusOf(entry)} readOnly={readOnly}
                                      onChange={v => onSave(entry.id, { status: v })} />;
@@ -1649,12 +1666,33 @@ function EntryRow({ entry, cols, readOnly, onSave, onDelete }) {
     };
 
     return (
-        <tr className={`group/entry ${ENTRY_ROW_BG[entryStatusOf(entry)]}`}>
-            {cols.map(c => (
-                <td key={c[0]} className={`border-b border-white/[.04] ${c[0] === 'akcje' ? 'px-1 pt-1.5' : 'px-2 py-1'} align-top ${c[3] ? 'text-right tabular-nums' : ''}`}>
-                    {cellOf(c[0])}
-                </td>
-            ))}
+        <>
+            <tr className={`group/entry ${ENTRY_ROW_BG[entryStatusOf(entry)]}`}>
+                {cols.map(c => (
+                    <td key={c[0]} className={`${obca ? '' : 'border-b'} border-white/[.04] ${c[0] === 'akcje' ? 'px-1 pt-1.5' : 'px-2 py-1'} align-top ${c[3] ? 'text-right tabular-nums' : ''}`}>
+                        {cellOf(c[0])}
+                    </td>
+                ))}
+            </tr>
+            {obca && (
+                <CurrencyNoteRow cols={cols} className={ENTRY_ROW_BG[entryStatusOf(entry)]}>
+                    <ConvertedNote amount={parsePriceInput(get('unitCostOriginal'))} cur={entry.currency}
+                        rate={entry.exchangeRate} rateDate={entry.rateDate} manual={!entry.rateDate} />
+                </CurrencyNoteRow>
+            )}
+        </>
+    );
+}
+
+// @anchor realization-new-currency-note-row — przeliczenie zakupu w walucie obcej w OSOBNYM wierszu pod
+// wpisem, zaczynającym się pod kolumną „Koszt jedn.": w komórce kosztu tekst wychodził na „Wartość" i „Status".
+function CurrencyNoteRow({ cols, className = '', children }) {
+    const i = cols.findIndex(c => c[0] === 'unitCost');
+    if (i < 0) return null;
+    return (
+        <tr className={className}>
+            {i > 0 && <td colSpan={i} className="border-b border-white/[.04]" />}
+            <td colSpan={cols.length - i} className="border-b border-white/[.04] px-2 pb-1.5">{children}</td>
         </tr>
     );
 }
@@ -1678,9 +1716,14 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultUnitCost = null, o
         manufacturer: '', model: '', ean: '', scope: '',
         // Domyślnie planowy — pozaplanowy i prognozowany wybiera się świadomie.
         status: ENTRY_STATUS.PLANNED,
+        // @anchor realization-new-entry-currency — waluta faktury; inna niż waluta zamówienia →
+        // koszt jedn. wpisuje się w walucie faktury, serwer przelicza kursem NBP
+        currency: currencyCode(),
     }));
     const [draft, setDraft] = useState(start);
     const [brak, setBrak] = useState([]);
+    const obca = draft.currency !== currencyCode();
+    const kurs = useRatePreview(obca ? draft.currency : null, draft.entryDate);
     const [zapisuje, setZapisuje] = useState(false);
     const [ostrzezenie, setOstrzezenie] = useState(false);
 
@@ -1747,6 +1790,7 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultUnitCost = null, o
             ...draft,
             qty: resolveEntryNumber(draft.qty),
             unitCost: resolveEntryNumber(draft.unitCost),
+            ...(obca ? { unitCostOriginal: resolveEntryNumber(draft.unitCost) } : { currency: null }),
         });
         setZapisuje(false);
         if (ok) onClose();
@@ -1771,7 +1815,7 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultUnitCost = null, o
         onKeyDown: onKey,
     });
 
-    const wartosc = (parsePriceInput(draft.qty) || 0) * (parsePriceInput(draft.unitCost) || 0);
+    const wartosc = (parsePriceInput(draft.qty) || 0) * (parsePriceInput(draft.unitCost) || 0) * (obca ? (kurs?.rate || 0) : 1);
 
     const cellOf = (key) => {
         switch (key) {
@@ -1785,7 +1829,14 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultUnitCost = null, o
             case 'ean':          return pole('ean', 'font-mono', { placeholder: 'EAN', label: 'Kod EAN' });
             case 'scope':        return pole('scope', '', { placeholder: 'zakres — co obejmuje', label: 'Zakres' });
             case 'qty':          return pole('qty', 'text-right font-mono', { label: 'Ilość wpisu', sanitize: true });
-            case 'unitCost':     return pole('unitCost', 'text-right font-mono', { label: 'Koszt jednostkowy', sanitize: true });
+            case 'unitCost':     return (
+                <>
+                    <div className="flex items-center gap-1">
+                        {pole('unitCost', 'text-right font-mono', { label: obca ? `Koszt jednostkowy w ${draft.currency}` : 'Koszt jednostkowy', sanitize: true })}
+                        <CurrencyPill value={draft.currency} disabled={zapisuje} onChange={v => set('currency', v)} />
+                    </div>
+                </>
+            );
             case 'wartosc':      return <span className="text-red-400">{fmtZl(wartosc)}</span>;
             case 'surplus':      return <StatusPicker value={draft.status} alwaysOpen onChange={v => set('status', v)} />;
             case 'comment':      return pole('comment', '', { placeholder: 'komentarz — co zrobione', label: 'Komentarz wpisu' });
@@ -1804,11 +1855,16 @@ function EntryForm({ node, cols, withCard, defaultQty, defaultUnitCost = null, o
         <>
             <tr ref={rowRef} className="bg-teal-500/[.06]">
                 {cols.map(c => (
-                    <td key={c[0]} className={`border-b border-white/[.04] px-2 py-1.5 align-top ${c[3] ? 'text-right tabular-nums' : ''}`}>
+                    <td key={c[0]} className={`${obca ? '' : 'border-b'} border-white/[.04] px-2 py-1.5 align-top ${c[3] ? 'text-right tabular-nums' : ''}`}>
                         {cellOf(c[0])}
                     </td>
                 ))}
             </tr>
+            {obca && (
+                <CurrencyNoteRow cols={cols} className="bg-teal-500/[.06]">
+                    <ConvertedNote amount={parsePriceInput(draft.unitCost)} cur={draft.currency} rate={kurs === undefined ? undefined : kurs?.rate} rateDate={kurs?.date} />
+                </CurrencyNoteRow>
+            )}
             {brak.length > 0 && (
                 <tr ref={errRef} className="bg-teal-500/[.06]">
                     <td colSpan={cols.length} className="border-b border-red-400/30 px-2 py-1.5 text-[length:var(--rn-lg)] font-semibold text-red-300">
@@ -1916,7 +1972,7 @@ function LeafCard({ node, card, r, planValue, readOnly, token, onRefreshCard, on
                             <CardField label="Nazwa handlowa" value={card.productName} />
                             <CardField label="Oferent" value={shortCompanyName(card.supplier?.name || card.seller)} />
                             <CardField label="Koszt jedn." valueClass="tabular-nums text-orange-300"
-                                value={unitCost != null ? `${fmtZl(unitCost)} zł` : null} />
+                                value={unitCost != null ? `${fmtZl(unitCost)} ${currencySymbol()}` : null} />
                             <CardField label="Dostępność" value={card.availability} />
                             <CardField label="Adres www" value={card.productUrl ? <CardLink url={card.productUrl} /> : null} />
                         </div>
@@ -1926,7 +1982,7 @@ function LeafCard({ node, card, r, planValue, readOnly, token, onRefreshCard, on
                             </div>
                         )}
                         <div className="mt-2 text-[10px] text-gray-600">
-                            z karty produktu · cena z wyceny {fmtZl(card.budgetedPriceNetto)} zł
+                            z karty produktu · cena z wyceny {fmtZl(card.budgetedPriceNetto)} {currencySymbol()}
                         </div>
                     </>
                 ) : (
@@ -1962,7 +2018,7 @@ function LeafCard({ node, card, r, planValue, readOnly, token, onRefreshCard, on
                     {dUnit != null && (
                         <div className="mt-2 text-xs text-gray-400">
                             Δ na jednostce: <b className={dUnit <= 0 ? 'text-emerald-300' : 'text-red-300'}>
-                                {dUnit > 0 ? '+' : ''}{fmtZl(dUnit)} zł</b>
+                                {dUnit > 0 ? '+' : ''}{fmtZl(dUnit)} {currencySymbol()}</b>
                         </div>
                     )}
                     {/* Podpis mówi, SKĄD bierze się cena zakupu, więc ma sens dopiero gdy obie
@@ -1985,7 +2041,7 @@ function LeafCard({ node, card, r, planValue, readOnly, token, onRefreshCard, on
                 Nazwa sekcji idzie za typem liścia, tak samo jak nagłówek szuflady: materiał
                 i sprzęt się KUPUJE, pracę i usługę WYKONUJE. */}
             <Block>
-                <SectionTitle right={`Σ ${fmtZl(r.value)} zł`}>
+                <SectionTitle right={`Σ ${fmtZl(r.value)} ${currencySymbol()}`}>
                     {TYPE_META[node.type]?.hasCard ? 'Zakupy' : 'Wykonanie'} ({r.entries.length})
                 </SectionTitle>
                 {r.entries.length === 0 ? (
@@ -2013,12 +2069,12 @@ function LeafCard({ node, card, r, planValue, readOnly, token, onRefreshCard, on
             <Block>
                 <SectionTitle>Podsumowanie</SectionTitle>
                 <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Wycena</Label><div className="text-sm font-semibold tabular-nums text-orange-400">{fmtZl(planValue)} zł</div></div>
-                    <div><Label>Zakup</Label><div className="text-sm font-semibold tabular-nums text-red-400">{fmtZl(r.value)} zł</div></div>
+                    <div><Label>Wycena</Label><div className="text-sm font-semibold tabular-nums text-orange-400">{fmtZl(planValue)} {currencySymbol()}</div></div>
+                    <div><Label>Zakup</Label><div className="text-sm font-semibold tabular-nums text-red-400">{fmtZl(r.value)} {currencySymbol()}</div></div>
                     <div><Label>Ilość</Label><div className="text-sm font-semibold tabular-nums">{fmtQty(r.qty)} / {fmtQty(r.plan)} {node.unit}</div></div>
                     <div><Label>Odchylenie</Label>
                         <div className={`text-sm font-semibold tabular-nums ${delta <= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
-                            {delta > 0 ? '+' : ''}{fmtZl(delta)} zł</div></div>
+                            {delta > 0 ? '+' : ''}{fmtZl(delta)} {currencySymbol()}</div></div>
                 </div>
                 {node.comment && (
                     <div className="mt-3">
@@ -2085,11 +2141,11 @@ const PurchaseLine = ({ e, node }) => {
                 <span className="font-mono text-[11px] text-teal-300">{fmtDate(e.entryDate)}</span>
                 {e.docNumber && <span className="truncate font-mono text-[11px] text-gray-500">{e.docNumber}</span>}
                 <span className="ml-auto shrink-0 text-xs font-semibold tabular-nums text-red-300">
-                    {fmtZl(round2(qty * unit))} zł
+                    {fmtZl(round2(qty * unit))} {currencySymbol()}
                 </span>
             </div>
             <div className="text-[11px] tabular-nums text-gray-400">
-                {fmtQty(qty)} {node.unit} × {fmtZl(unit)} zł
+                {fmtQty(qty)} {node.unit} × {fmtZl(unit)} {currencySymbol()}
             </div>
             <div className="break-words text-[11px] text-gray-500">{shortCompanyName(e.supplier?.name) || 'oferent nieznany'}</div>
             {produkt && <div className="break-words text-[11px] text-gray-500">{produkt}</div>}
@@ -2145,7 +2201,7 @@ const ProposalLine = ({ p }) => {
                 {p.isSelected && <Tag klasa="border-emerald-400/30 text-emerald-300">Wybrana</Tag>}
                 {p.isRejected && <Tag klasa="border-white/10 text-gray-500">Odrzucona</Tag>}
                 <span className="ml-auto text-xs font-semibold tabular-nums text-gray-200">
-                    {p.priceNetto != null ? `${fmtZl(p.priceNetto)} zł` : '—'}
+                    {p.priceNetto != null ? `${fmtZl(p.priceNetto)} ${currencySymbol()}` : '—'}
                 </span>
             </div>
             <div className="mt-1 break-words text-xs text-gray-300">{p.productName || '—'}</div>
@@ -2157,7 +2213,7 @@ const ProposalLine = ({ p }) => {
             </div>
             {p.availability && <div className="break-words text-[11px] text-gray-500">dostępność: {p.availability}</div>}
             {cenaZakupu != null && cenaZakupu !== p.priceNetto && (
-                <div className="text-[11px] tabular-nums text-red-300">cena zakupu: {fmtZl(cenaZakupu)} zł</div>
+                <div className="text-[11px] tabular-nums text-red-300">cena zakupu: {fmtZl(cenaZakupu)} {currencySymbol()}</div>
             )}
             {p.sourceUrl && <div className="mt-0.5 text-[11px]"><CardLink url={p.sourceUrl} /></div>}
         </div>
@@ -2204,16 +2260,16 @@ function WynikZamowienia({ c }) {
         <div className="mb-3 rounded border border-white/[.08] bg-white/[.02] p-2.5">
             <div className="mb-2 flex flex-wrap gap-2.5">
                 {kafle.map(({ k, label, note, color }) => (
-                    <Tile key={k} label={label} value={`${fmtZl(s[k])} zł`} color={color} note={note} />
+                    <Tile key={k} label={label} value={`${fmtZl(s[k])} ${currencySymbol()}`} color={color} note={note} />
                 ))}
-                <Tile label="Koszt całkowity" value={`${fmtZl(koszt)} zł`} color="text-red-400" note="suma trzech statusów" />
-                <Tile label="Plan wydatków" value={`${fmtZl(c.planWydatkow)} zł`} color="text-orange-400" note={`budżet ${fmtZl(c.plan)} zł + pozaplanowe ${fmtZl(s.UNPLANNED)} zł`} />
-                <Tile label="Przychód z oferty" value={`${fmtZl(c.przychod)} zł`} color="text-emerald-200"
+                <Tile label="Koszt całkowity" value={`${fmtZl(koszt)} ${currencySymbol()}`} color="text-red-400" note="suma trzech statusów" />
+                <Tile label="Plan wydatków" value={`${fmtZl(c.planWydatkow)} ${currencySymbol()}`} color="text-orange-400" note={`budżet ${fmtZl(c.plan)} ${currencySymbol()} + pozaplanowe ${fmtZl(s.UNPLANNED)} ${currencySymbol()}`} />
+                <Tile label="Przychód z oferty" value={`${fmtZl(c.przychod)} ${currencySymbol()}`} color="text-emerald-200"
                     note={c.przychod > 0
-                        ? `wynik planowany ${fmtZl(wynikPlan)} zł · ${fmtPct(marzaPlan)}${c.przychodPoAkceptacji > 0 ? ` · bez ${fmtZl(c.przychodPoAkceptacji)} zł z pozycji dodanych po akceptacji` : ''}`
+                        ? `wynik planowany ${fmtZl(wynikPlan)} ${currencySymbol()} · ${fmtPct(marzaPlan)}${c.przychodPoAkceptacji > 0 ? ` · bez ${fmtZl(c.przychodPoAkceptacji)} {currencySymbol()} z pozycji dodanych po akceptacji` : ''}`
                         : 'brak cen ofertowych w planie'} />
-                <Tile label="Wynik" value={`${fmtZl(wynik)} zł`} color={wynik < 0 ? 'text-red-400' : 'text-emerald-400'}
-                    note={marza != null ? `${fmtPct(marza)} przychodu · ${zmiana >= 0 ? '+' : ''}${fmtZl(zmiana)} zł wobec planu` : 'brak przychodu z oferty'} />
+                <Tile label="Wynik" value={`${fmtZl(wynik)} ${currencySymbol()}`} color={wynik < 0 ? 'text-red-400' : 'text-emerald-400'}
+                    note={marza != null ? `${fmtPct(marza)} przychodu · ${zmiana >= 0 ? '+' : ''}${fmtZl(zmiana)} ${currencySymbol()} wobec planu` : 'brak przychodu z oferty'} />
             </div>
             <div className="flex h-3 overflow-hidden rounded-sm bg-white/[.06]" title="Przychód z oferty podzielony na koszty wg statusów i wynik">
                 <i className="block h-full bg-orange-400/80" style={{ width: szer(s.PLANNED) }} />
@@ -2248,7 +2304,7 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec, kpiOpen
                 <button onClick={onToggleKpi} className="rounded border border-white/[.14] px-2 py-0.5 text-[11px] text-gray-400 hover:text-gray-200">
                     {kpiOpen
                         ? 'Ukryj analizę zamówienia'
-                        : `Analiza zamówienia — wynik ${fmtZl(round2(c.przychod - c.real))} zł · ${fmtZl(c.plan)} zł wyceny · ${fmtPct(pct(poniesione, c.plan))} pokrycia zakupami`}
+                        : `Analiza zamówienia — wynik ${fmtZl(round2(c.przychod - c.real))} ${currencySymbol()} · ${fmtZl(c.plan)} ${currencySymbol()} wyceny · ${fmtPct(pct(poniesione, c.plan))} pokrycia zakupami`}
                 </button>
                 <button onClick={onToggle} className="rounded border border-white/[.14] px-2 py-0.5 text-[11px] text-gray-400 hover:text-gray-200">
                     {open ? 'Ukryj realizację zakresów' : `Realizacja ${a.galezie.length} zakresów głównych (${c.pozycji} pozycji) — plan wobec wykonania`}
@@ -2256,7 +2312,7 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec, kpiOpen
                 <button onClick={onToggleExec} className="rounded border border-white/[.14] px-2 py-0.5 text-[11px] text-gray-400 hover:text-gray-200">
                     {execOpen
                         ? 'Ukryj bilans domkniętych'
-                        : `Bilans domkniętych pozycji — ${z.lacznie.pozycji} poz. na ${fmtZl(z.lacznie.plan)} zł`}
+                        : `Bilans domkniętych pozycji — ${z.lacznie.pozycji} poz. na ${fmtZl(z.lacznie.plan)} ${currencySymbol()}`}
                 </button>
             </div>
 
@@ -2267,7 +2323,7 @@ function Analiza({ a, orderName, open, onToggle, execOpen, onToggleExec, kpiOpen
                     </div>
                     <WynikZamowienia c={c} />
                     <div className="flex flex-wrap gap-4">
-                        <Meter label="Pokrycie wyceny zakupami" done={poniesione} plan={c.plan} left={`${fmtZl(poniesione)} zł`} right={`${fmtZl(c.plan)} zł`} />
+                        <Meter label="Pokrycie wyceny zakupami" done={poniesione} plan={c.plan} left={`${fmtZl(poniesione)} ${currencySymbol()}`} right={`${fmtZl(c.plan)} ${currencySymbol()}`} />
                         <Meter label="Dni wykonane" done={c.dniWyk} plan={c.dniPlan} left={`${fmtQty(c.dniWyk)} dni wykonanych`} right={`${fmtQty(c.dniPlan)} dni w planie`} />
                         <Meter label="Pozycje ruszone" done={c.zRealizacja} plan={c.pozycji} left={`${c.zRealizacja} pozycji z zakupami`} right={`${c.pozycji} pozycji`} />
                     </div>

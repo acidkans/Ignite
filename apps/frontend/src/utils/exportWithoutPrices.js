@@ -10,13 +10,13 @@
 
 // @anchor money-header-re
 // Nagłówek/etykieta niosąca wartość pieniężną lub narzut/rabat.
-export const MONEY_HEADER_RE = /(cena|ceny|cenow|koszt|narzut|marż|marz|rabat|wartoś|wartos|zysk|przychod|przychód|kwota|budżet|budzet|\bPLN\b|netto|brutto|cash\s*flow)/i;
+export const MONEY_HEADER_RE = /(cena|ceny|cenow|koszt|narzut|marż|marz|rabat|wartoś|wartos|zysk|przychod|przychód|kwota|budżet|budzet|\bPLN\b|\bEUR\b|netto|brutto|cash\s*flow)/i;
 
 // Etykieta wiersza sumującego (bez słowa „cena/koszt", a i tak niosącego wartość).
 const TOTAL_LABEL_RE = /(razem|suma|łącznie|lacznie|ogółem|ogolem)/i;
 
 // Komórka „liczbowa" w HTML: same cyfry/separatory/procent/minus, min. jedna cyfra.
-const NUMERIC_TEXT_RE = /^[\s \d.,%+\-–—()]*(PLN|zł|EUR|USD)?\s*$/i;
+const NUMERIC_TEXT_RE = /^[\s \d.,%+\-–—()]*(PLN|zł|EUR|€|USD)?\s*$/i;
 
 // Wiersz etykieta→wartość (podsumowania, pola rabatu) ma niewiele komórek; szeroki
 // wiersz danych nie jest czyszczony po etykiecie, tylko po kolumnie.

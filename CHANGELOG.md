@@ -1,3 +1,23 @@
+## 2026-11-10 — feat(waluta): waluta zamówienia PLN/EUR i zakup w walucie obcej przeliczany kursem NBP (v2026.11.10.2133)
+
+### schema.prisma
+- dodano pole `schema-pole` `ProcessNode.currency` (String, domyślnie `PLN`) — waluta całego zamówienia; pole globalne, nie wersji (poza `cloneVersionData`)
+- dodano pola `schema-pole` `LeafActual.currency`, `unitCostOriginal`, `exchangeRate`, `rateDate` — oryginał zakupu w walucie faktury i kurs, po którym wszedł do sum; migracja `20261110220000_order_currency`
+
+### architektura / API
+- dodano `back-endpoint` `GET /process-tree/:id/currency` i `PATCH /process-tree/:id/currency` {currency: PLN | EUR} — znacznik w zakładce „Informacje o zamówieniu”, kwot nie przelicza
+- dodano `back-endpoint` `GET /exchange-rates/cross?from&to&date` — kurs NBP (tabela A) z dnia roboczego przed datą, kurs krzyżowy przez PLN
+- `back-endpoint` `POST/PATCH /leaf-actuals` przyjmują `currency`, `unitCostOriginal`, `exchangeRate` (ręczny); `unitCost` liczy serwer w walucie zamówienia
+- frontend: symbol waluty w etykietach, nagłówkach kolumn, eksportach PDF i Excel bierze się z `ui-funkcja` `currencySymbol` / `currencyCode` (`utils/currency.js`) zamiast zaszytego „zł” / „PLN”; ceny ofert dostawców przeliczane na walutę zamówienia (`toOrderCurrency`)
+
+### słownik
+- dodano `ProcessNode.currency`, `LeafActual.currency/unitCostOriginal/exchangeRate/rateDate`, `fetchNbpRateBefore`, `getCrossRate`, `currencyFields`, `ORDER_CURRENCIES`, endpointy waluty, moduł `utils/currency.js`, `CurrencyPill`, `useRatePreview`, `ConvertedNote`
+
+### wytyczne
+- `schema-pole` `LeafActual.unitCost` — zawsze w walucie zamówienia; oryginał faktury w `unitCostOriginal` + `currency`, kurs w `exchangeRate` (`rateDate` NULL = kurs ręczny)
+- `schema-pole` `ProcessNode.currency` — zmiana waluty nie przelicza kwot; wszystkie wpisy zamówienia uznaje się za wpisane w wybranej walucie
+- `ui-funkcja` `currencySymbol` — nowa kwota w UI/eksporcie zamówienia dostaje symbol z `utils/currency.js`, nigdy zaszyte „zł” / „PLN” (wyjątek: globalny katalog materiałów i QuickQuote, które są w PLN)
+
 ## 2026-11-10 — feat(realizacja): odpowiedź w czacie spod pytania Q&A widoczna pod tym pytaniem (v2026.11.10.0957)
 
 ### schema.prisma

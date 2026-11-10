@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import ExcelJS from 'exceljs';
 import { Lock, FileSpreadsheet, RefreshCw } from 'lucide-react';
 import { isRejectedPlanNode, applyGroupMultipliers, isCostNode } from './wbsConstants';
+import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt } from '../../../utils/currency';
 
 const API_URL = '/api';
 
@@ -37,6 +38,7 @@ const calcOffer = (n) => {
 // + marża plan → efektywna z cen ofertowych zamrożonych w baseline).
 // Liczby porównania wyłącznie z GET /orders/:id/comparison.
 export default function BudgetModesPanel({ nodeId, mode, acceptance }) {
+    useOrderCurrency(); // przerysowanie po wczytaniu/zmianie waluty zamówienia
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     const headers = useMemo(() => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }), [token]);
 
@@ -344,10 +346,10 @@ export default function BudgetModesPanel({ nodeId, mode, acceptance }) {
     return (
         <div>
             <div className="flex items-center gap-3 px-3 py-2 border-b border-white/5">
-                <span className="text-[10px] text-gray-500">Wycena <span className="font-mono text-orange-300">{zl(cmp.kpi.baselineSum)} zł</span></span>
-                <span className="text-[10px] text-gray-500" title="Suma wyłącznie pozycji, które mają już produkt zakupu">Zakup <span className="font-mono text-red-300">{zl(cmp.kpi.currentSum)} zł</span></span>
+                <span className="text-[10px] text-gray-500">Wycena <span className="font-mono text-orange-300">{zl(cmp.kpi.baselineSum)} {currencySymbol()}</span></span>
+                <span className="text-[10px] text-gray-500" title="Suma wyłącznie pozycji, które mają już produkt zakupu">Zakup <span className="font-mono text-red-300">{zl(cmp.kpi.currentSum)} {currencySymbol()}</span></span>
                 <span className={`text-[10px] font-bold font-mono ${cmp.kpi.deltaSum > 0 ? 'text-red-300' : 'text-teal-300'}`}>
-                    Δ {cmp.kpi.deltaSum >= 0 ? '+' : ''}{zl(cmp.kpi.deltaSum)} zł{cmp.kpi.deltaPct != null ? ` (${cmp.kpi.deltaPct >= 0 ? '+' : ''}${cmp.kpi.deltaPct.toFixed(1)}%)` : ''}
+                    Δ {cmp.kpi.deltaSum >= 0 ? '+' : ''}{zl(cmp.kpi.deltaSum)} {currencySymbol()}{cmp.kpi.deltaPct != null ? ` (${cmp.kpi.deltaPct >= 0 ? '+' : ''}${cmp.kpi.deltaPct.toFixed(1)}%)` : ''}
                 </span>
                 <button onClick={fetchAll} title="Odśwież" className="ml-auto p-1 text-gray-500 hover:text-white"><RefreshCw size={11} /></button>
                 <button onClick={exportComparison} title="Eksport Excel (żywe formuły)"

@@ -9,6 +9,7 @@ import OrderTeamModal from './OrderTeamModal';
 import NewContactModal from './NewContactModal';
 import { shortCompanyName } from './wbs/realizationShared';
 import { fuzzyMatch } from './trainings/trainingsShared';
+import { ORDER_CURRENCIES, useOrderCurrency, saveOrderCurrency, loadOrderCurrency } from '../../utils/currency';
 
 function countWorkingDays(startStr, endStr) {
     if (!startStr || !endStr) return null;
@@ -435,6 +436,17 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
     // przy każdym kontakcie widać, czy jest w zespole (widzi zamówienie), czy jest tylko wpisem.
     const [orderTeam, setOrderTeam] = useState(null);
     const [teamModalOpen, setTeamModalOpen] = useState(false);
+
+    // @anchor requirements-order-currency — znacznik waluty zamówienia (PLN | EUR). Kwot nie przelicza:
+    // wszystkie wpisy zamówienia uznajemy za wpisane w wybranej walucie.
+    const orderCurrency = useOrderCurrency();
+    const [currencyError, setCurrencyError] = useState(null);
+    useEffect(() => { if (nodeId) loadOrderCurrency(nodeId); }, [nodeId]);
+    const changeCurrency = async (cur) => {
+        if (cur === orderCurrency) return;
+        setCurrencyError(null);
+        try { await saveOrderCurrency(nodeId, cur); } catch (e) { setCurrencyError(e.message); }
+    };
     const loadOrderTeam = useCallback(async () => {
         if (!nodeId) return;
         try {
@@ -662,6 +674,21 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
             )}
             {/* Top action bar */}
             <div className="flex justify-end items-center gap-3">
+                <div className="mr-auto flex items-center gap-2" title="Waluta całego zamówienia: wycena, budżet, zakupy, eksporty. Kwoty nie są przeliczane — zmiana tylko oznacza, w jakiej walucie są wpisane.">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Waluta zamówienia</span>
+                    <div className="flex rounded-lg border border-white/10 overflow-hidden">
+                        {ORDER_CURRENCIES.map(cur => (
+                            <button
+                                key={cur}
+                                onClick={() => changeCurrency(cur)}
+                                className={`px-2.5 py-1 text-[10px] font-bold tracking-widest transition-all ${orderCurrency === cur ? 'bg-amber-500/20 text-amber-300' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}
+                            >
+                                {cur}
+                            </button>
+                        ))}
+                    </div>
+                    {currencyError && <span className="text-[10px] text-red-400">{currencyError}</span>}
+                </div>
                 <button
                     onClick={() => setPendingExport({ title: 'Informacje o zamówieniu (PDF)', defaultFilename: `${String(orderName || 'zamowienie').trim().replace(/[\\/:*?"<>|\s]+/g, '_') || 'zamowienie'}_informacje.pdf`, makeArtifact: () => buildRequirementsArtifact({ form, countdown, workingDays, orderName }) })}
                     className="flex items-center gap-1.5 px-3 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 rounded-lg text-red-300 text-[10px] font-bold uppercase tracking-widest transition-all"

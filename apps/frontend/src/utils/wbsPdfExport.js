@@ -1,4 +1,5 @@
 import { fmtPLN, isCostNode } from '../components/shared/wbs/wbsConstants';
+import { currencyCode } from './currency';
 
 export const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -210,7 +211,7 @@ export function buildWbsHtmlTable(wbsData, depth, opts = {}) {
         const stratTd = (e) => hasStrategy ? `<td style="${tdS}white-space:pre-wrap;">${esc(e.strategy || '')}</td>` : '';
         const rows = entries.map(e => `<tr><td style="${tdS}">${esc(e.name)}</td>${stratTd(e)}<td style="${tdRNarrow}">${fmtPLN(e.total)}</td></tr>`).join('');
         const sumColspan = hasStrategy ? ' colspan="2"' : '';
-        return `<div class="wbs-offer-table"><table style="${tblStyle}width:auto;"><thead><tr><th style="${thS}">Zakresy</th>${stratTh}<th style="${thNarrow}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}<tr><td${sumColspan} style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumRNarrow}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table></div>`;
+        return `<div class="wbs-offer-table"><table style="${tblStyle}width:auto;"><thead><tr><th style="${thS}">Zakresy</th>${stratTh}<th style="${thNarrow}">Cena ofertowa (${currencyCode()})</th></tr></thead><tbody>${rows}<tr><td${sumColspan} style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumRNarrow}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table></div>`;
     }
 
     if (depth === 2) {
@@ -236,7 +237,7 @@ export function buildWbsHtmlTable(wbsData, depth, opts = {}) {
                 rows += `<tr><td style="${tdS}">${esc(g1.name)}</td><td style="${tdS}">${esc(children[i].name)}</td><td style="${tdR}">${fmtPLN(children[i].total)}</td></tr>`;
             }
         }
-        return `<div class="wbs-offer-table"><table style="${tblStyle}"><thead><tr><th style="${thS}">Zakresy</th><th style="${thS}">Składowe zakresów</th><th style="${thS}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}<tr><td colspan="2" style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumR}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table></div>`;
+        return `<div class="wbs-offer-table"><table style="${tblStyle}"><thead><tr><th style="${thS}">Zakresy</th><th style="${thS}">Składowe zakresów</th><th style="${thS}">Cena ofertowa (${currencyCode()})</th></tr></thead><tbody>${rows}<tr><td colspan="2" style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumR}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table></div>`;
     }
 
     if (depth === 3) {
@@ -282,7 +283,7 @@ export function buildWbsHtmlTable(wbsData, depth, opts = {}) {
                 }
             }
         }
-        return `<div class="wbs-offer-table"><table style="${tblStyle}"><thead><tr><th style="${thS}">Zakresy</th><th style="${thS}">Składowe zakresów</th><th style="${thS}">Pozycje</th><th style="${thS}">Ilość</th><th style="${thS}">J.m.</th><th style="${thS}">Cena jedn. (PLN)</th><th style="${thS}">Cena ofertowa (PLN)</th></tr></thead><tbody>${rows}<tr><td colspan="6" style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumR}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table></div>`;
+        return `<div class="wbs-offer-table"><table style="${tblStyle}"><thead><tr><th style="${thS}">Zakresy</th><th style="${thS}">Składowe zakresów</th><th style="${thS}">Pozycje</th><th style="${thS}">Ilość</th><th style="${thS}">J.m.</th><th style="${thS}">Cena jedn. (${currencyCode()})</th><th style="${thS}">Cena ofertowa (${currencyCode()})</th></tr></thead><tbody>${rows}<tr><td colspan="6" style="${sumS}text-align:right;"><strong>Razem</strong></td><td style="${sumR}"><strong>${fmtPLN(total)}</strong></td></tr></tbody></table></div>`;
     }
 
     return '';

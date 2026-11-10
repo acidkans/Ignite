@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditAction } from '../audit/audit.types';
 import { isOpenLeafType } from '../common/leaf-types.util';
+import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 
 // @anchor leaf-actuals-user — kształt `req.user` z JwtStrategy, tyle ile potrzeba do uprawnień
 export interface ActualsUser {
@@ -27,6 +28,11 @@ export interface LeafActualInput {
     scope?: string | null;
     // @anchor leaf-actual-input-status — PLANNED / UNPLANNED / FORECAST (`LeafActual.status`)
     status?: string;
+    // @anchor leaf-actual-input-currency — waluta zakupu, gdy inna niż waluta zamówienia; wtedy
+    // kwotę niesie `unitCostOriginal`, a `unitCost` liczy serwer kursem NBP (albo `exchangeRate` z ręki)
+    currency?: string | null;
+    unitCostOriginal?: number | string | null;
+    exchangeRate?: number | string | null;
 }
 
 // @anchor leaf-actual-statuses — dozwolone wartości `LeafActual.status`; nieznana wartość to 400,
@@ -48,6 +54,7 @@ const ENTRY_SELECT = {
     id: true, wbsRootId: true, entryDate: true, qty: true, unitCost: true,
     comment: true, docNumber: true, manufacturer: true, model: true, ean: true, scope: true,
     status: true, createdAt: true,
+    currency: true, unitCostOriginal: true, exchangeRate: true, rateDate: true,
     supplier: { select: { id: true, name: true } },
     author: { select: { id: true, firstName: true, lastName: true, email: true } },
 } as const;
@@ -68,7 +75,40 @@ const num = (v: unknown): number | null => {
 export class LeafActualsService {
     private readonly logger = new Logger(LeafActualsService.name);
 
-    constructor(private prisma: PrismaService) { }
+    constructor(private prisma: PrismaService, private exchangeRates: ExchangeRatesService) { }
+
+    // @anchor leaf-actuals-currency-fields — pola walutowe wpisu. Waluta = waluta zamówienia (albo pusta)
+    // → wpis zwykły, `unitCost` z formularza. Inna waluta → `unitCost` = oryginał × kurs (NBP z dnia
+    // roboczego przed datą zdarzenia, chyba że użytkownik podał kurs z faktury — wtedy `rateDate` = NULL).
+    private async currencyFields(
+        nodeId: string,
+        cur: string | null,
+        original: number | null,
+        manualRate: number | null,
+        entryDate: Date,
+    ): Promise<{ currency: string | null; unitCostOriginal: number | null; exchangeRate: number | null; rateDate: Date | null; unitCost?: number }> {
+        const order = await this.prisma.processNode.findUnique({ where: { id: nodeId }, select: { currency: true } });
+        const orderCur = (order?.currency || 'PLN').toUpperCase();
+        const code = (cur || '').trim().toUpperCase();
+        if (!code || code === orderCur) return { currency: null, unitCostOriginal: null, exchangeRate: null, rateDate: null };
+        if (!/^[A-Z]{3}$/.test(code)) throw new BadRequestException(`Nieznana waluta: ${cur}`);
+        if (original == null) throw new BadRequestException('Podaj koszt jednostkowy w walucie zakupu');
+        let rate = manualRate != null && manualRate > 0 ? manualRate : null;
+        let rateDate: Date | null = null;
+        if (rate == null) {
+            const r = await this.exchangeRates.getCrossRate(code, orderCur, entryDate);
+            if (!r) throw new BadRequestException(`Brak kursu NBP ${code}/${orderCur} — wpisz kurs ręcznie`);
+            rate = r.rate;
+            rateDate = new Date(`${r.date}T00:00:00Z`);
+        }
+        return {
+            currency: code,
+            unitCostOriginal: original,
+            exchangeRate: rate,
+            rateDate,
+            unitCost: Math.round(original * rate * 100) / 100,
+        };
+    }
 
     private isManager(user?: ActualsUser) {
         return !!user?.roles?.some((r) => ['ADMIN', 'MANAGER'].includes(r));
@@ -140,16 +180,23 @@ export class LeafActualsService {
         if (!input?.wbsNodeId) throw new BadRequestException('wbsNodeId wymagane');
         const qty = num(input.qty);
         if (qty == null || qty <= 0) throw new BadRequestException('Ilość musi być większa od zera');
-        const unitCost = num(input.unitCost) ?? 0;
-
         const { rootId, nodeId, leaf } = await this.rootOfWbsNode(input.wbsNodeId);
+        const entryDate = input.entryDate ? new Date(input.entryDate) : new Date();
+        const waluta = await this.currencyFields(
+            nodeId, input.currency ?? null, num(input.unitCostOriginal) ?? num(input.unitCost), num(input.exchangeRate), entryDate,
+        );
+        const unitCost = waluta.unitCost ?? num(input.unitCost) ?? 0;
         const created = await this.prisma.leafActual.create({
             data: {
                 wbsRootId: rootId,
                 nodeId,
-                entryDate: input.entryDate ? new Date(input.entryDate) : new Date(),
+                entryDate,
                 qty,
                 unitCost,
+                currency: waluta.currency,
+                unitCostOriginal: waluta.unitCostOriginal,
+                exchangeRate: waluta.exchangeRate,
+                rateDate: waluta.rateDate,
                 comment: input.comment?.trim() || null,
                 docNumber: input.docNumber?.trim() || null,
                 supplierId: input.supplierId || null,
@@ -168,7 +215,7 @@ export class LeafActualsService {
                 action: AuditAction.CREATE,
                 entity: 'LeafActual',
                 entityId: created.id,
-                diff: { wbsNodeId: input.wbsNodeId, leaf: leaf.name, qty, unitCost, comment: created.comment, status: created.status },
+                diff: { wbsNodeId: input.wbsNodeId, leaf: leaf.name, qty, unitCost, comment: created.comment, status: created.status, currency: created.currency, unitCostOriginal: created.unitCostOriginal, exchangeRate: created.exchangeRate },
                 userId: user?.userId ?? null,
             },
         });
@@ -188,13 +235,36 @@ export class LeafActualsService {
         if (input.qty !== undefined && (qty == null || qty <= 0)) {
             throw new BadRequestException('Ilość musi być większa od zera');
         }
-        const unitCost = num(input.unitCost);
+        let unitCost = num(input.unitCost);
+
+        // Waluta przeliczana od nowa, gdy zmienia się cokolwiek, od czego zależy: waluta, kwota
+        // oryginalna, kurs ręczny albo data zdarzenia (inna data = inny kurs NBP).
+        const dotykaWaluty = input.currency !== undefined || input.unitCostOriginal !== undefined
+            || input.exchangeRate !== undefined || (input.entryDate !== undefined && !!existing.currency);
+        let walutaData: Record<string, unknown> = {};
+        if (!dotykaWaluty && existing.currency && unitCost != null) {
+            // Nadpisanie kosztu w walucie zamówienia na wpisie obcym = rezygnacja z przeliczenia;
+            // inaczej oryginał i kurs zostałyby przy kwocie, która z nich już nie wynika.
+            walutaData = { currency: null, unitCostOriginal: null, exchangeRate: null, rateDate: null };
+        } else if (dotykaWaluty) {
+            const cur = input.currency !== undefined ? input.currency : existing.currency;
+            const entryDate = input.entryDate !== undefined ? new Date(input.entryDate) : existing.entryDate;
+            const original = input.unitCostOriginal !== undefined ? num(input.unitCostOriginal)
+                : (existing.unitCostOriginal ?? (cur ? unitCost : null));
+            // Ręczny kurs (z faktury, `rateDate` = NULL) zostaje przy zmianie daty; NBP-owy liczy się od nowa.
+            const manual = input.exchangeRate !== undefined ? num(input.exchangeRate)
+                : (existing.currency && existing.rateDate == null && input.currency === undefined ? existing.exchangeRate : null);
+            const w = await this.currencyFields(existing.nodeId, cur ?? null, original ?? unitCost, manual, entryDate);
+            walutaData = { currency: w.currency, unitCostOriginal: w.unitCostOriginal, exchangeRate: w.exchangeRate, rateDate: w.rateDate };
+            if (w.unitCost != null) unitCost = w.unitCost;
+        }
 
         const updated = await this.prisma.leafActual.update({
             where: { id },
             data: {
                 ...(qty != null ? { qty } : {}),
                 ...(unitCost != null ? { unitCost } : {}),
+                ...walutaData,
                 ...(input.entryDate !== undefined ? { entryDate: new Date(input.entryDate) } : {}),
                 ...(input.comment !== undefined ? { comment: input.comment?.trim() || null } : {}),
                 ...(input.docNumber !== undefined ? { docNumber: input.docNumber?.trim() || null } : {}),
@@ -214,8 +284,8 @@ export class LeafActualsService {
                 entity: 'LeafActual',
                 entityId: id,
                 diff: {
-                    przed: { qty: existing.qty, unitCost: existing.unitCost, comment: existing.comment, status: existing.status },
-                    po: { qty: updated.qty, unitCost: updated.unitCost, comment: updated.comment, status: updated.status },
+                    przed: { qty: existing.qty, unitCost: existing.unitCost, comment: existing.comment, status: existing.status, currency: existing.currency, unitCostOriginal: existing.unitCostOriginal, exchangeRate: existing.exchangeRate },
+                    po: { qty: updated.qty, unitCost: updated.unitCost, comment: updated.comment, status: updated.status, currency: updated.currency, unitCostOriginal: updated.unitCostOriginal, exchangeRate: updated.exchangeRate },
                 },
                 userId: user?.userId ?? null,
             },

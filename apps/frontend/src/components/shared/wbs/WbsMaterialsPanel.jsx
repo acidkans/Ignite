@@ -15,6 +15,7 @@ import { guardSnapshotEdit } from '../SnapshotEditGuard';
 import { guardOfferEdit, requestOfferUnlock, offerLockInputProps } from '../OfferLockGuard';
 import AutoResizeTextarea from './AutoResizeTextarea';
 import { composeProposalName } from './proposalName';
+import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt, toOrderCurrency } from '../../../utils/currency';
 import {
     TYPE_META, OPEN_LEAF_TYPES, STATUS_META, authHeaders, flattenWbsNodes, getParentPath,
     flattenReq, wbsRootOf, purchaseUnitOf, REAL_STATE, realizationOf, fmtQty, fmtZl, fmtDate,
@@ -563,8 +564,14 @@ function ProposalsSection({ req, token, onRefresh, onPatch, materialDb, onPropag
 
 // ─── OfferPartsModal ──────────────────────────────────────────────────────────
 
-// Cena jedn. pozycji w PLN — waluta obca idzie przez przeliczony `priceNettoPln`
-const offerPosPricePln = (pos) => (pos?.priceNettoPln ?? pos?.priceNetto ?? null);
+// Cena jedn. pozycji oferty w walucie zamówienia: oferta w tej samej walucie → cena oryginalna;
+// inaczej przez przeliczony do PLN `priceNettoPln` (parser, kurs NBP) i bieżący kurs waluty zamówienia.
+const offerPosPricePln = (pos) => {
+    const posCur = (pos?.currency || 'PLN').toUpperCase();
+    if (pos?.priceNetto != null && posCur === currencyCode()) return pos.priceNetto;
+    const pln = pos?.priceNettoPln ?? pos?.priceNetto ?? null;
+    return pln == null ? null : toOrderCurrency(pln, 'PLN');
+};
 // Wartość całej oferty: suma(cena x ilość) po pozycjach z ceną
 const offerWholeTotal = (offer) => (offer.positions || [])
     .filter(p => offerPosPricePln(p) != null)
@@ -648,7 +655,7 @@ function OfferPartsModal({ offers, initialParts, reqQty, onSave, onClose }) {
                                     <label className="flex items-center gap-1.5 text-[11px] text-gray-300 cursor-pointer shrink-0">
                                         <input type="checkbox" checked={allKey in sel} onChange={() => toggle(allKey, wholeDefaultQty)} className="accent-amber-500" />
                                         Cała oferta
-                                        <span className="font-mono text-amber-300">{offerWholeTotal(offer).toFixed(2)} zł</span>
+                                        <span className="font-mono text-amber-300">{offerWholeTotal(offer).toFixed(2)} {currencySymbol()}</span>
                                     </label>
                                     {qtyInput(allKey)}
                                 </div>
@@ -661,9 +668,7 @@ function OfferPartsModal({ offers, initialParts, reqQty, onSave, onClose }) {
                                             <span className="flex-1 truncate text-gray-200" title={pos.name || pos.description}>{pos.name || pos.description || '—'}</span>
                                             <span className="text-gray-500 text-[10px] shrink-0">{pos.quantity ?? 1} {pos.unit || ''}</span>
                                             <span className="text-amber-300 whitespace-nowrap font-mono text-[10px] shrink-0 w-24 text-right">
-                                                {pos.priceNettoPln != null
-                                                    ? `${Number(pos.priceNettoPln).toFixed(2)} zł`
-                                                    : `${Number(pos.priceNetto).toFixed(2)} ${pos.currency || 'zł'}`}
+                                                {`${Number(offerPosPricePln(pos)).toFixed(2)} ${currencySymbol()}`}
                                             </span>
                                             {qtyInput(k)}
                                         </label>
@@ -676,7 +681,7 @@ function OfferPartsModal({ offers, initialParts, reqQty, onSave, onClose }) {
                 <div className="flex items-center gap-3 px-4 py-3 border-t border-white/10">
                     <div className="flex-1 text-xs text-gray-400">
                         {rows.length > 0
-                            ? <>Części: {rows.length} · koszt jedn.: <span className="font-mono text-amber-300">{sum.toFixed(2)} zł</span></>
+                            ? <>Części: {rows.length} · koszt jedn.: <span className="font-mono text-amber-300">{sum.toFixed(2)} {currencySymbol()}</span></>
                             : 'Nic nie zaznaczono'}
                         {invalid && <span className="ml-2 text-red-400">ilość musi być &gt; 0</span>}
                         {error && <span className="ml-2 text-red-400">{error}</span>}
@@ -1132,7 +1137,7 @@ export function ProductCard({ card, wbsNode, token, materialDb, offers, onRefres
                             <div>
                                 <div className="flex items-center gap-1">
                                     <div className="flex-1 bg-black/30 border border-amber-500/30 rounded px-2 py-1.5 text-xs text-amber-300 font-mono truncate">
-                                        {offerSnap.priceNetto != null ? `${Number(offerSnap.priceNetto).toFixed(2)} zł` : '—'}
+                                        {offerSnap.priceNetto != null ? `${Number(offerSnap.priceNetto).toFixed(2)} ${currencySymbol()}` : '—'}
                                     </div>
                                     {!readOnly && offers?.length > 0 && (
                                         <button onClick={() => { onRefreshOffers?.(); setOfferPicker(true); }} title="Zmień skład z oferty (pozycje / części / cała oferta)" className="p-1 text-gray-600 hover:text-amber-400 transition-colors shrink-0">
@@ -1874,8 +1879,8 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
                         {/* Praca i usługi nie mają karty — plan siedzi wtedy wprost na liściu,
                             a Δ wartość i tak z niego liczy, więc kolumna musi go pokazać */}
                         {card?.priceNetto != null
-                            ? `${fmtZl(card.priceNetto)} zł`
-                            : (!card && node.unitCost ? `${fmtZl(node.unitCost)} zł` : '—')}
+                            ? `${fmtZl(card.priceNetto)} ${currencySymbol()}`
+                            : (!card && node.unitCost ? `${fmtZl(node.unitCost)} ${currencySymbol()}` : '—')}
                         {offerLocked && <Lock size={9} className="inline-block ml-1 -mt-0.5 text-amber-400/60" />}
                     </span>
                 )}
@@ -1889,7 +1894,7 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
                 return (
                     <td className="px-3 py-2.5 text-sm font-mono whitespace-nowrap text-right">
                         <span className="text-red-400" title={fromEntries != null && realization.mixedPrices ? 'Średnia ważona z wpisów realizacji' : undefined}>
-                            {pu != null ? `${fmtZl(pu)} zł` : '—'}
+                            {pu != null ? `${fmtZl(pu)} ${currencySymbol()}` : '—'}
                             {fromEntries != null && realization.mixedPrices && <span className="text-[10px] text-gray-500 ml-1">śr.</span>}
                         </span>
                     </td>
@@ -1905,7 +1910,7 @@ function WbsMaterialRow({ node, card, accepted = false, offerLocked = false, isE
                 const cls = d == null ? 'text-gray-600' : d > 0.005 ? 'text-red-300' : d < -0.005 ? 'text-teal-300' : 'text-gray-500';
                 return (
                     <td className="px-3 py-2.5 text-sm font-mono whitespace-nowrap text-right">
-                        <span className={cls}>{d == null ? '—' : `${d > 0 ? '+' : ''}${fmtZl(d)} zł`}</span>
+                        <span className={cls}>{d == null ? '—' : `${d > 0 ? '+' : ''}${fmtZl(d)} ${currencySymbol()}`}</span>
                     </td>
                 );
             })()}
@@ -2151,7 +2156,7 @@ export function PurchasesBar({ node, realization, colSpan, open, onToggle, readO
                         <span className="font-mono text-gray-500">/ {fmtQty(realization.plan)} {node.unit || 'szt'}</span>
                         <span className="text-gray-500">{entriesLabel(realization.entries.length)}</span>
                         {realization.value > 0 && (
-                            <span className="text-gray-400">wartość <span className="font-mono text-red-400">{fmtZl(realization.value)} zł</span></span>
+                            <span className="text-gray-400">wartość <span className="font-mono text-red-400">{fmtZl(realization.value)} {currencySymbol()}</span></span>
                         )}
                     </button>
                     {readOnly
@@ -2196,6 +2201,7 @@ export default function WbsMaterialsPanel({
     orderName = '',
     onExportReady,
 }) {
+    useOrderCurrency(); // przerysowanie po wczytaniu/zmianie waluty zamówienia
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     // @anchor wbs-materials-is-touch — dotyk czytamy raz w panelu i przekazujemy do wierszy
     // (`useDevice` w każdym wierszu zakładałby setki listenerów matchMedia).

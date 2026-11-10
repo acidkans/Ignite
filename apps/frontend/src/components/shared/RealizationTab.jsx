@@ -12,6 +12,7 @@ import FilterDropdown from './wbs/FilterDropdown';
 import ProtokolOdbioruModal from './wbs/ProtokolOdbioruModal';
 import { liczBilansWykonania, NIEROZPOCZETE_LABEL } from './wbs/realizationBilans';
 import { fetchStatusOdbioru } from '../../utils/protokolOdbioruExport';
+import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt } from '../../utils/currency';
 import { sanitizeQtyInput, parsePriceInput, DRAWER, STRUCTURE_STATUS_META, statusMetaForType, statusOptionsForType, statusLabelForType, resolveStatusCode, usesWorkStatuses,
     PLAN_STATUS_META, planStatusFromAny, PURCHASE_STATUS_META, EXEC_STATUS_META, execStatusLabel,
     hasPurchaseAxis, hasExecAxis, DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS,
@@ -363,14 +364,14 @@ export function RealizationRow({ node, card, realization, odbior, isExpanded, on
             {/* Koszt jedn. wyceny — praca i usługa nie mają karty, plan siedzi wtedy na liściu */}
             <td className="px-3 py-2.5 text-right font-mono text-sm whitespace-nowrap">
                 <span className="text-orange-400" title={card ? undefined : 'Koszt jedn. z wyceny pozycji (WbsNode.unitCost) — edycja w Budżecie'}>
-                    {planUnit != null ? `${fmtZl(planUnit)} zł` : '—'}
+                    {planUnit != null ? `${fmtZl(planUnit)} ${currencySymbol()}` : '—'}
                 </span>
             </td>
 
             {/* Koszt jedn. zakupu — średnia ważona wpisów (każdy ma własną cenę) */}
             <td className="px-3 py-2.5 text-right font-mono text-sm whitespace-nowrap">
                 <span className="text-red-400" title={r.avg != null && r.mixedPrices ? 'Średnia ważona z wpisów realizacji' : undefined}>
-                    {purchaseUnit != null ? `${fmtZl(purchaseUnit)} zł` : '—'}
+                    {purchaseUnit != null ? `${fmtZl(purchaseUnit)} ${currencySymbol()}` : '—'}
                     {r.avg != null && r.mixedPrices && <span className="text-[10px] text-gray-500 ml-1">śr.</span>}
                 </span>
             </td>
@@ -384,13 +385,13 @@ export function RealizationRow({ node, card, realization, odbior, isExpanded, on
                     która jest planem. Δ zostaje przy kolorze wg znaku, bo niesie inną informację
                     (oszczędność vs przekroczenie), a nie kwotę. */}
                 <div className="text-orange-400" title="Plan wydatków: koszt z wyceny (ilość × koszt jedn.) + zakupy pozaplanowe">
-                    {planValue != null ? `${fmtZl(r.planWydatkow)} zł` : '—'}
+                    {planValue != null ? `${fmtZl(r.planWydatkow)} ${currencySymbol()}` : '—'}
                 </div>
                 <div className={hasReal ? 'text-red-400' : 'text-gray-600'} title="Zakupy poniesione — suma wpisów planowych i pozaplanowych">
-                    {hasReal ? `${fmtZl(r.value)} zł` : '—'}
+                    {hasReal ? `${fmtZl(r.value)} ${currencySymbol()}` : '—'}
                 </div>
                 {r.byStatus.FORECAST > 0 && (
-                    <div className="text-sm text-amber-300" title="Plan budżetu minus zakupy planowe">prognoza {fmtZl(r.byStatus.FORECAST)} zł</div>
+                    <div className="text-sm text-amber-300" title="Plan budżetu minus zakupy planowe">prognoza {fmtZl(r.byStatus.FORECAST)} {currencySymbol()}</div>
                 )}
                 {dValue != null && (
                     /* Δ w tym samym stopniu co kwoty nad nią — to najważniejsza liczba w kolumnie
@@ -610,7 +611,7 @@ export function RealizationEntryLine({ entry, cols, hasCard, readOnly, onSave, o
                 if (c.key === 'purchasePrice') return <td key={c.key} className="px-2 py-1.5">{field('unitCost', 'font-mono text-right', { label: 'Koszt jednostkowy', sanitize: true })}</td>;
                 if (c.key === 'total') return (
                     <td key={c.key} className="px-3 py-1.5 text-right font-mono text-sm text-red-400 whitespace-nowrap">
-                        {fmtZl(wartosc)} zł
+                        {fmtZl(wartosc)} {currencySymbol()}
                     </td>
                 );
                 if (c.key === 'actions') return (
@@ -789,7 +790,7 @@ export function RealizationEntryForm({ node, cols, hasCard, defaultQty, seedProd
                 if (c.key === 'total') return (
                     <td key={c.key} className="px-3 py-2 text-right align-top">
                         {lab('Wartość')}
-                        <div className="font-mono text-sm text-gray-400 mb-1">{fmtZl(wartosc)} zł</div>
+                        <div className="font-mono text-sm text-gray-400 mb-1">{fmtZl(wartosc)} {currencySymbol()}</div>
                         {/* Przycisk nazywa czynność, nie sposób jej wywołania („dopisz"). */}
                         <button onClick={submit} disabled={saving} title="Zapisz wpis (Enter)"
                             className="inline-flex items-center gap-1 px-2 py-1 rounded border border-teal-500/30 bg-teal-500/10 text-teal-300 text-xs font-bold uppercase whitespace-nowrap hover:bg-teal-500/20 disabled:opacity-40">
@@ -899,7 +900,7 @@ export function RealizationExpandPanel({ node, card, realization, token, readOnl
                     Wpisy realizacji ({realization.entries.length})
                 </span>
                 <span className="text-[11px] text-gray-500 font-mono">
-                    Σ {fmtZl(realization.value)} zł
+                    Σ {fmtZl(realization.value)} {currencySymbol()}
                     {remaining > 1e-9 && !node.realizationClosed && (
                         <span className="text-amber-400/80 ml-2">· brakuje {fmtQty(remaining)} {node.unit || 'szt'}</span>
                     )}
@@ -1073,7 +1074,7 @@ export async function eksportRealizacjiXlsx({
     const zk = wb.addWorksheet('Zakupy');
     const az = wb.addWorksheet('Analiza zakupów');
     // Waluta w postaci, którą Excel rozpoznaje jako PLN, a nie jako format niestandardowy.
-    const FMT_PLN = '#,##0.00\\ [$zł-415]';
+    const FMT_PLN = excelMoneyFmt();
     // Kolumny kosztowe w każdym arkuszu w kolorach aplikacji: plan pomarańczowy, realizacja/zakup
     // czerwony, Δ (realizacja − plan) warunkowo — na plus czerwona (przekroczenie), na minus zielona.
     const kolorCzcionki = (c, argb) => { c.font = { ...(c.font || {}), color: { argb } }; };
@@ -1627,7 +1628,7 @@ export async function eksportRealizacjiXlsx({
         for (const k of ['D', 'E']) ps.getCell(`${k}${r}`).font = { ...(ps.getCell(`${k}${r}`).font || {}), color: { argb: dodatni ? KOLOR_WYNIKU.WYNIK : KOLOR_WYNIKU.STRATA } };
     }
     if (totals.przychodPoAkceptacji > 0) {
-        const r = ps.addRow({ a: `Przychód bez pozycji dodanych po akceptacji oferty (${fmtZl(totals.przychodPoAkceptacji)} zł).` });
+        const r = ps.addRow({ a: `Przychód bez pozycji dodanych po akceptacji oferty (${fmtZl(totals.przychodPoAkceptacji)} ${currencySymbol()}).` });
         ps.mergeCells(`A${r.number}:G${r.number}`);
         r.getCell('a').font = { italic: true, color: { argb: 'FF6B7280' } };
     }
@@ -1696,7 +1697,7 @@ export async function eksportRealizacjiXlsx({
     // do przodu / przekraczamy / nic nie ruszyło) ma własne sformułowanie, bo inaczej
     // przy zerowej realizacji wychodzą komunikaty bez sensu. Kwoty zawsze dodatnie,
     // kierunek niesie słowo.
-    const zl = v => `${fmtZl(v)} zł`;
+    const zl = v => `${fmtZl(v)} ${currencySymbol()}`;
     const pct = (a, b) => `${(a / b * 100).toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
     // Liczebnik w mianowniku (1 pozycja / 2 pozycje / 5 pozycji). Po przyimku „z" polski
     // wymaga dopełniacza niezależnie od liczby, więc tam wpisujemy „pozycji" na sztywno.
@@ -1879,6 +1880,7 @@ export default function RealizationTab({
     refreshKey = 0,
     oneDriveFolderName = null,
 }) {
+    useOrderCurrency(); // przerysowanie po wczytaniu/zmianie waluty zamówienia
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
 
     const isManagerOrAdmin = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
@@ -2727,9 +2729,9 @@ export default function RealizationTab({
                                     if (c.key === 'total') return (
                                         <td key={c.key} className={`${base} px-3 py-2 text-right font-mono text-base whitespace-nowrap`}>
                                             {/* Ta sama logika koloru co w wierszach — patrz `realization-total-plan-color`. */}
-                                            <div className="text-orange-400" title="Plan wydatków: suma z wyceny + zakupy pozaplanowe">{fmtZl(totals.planWydatkow)} zł</div>
-                                            <div className="text-red-400" title="Suma zakupów poniesionych">{fmtZl(totals.poniesione)} zł</div>
-                                            {totals.wgStatusu.FORECAST > 0 && <div className="text-sm text-amber-300" title="Suma: plan budżetu minus zakupy planowe">prognoza {fmtZl(totals.wgStatusu.FORECAST)} zł</div>}
+                                            <div className="text-orange-400" title="Plan wydatków: suma z wyceny + zakupy pozaplanowe">{fmtZl(totals.planWydatkow)} {currencySymbol()}</div>
+                                            <div className="text-red-400" title="Suma zakupów poniesionych">{fmtZl(totals.poniesione)} {currencySymbol()}</div>
+                                            {totals.wgStatusu.FORECAST > 0 && <div className="text-sm text-amber-300" title="Suma: plan budżetu minus zakupy planowe">prognoza {fmtZl(totals.wgStatusu.FORECAST)} {currencySymbol()}</div>}
                                             <div className={`text-base font-bold ${totals.delta > 0.005 ? 'text-red-300' : totals.delta < -0.005 ? 'text-teal-300' : 'text-gray-500'}`}>
                                                 Δ {totals.delta > 0 ? '+' : ''}{fmtZl(totals.delta)}
                                             </div>

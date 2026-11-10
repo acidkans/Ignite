@@ -44,7 +44,7 @@ export const selectAllOnFocus = (e) => {
 // @anchor realization-entry-numeric-fields — pola wpisu niosące LICZBĘ, a nie tekst: tylko one
 // liczą działania i tylko one przechodzą przez `sanitizeQtyInput`. Jedna lista dla wiersza
 // zapisanego wpisu i dla formularza nowego, żeby oba traktowały „=" tak samo.
-export const NUMERIC_ENTRY_FIELDS = new Set(['qty', 'unitCost']);
+export const NUMERIC_ENTRY_FIELDS = new Set(['qty', 'unitCost', 'unitCostOriginal']);
 
 // @anchor realization-entry-formula — pole liczbowe wpisu przyjmuje DZIAŁANIE: „=4,3*220"
 // zapisuje się jako 946. Liczy je `parsePriceInput`, czyli ta sama droga co w Budżecie

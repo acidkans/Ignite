@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { API_URL } from '../../../config';
 import { UNIT_OPTIONS, wbsTypeFromAny } from './wbsConstants';
+import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt } from '../../../utils/currency';
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
@@ -785,7 +786,7 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
                             placeholder="0.00"
                             className={`${ic} pr-8`}
                         />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-[10px]">zł</span>
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-[10px]">{currencySymbol()}</span>
                     </div>
                 </div>
             </div>
@@ -815,7 +816,7 @@ function ExpandedDetail({ r, token, onRefresh, onPatch, materialDb, offers, isLo
                                             <span className="text-white flex-1 truncate">{pos.description}</span>
                                             {pos.manufacturer && <span className="text-gray-500 text-[10px]">{pos.manufacturer}</span>}
                                             <span className="text-gray-400 font-mono w-14 text-right">{pos.quantity} {pos.unit || 'sztuki'}</span>
-                                            <span className="text-green-400 font-mono w-20 text-right">{pos.priceNetto ? `${Number(pos.priceNetto).toFixed(2)} zł` : '—'}</span>
+                                            <span className="text-green-400 font-mono w-20 text-right">{pos.priceNetto ? `${Number(pos.priceNetto).toFixed(2)} ${currencySymbol(pos.currency || 'PLN')}` : '—'}</span>
                                             {isSelected && <Star size={10} className="text-green-400 fill-green-400 shrink-0" />}
                                         </button>
                                     );
@@ -980,7 +981,7 @@ function ProposalsSection({ req, token, onRefresh, onPatch }) {
                                 <p className="text-xs text-white font-medium truncate">{p.productName}</p>
                                 <p className="text-[10px] text-gray-400">
                                     {p.manufacturer}{p.model ? ` · ${p.model}` : ''}
-                                    {p.priceNetto != null && <span className="text-green-400 ml-2 font-mono">{Number(p.priceNetto).toFixed(2)} zł</span>}
+                                    {p.priceNetto != null && <span className="text-green-400 ml-2 font-mono">{Number(p.priceNetto).toFixed(2)} {currencySymbol()}</span>}
                                 </p>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">

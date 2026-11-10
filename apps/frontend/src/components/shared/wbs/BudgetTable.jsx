@@ -3,6 +3,7 @@ import { Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { fmtPLN, fmtPLNFull, fmtQty, fmtPct, fmtPctFull, TYPE_OPTIONS, TYPE_LABELS, UNIT_OPTIONS, parseLocaleNumber, sanitizeQtyInput, evalQtyFormula, isMilestoneNode } from './wbsConstants';
 import { offerLockInputProps } from '../OfferLockGuard';
 import FilterDropdown from './FilterDropdown';
+import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt } from '../../../utils/currency';
 
 const TH_BASE = 'text-left px-3 py-2.5 text-[17px] font-bold uppercase tracking-widest text-white whitespace-normal break-words select-none relative align-bottom';
 const TD = 'px-2 py-1.5 align-top break-words';
@@ -99,6 +100,7 @@ export default function BudgetTable({
     costsOnly = false,
     onCostsOnlyChange,
 }) {
+    useOrderCurrency(); // przerysowanie po wczytaniu/zmianie waluty zamówienia
     const lockProps = offerLockInputProps(offerLocked);
     const lockCls = offerLocked ? ' cursor-not-allowed opacity-70' : '';
     // @anchor budget-table-oz-sums — sumy Oferta/Zakup z propozycji (isOffer/isPurchase) do kafli KPI
@@ -424,18 +426,18 @@ export default function BudgetTable({
                         <div className="text-[10px] uppercase tracking-widest text-red-300/90 font-bold mb-1">Koszt</div>
                         <div className="flex items-baseline justify-between gap-2">
                             <span className="text-[10px] uppercase tracking-wider text-red-300/60">Oferta</span>
-                            <span className="text-sm font-black text-red-200">{fmtPLNFull(summary.totalCost)} PLN</span>
+                            <span className="text-sm font-black text-red-200">{fmtPLNFull(summary.totalCost)} {currencyCode()}</span>
                         </div>
                         {showReal && (
                             <div className="flex items-baseline justify-between gap-2">
                                 <span className="text-[10px] uppercase tracking-wider text-red-300/60">Rzeczywiste</span>
-                                <span className="text-sm font-bold text-red-200/80">{fmtPLNFull(real.cost)} PLN</span>
+                                <span className="text-sm font-bold text-red-200/80">{fmtPLNFull(real.cost)} {currencyCode()}</span>
                             </div>
                         )}
                         {hasActiveFilter && (
                             <div className="flex items-baseline justify-between gap-2 italic">
                                 <span className="text-[8px] uppercase tracking-wider text-red-300/60">Zafiltrowane</span>
-                                <span className="text-xs font-bold text-red-200/80">{fmtPLNFull(filteredSums.totalCost)} PLN</span>
+                                <span className="text-xs font-bold text-red-200/80">{fmtPLNFull(filteredSums.totalCost)} {currencyCode()}</span>
                             </div>
                         )}
                     </div>
@@ -443,18 +445,18 @@ export default function BudgetTable({
                         <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold mb-1">Przychód</div>
                         <div className="flex items-baseline justify-between gap-2">
                             <span className="text-[10px] uppercase tracking-wider text-green-300/60">Oferta</span>
-                            <span className="text-sm font-black text-green-200">{fmtPLNFull(summary.totalRevenue)} PLN</span>
+                            <span className="text-sm font-black text-green-200">{fmtPLNFull(summary.totalRevenue)} {currencyCode()}</span>
                         </div>
                         {showReal && (
                             <div className="flex items-baseline justify-between gap-2">
                                 <span className="text-[10px] uppercase tracking-wider text-green-300/60">Rzeczywiste</span>
-                                <span className="text-sm font-bold text-green-200/80">{fmtPLNFull(real.revenue)} PLN</span>
+                                <span className="text-sm font-bold text-green-200/80">{fmtPLNFull(real.revenue)} {currencyCode()}</span>
                             </div>
                         )}
                         {hasActiveFilter && (
                             <div className="flex items-baseline justify-between gap-2 italic">
                                 <span className="text-[8px] uppercase tracking-wider text-green-300/60">Zafiltrowane</span>
-                                <span className="text-xs font-bold text-green-200/80">{fmtPLNFull(filteredSums.totalRevenue)} PLN</span>
+                                <span className="text-xs font-bold text-green-200/80">{fmtPLNFull(filteredSums.totalRevenue)} {currencyCode()}</span>
                             </div>
                         )}
                     </div>
@@ -462,18 +464,18 @@ export default function BudgetTable({
                         <div className="text-[10px] uppercase tracking-widest text-green-300/90 font-bold mb-1">Zysk</div>
                         <div className="flex items-baseline justify-between gap-2">
                             <span className="text-[10px] uppercase tracking-wider text-green-300/60">Oferta</span>
-                            <span className="text-sm font-black text-green-200">{fmtPLNFull(summary.profit)} PLN</span>
+                            <span className="text-sm font-black text-green-200">{fmtPLNFull(summary.profit)} {currencyCode()}</span>
                         </div>
                         {showReal && (
                             <div className="flex items-baseline justify-between gap-2">
                                 <span className="text-[10px] uppercase tracking-wider text-green-300/60">Rzeczywiste</span>
-                                <span className="text-sm font-bold text-green-200/80">{fmtPLNFull(real.profit)} PLN</span>
+                                <span className="text-sm font-bold text-green-200/80">{fmtPLNFull(real.profit)} {currencyCode()}</span>
                             </div>
                         )}
                         {hasActiveFilter && (
                             <div className="flex items-baseline justify-between gap-2 italic">
                                 <span className="text-[8px] uppercase tracking-wider text-green-300/60">Zafiltrowane</span>
-                                <span className="text-xs font-bold text-green-200/80">{fmtPLNFull(filteredSums.profit)} PLN</span>
+                                <span className="text-xs font-bold text-green-200/80">{fmtPLNFull(filteredSums.profit)} {currencyCode()}</span>
                             </div>
                         )}
                     </div>
@@ -527,7 +529,7 @@ export default function BudgetTable({
                         </div>
                         {discountPercent !== '' && discountPercent != null && (
                             <div className="text-[9px] text-orange-200/70 mt-0.5">
-                                = {fmtPLNFull(Number.isFinite(Number(String(discountPercent).replace(',', '.'))) ? summary.rawRevenue * Math.max(0, Number(String(discountPercent).replace(',', '.'))) / 100 : 0)} PLN
+                                = {fmtPLNFull(Number.isFinite(Number(String(discountPercent).replace(',', '.'))) ? summary.rawRevenue * Math.max(0, Number(String(discountPercent).replace(',', '.'))) / 100 : 0)} {currencyCode()}
                             </div>
                         )}
                         <div className="relative mt-1">
@@ -540,7 +542,7 @@ export default function BudgetTable({
                                 className={`w-full rounded-lg border border-orange-400/25 bg-black/30 px-2 py-1 pr-7 text-sm font-black text-orange-100 focus:outline-none focus:border-orange-400${lockCls}`}
                                 placeholder="0,00"
                             />
-                            <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-xs font-black text-orange-200/80">zł</span>
+                            <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-xs font-black text-orange-200/80">{currencySymbol()}</span>
                         </div>
                         {discountAmount !== '' && discountAmount != null && (
                             <div className="text-[9px] text-orange-200/70 mt-0.5">
@@ -642,7 +644,7 @@ export default function BudgetTable({
                                             if (newType === 'group') {
                                                 const uc = parseFloat(row.unitCost);
                                                 if (uc && uc !== 0) {
-                                                    alert('Ten węzeł ma wartość w polu "Koszt jednostkowy" (' + Number(row.unitCost).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' PLN).\n\nUsuń ją przed zmianą na gałąź grupującą — inaczej wartość wejdzie do podsumowania oferty.');
+                                                    alert('Ten węzeł ma wartość w polu "Koszt jednostkowy" (' + Number(row.unitCost).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + currencyCode() + ').\n\nUsuń ją przed zmianą na gałąź grupującą — inaczej wartość wejdzie do podsumowania oferty.');
                                                     return;
                                                 }
                                             }
@@ -777,7 +779,7 @@ export default function BudgetTable({
                                 </td>
 
                                 <td className={`${TD} text-center text-sm tabular-nums font-mono rounded bg-white/[0.03] ${row.totalCost > 0 ? 'text-red-400' : 'text-gray-600'}`}>
-                                    {row.totalCost > 0 ? `${fmtPLN(row.totalCost)} zł` : '—'}
+                                    {row.totalCost > 0 ? `${fmtPLN(row.totalCost)} ${currencySymbol()}` : '—'}
                                 </td>
 
                                 <td className={TD}>
@@ -829,7 +831,7 @@ export default function BudgetTable({
                                 </td>
 
                                 <td className={`${TD} text-center text-sm tabular-nums font-mono font-semibold rounded bg-white/[0.03] ${row.offerPrice > 0 ? 'text-green-400' : 'text-gray-600'}`}>
-                                    {row.offerPrice > 0 ? `${fmtPLN(row.offerPrice)} zł` : '—'}
+                                    {row.offerPrice > 0 ? `${fmtPLN(row.offerPrice)} ${currencySymbol()}` : '—'}
                                 </td>
 
                                 <td className={TD}>

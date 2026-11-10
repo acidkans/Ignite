@@ -28,6 +28,7 @@ import AllTasksModal from './AllTasksModal';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
 import OfferLockGuard, { guardOfferEdit, useOfferLock } from '../OfferLockGuard';
 import { buildQaIndex, resolveStrategyText } from './strategyQuestions';
+import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt } from '../../../utils/currency';
 
 
 const VIEWS = {
@@ -140,6 +141,7 @@ function BranchStrategyField({ name, value, onSave }) {
 }
 
 export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible, oneDriveFolderName = null, initialSection = null, onInitialSectionApplied, realization = null }) {
+    useOrderCurrency(); // przerysowanie po wczytaniu/zmianie waluty zamówienia
     const [wbsData, setWbsData] = useState([]);
     // @anchor budget-scope-data — `wbsData` BEZ pozycji odrzuconych (i bez ich poddrzew).
     // Czyta z niego WSZYSTKO, co liczy pieniądze: tabela Budżet, kafle koszt/przychód/zysk,
@@ -1785,7 +1787,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 return r.quantity;
             };
             // Cena ofertowa węzła z budżetu
-            const fmtPln = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' zł' : ''; };
+            const fmtPln = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + currencySymbol() : ''; };
             const nodeOfferPrice = (node) => {
                 if (!node) return 0;
                 const q = Math.max(0, parseFloat(node.quantity) || 0);
@@ -2613,7 +2615,7 @@ ${ganttSectionHtml}
         // Tokeny oferty rozwijamy do wartości; tabele WBS pomijamy — budżet idzie osobno.
         const offer = String(offerText || '')
             .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
-            .replace(/\{wartość oferty\}/g, fmtPLN(offerRevenueTotal) + ' PLN')
+            .replace(/\{wartość oferty\}/g, fmtPLN(offerRevenueTotal) + ' ' + currencyCode())
             .replace(/\{data oferty\}/g, offerDate)
             .replace(/\{Roboczo dni w projekcie\}/gi, String(workDaysMemo))
             .replace(/\{tabela wbs[123]?\}/gi, '');
@@ -3777,7 +3779,7 @@ ${ganttSectionHtml}
 
             // Wiersz ostrzegawczy — luźne pozycje bez przypisania do zadania.
             const cfWarnRow = cfSheet.addRow([cfLoose.length
-                ? `⚠ Pozycje bez przypisania do zadania w harmonogramie: ${cfLoose.length} — koszt ${cfLooseCost.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN wypada z osi czasu`
+                ? `⚠ Pozycje bez przypisania do zadania w harmonogramie: ${cfLoose.length} — koszt ${cfLooseCost.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencyCode()} wypada z osi czasu`
                 : '✓ Wszystkie pozycje przypisane do zadań w harmonogramie — brak dziur w osi czasu']);
             cfWarnRow.font = { bold: true, color: { argb: cfLoose.length ? 'FFB91C1C' : 'FF166534' } };
             if (cfLoose.length) cfWarnRow.fill = cfWarnFill;
@@ -3885,7 +3887,7 @@ ${ganttSectionHtml}
             // bez kotwicy doklejone na końcu (czerwone tło).
             const cfTitleB = cfSheet.addRow(['Lista pozycji — per liść kotwiczący']);
             cfTitleB.font = { bold: true, size: 12 };
-            const cfHdrB = cfSheet.addRow(['Lp.', 'Przedmiot', 'Liść kotwiczący', 'Osoba odpowiedzialna', 'Data zakończenia zadania', 'Data płatności', 'Koszt osobowy', 'Koszt materiałowy', 'Razem (PLN)']);
+            const cfHdrB = cfSheet.addRow(['Lp.', 'Przedmiot', 'Liść kotwiczący', 'Osoba odpowiedzialna', 'Data zakończenia zadania', 'Data płatności', 'Koszt osobowy', 'Koszt materiałowy', `Razem (${currencyCode()})`]);
             cfHdrB.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             cfHdrB.fill = cfHeaderFill;
 
@@ -4281,7 +4283,7 @@ ${ganttSectionHtml}
                                 const currency = !isHeader ? parseCurrencyCell(col) : null;
                                 if (currency) {
                                     cell.value = currency.num;
-                                    cell.numFmt = '#,##0.00" zł"';
+                                    cell.numFmt = excelMoneyFmt();
                                     cell.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
                                     if (currency.isBold) cell.font = { bold: true };
                                 } else if (isHeader) {
@@ -4405,7 +4407,7 @@ ${ganttSectionHtml}
         const resolveOfferTokens = (t) => (t || '')
             .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
             // Tryb „bez cen" — wartość oferty nie trafia do dokumentu.
-            .replace(/\{wartość oferty\}/g, exportNoPricesRef.current ? '—' : fmtPLN(offerRevenueTotal) + ' PLN')
+            .replace(/\{wartość oferty\}/g, exportNoPricesRef.current ? '—' : fmtPLN(offerRevenueTotal) + ' ' + currencyCode())
             .replace(/\{data oferty\}/g, offerDate)
             .replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '')
             .replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '')
@@ -4428,7 +4430,7 @@ ${ganttSectionHtml}
         {
             const sheet = workbook.addWorksheet('Oferta-podział na Typy');
             sheet.columns = [{ width: 32 }, { width: 24 }];
-            const hdr = sheet.addRow(['Typ zakresu', 'Cena ofertowa (PLN)']);
+            const hdr = sheet.addRow(['Typ zakresu', `Cena ofertowa (${currencyCode()})`]);
             hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             hdr.fill = navyFill;
             hdr.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -4474,7 +4476,7 @@ ${ganttSectionHtml}
         {
             const sheet = workbook.addWorksheet('WBS1 - Zakresy');
             sheet.columns = [{ width: 45 }, { width: 18 }, { width: 24 }, { width: 50 }];
-            const hdr = sheet.addRow(['Zakresy', 'Typ', 'Cena ofertowa (PLN)', 'Strategia']);
+            const hdr = sheet.addRow(['Zakresy', 'Typ', `Cena ofertowa (${currencyCode()})`, 'Strategia']);
             hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             hdr.fill = navyFill;
             hdr.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -4519,7 +4521,7 @@ ${ganttSectionHtml}
         {
             const sheet = workbook.addWorksheet('WBS2 - Składowe');
             sheet.columns = [{ width: 35 }, { width: 35 }, { width: 18 }, { width: 24 }];
-            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Typ', 'Cena ofertowa (PLN)']);
+            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Typ', `Cena ofertowa (${currencyCode()})`]);
             hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             hdr.fill = navyFill;
             hdr.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -4568,7 +4570,7 @@ ${ganttSectionHtml}
         {
             const sheet = workbook.addWorksheet('WBS3 - Szczegóły');
             sheet.columns = [{ width: 28 }, { width: 28 }, { width: 28 }, { width: 18 }, { width: 12 }, { width: 8 }, { width: 20 }, { width: 24 }, { width: 10 }, { width: 24 }, { width: 24 }];
-            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Pozycje', 'Typ', 'Ilość', 'J.m.', 'Cena jedn. netto (PLN)', 'Cena netto (PLN)', 'VAT', 'Wartość brutto (PLN)', 'Kwota podatku VAT (PLN)']);
+            const hdr = sheet.addRow(['Zakresy', 'Składowe zakresów', 'Pozycje', 'Typ', 'Ilość', 'J.m.', `Cena jedn. netto (${currencyCode()})`, `Cena netto (${currencyCode()})`, 'VAT', `Wartość brutto (${currencyCode()})`, `Kwota podatku VAT (${currencyCode()})`]);
             hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             hdr.fill = navyFill;
             hdr.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
@@ -4647,7 +4649,7 @@ ${ganttSectionHtml}
         {
             const sheet = workbook.addWorksheet('Zakresy grupujące');
             sheet.columns = [{ width: 40 }, { width: 50 }, { width: 24 }];
-            const hdr = sheet.addRow(['Zakres grupujący', 'Ścieżka', 'Cena ofertowa (PLN)']);
+            const hdr = sheet.addRow(['Zakres grupujący', 'Ścieżka', `Cena ofertowa (${currencyCode()})`]);
             hdr.font = { bold: true, color: { argb: 'FFFFFFFF' } };
             hdr.fill = navyFill;
             hdr.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -6507,7 +6509,7 @@ ${ganttSectionHtml}
             if (!entries.length) return '';
             const total = entries.reduce((s, e) => s + e.total, 0);
             const rows = entries.map(e => `| ${e.label} | ${fmtPLN(e.total)} |`).join('\n');
-            return `| Pozycja | Cena ofertowa (PLN) |\n|---|---|\n${rows}\n| **Razem** | **${fmtPLN(total)}** |`;
+            return `| Pozycja | Cena ofertowa (${currencyCode()}) |\n|---|---|\n${rows}\n| **Razem** | **${fmtPLN(total)}** |`;
         };
         return { 1: buildTable(1), 2: buildTable(2), 3: buildTable(3) };
     }, [wbsData]);
@@ -6727,7 +6729,7 @@ ${ganttSectionHtml}
                     // edytora i (osobno) przy eksporcie PDF.
                     const resolveOfferTokens = (t) => (t || '')
                         .replace(/\{nazwa projektu\}/g, orderName || projectName || '')
-                        .replace(/\{wartość oferty\}/g, fmtPLN(offerRevenueTotal) + ' PLN')
+                        .replace(/\{wartość oferty\}/g, fmtPLN(offerRevenueTotal) + ' ' + currencyCode())
                         .replace(/\{data oferty\}/g, offerDate)
                         .replace(/\{tabela wbs1\}/gi, wbsTablesByDepth[1] || '')
                         .replace(/\{tabela wbs2\}/gi, wbsTablesByDepth[2] || '')
@@ -6749,7 +6751,7 @@ ${ganttSectionHtml}
                                 </div>
                                 <div className="flex items-center gap-1.5">
                                     <span className="text-[10px] text-gray-500 uppercase tracking-widest">{'{wartość oferty}'}</span>
-                                    <span className="text-xs text-amber-300 font-semibold">{fmtPLN(offerRevenueTotal)} PLN</span>
+                                    <span className="text-xs text-amber-300 font-semibold">{fmtPLN(offerRevenueTotal)} {currencyCode()}</span>
                                 </div>
                                 <div className="flex items-center gap-1.5">
                                     <span className="text-[10px] text-gray-500 uppercase tracking-widest">{'{Roboczo dni}'}</span>
@@ -7021,7 +7023,7 @@ ${ganttSectionHtml}
                                     title="Porównanie baseline vs żywe dane — kliknij po szczegóły"
                                 >
                                     <Scale size={11} />
-                                    Δ {comparisonKpi.deltaPct != null ? `${comparisonKpi.deltaPct >= 0 ? '+' : ''}${comparisonKpi.deltaPct.toFixed(1)}%` : `${comparisonKpi.deltaSum >= 0 ? '+' : ''}${comparisonKpi.deltaSum.toFixed(2)} zł`}
+                                    Δ {comparisonKpi.deltaPct != null ? `${comparisonKpi.deltaPct >= 0 ? '+' : ''}${comparisonKpi.deltaPct.toFixed(1)}%` : `${comparisonKpi.deltaSum >= 0 ? '+' : ''}${comparisonKpi.deltaSum.toFixed(2)} ${currencySymbol()}`}
                                     {' · '}pokrycie {comparisonKpi.coveragePriced}/{comparisonKpi.coverageTotal}
                                 </button>
                             )}
@@ -7468,7 +7470,7 @@ ${ganttSectionHtml}
                                 <div className="grid grid-cols-[1.4fr,1.2fr,1fr,0.9fr,2rem] gap-3 px-4 py-2.5 bg-white/5 text-[10px] uppercase tracking-widest text-gray-400 font-bold">
                                     <div>Typ pozycji</div>
                                     <div>Jednostka</div>
-                                    <div>Koszt jedn. (zł)</div>
+                                    <div>Koszt jedn. ({currencySymbol()})</div>
                                     <div>Narzut (%)</div>
                                     <div />
                                 </div>

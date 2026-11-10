@@ -4,6 +4,7 @@ import { API_URL } from '../../config';
 import PropertyPreview from './PropertyPreview';
 import QuickQuotesSection from './QuickQuotesSection';
 import SharedOffersOneDrive from './SharedOffersOneDrive';
+import { currencySymbol } from '../../utils/currency';
 
 
 // ─── Sekcja zwijalna ──────────────────────────────────────────────────────────
@@ -188,7 +189,7 @@ function OffersTable({ nodeId, refreshKey, searchQuery = '', isGlobal = false })
                                                 <td className="px-3 py-2 text-right text-gray-300">{p.quantity ?? '—'}</td>
                                                 <td className="px-3 py-2 text-gray-500">{p.unit || '—'}</td>
                                                 <td className="px-3 py-2 text-right text-gray-300 whitespace-nowrap">
-                                                    {p.priceNetto != null ? `${Number(p.priceNetto).toFixed(2)} zł` : '—'}
+                                                    {p.priceNetto != null ? `${Number(p.priceNetto).toFixed(2)} ${currencySymbol(p.currency || 'PLN')}` : '—'}
                                                 </td>
                                                 <td className="px-2 py-2 text-center">
                                                     <button

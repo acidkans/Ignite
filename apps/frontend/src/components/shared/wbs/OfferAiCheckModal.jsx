@@ -1,5 +1,6 @@
 import { X, Sparkles, RefreshCw, AlertTriangle, AlertCircle, Info } from 'lucide-react';
 import { fmtPLN } from './wbsConstants';
+import { currencyCode } from '../../../utils/currency';
 
 // @anchor offer-ai-check-labels
 export const OFFER_AI_SEVERITY = {
@@ -112,7 +113,7 @@ export default function OfferAiCheckModal({ job, done, startError, onClose, onRu
                                         {f.budgetItems?.length > 0 && (
                                             <ul className="text-[12px] text-gray-400 flex flex-col gap-0.5">
                                                 {f.budgetItems.map((b, j) => (
-                                                    <li key={j}>▸ {b.path} — {b.quantity} {b.unit}{b.unitCost != null ? `, koszt jedn. ${fmtPLN(b.unitCost)} PLN` : ''}, koszt {fmtPLN(b.totalCost)} PLN, cena ofert. {fmtPLN(b.offerPrice)} PLN</li>
+                                                    <li key={j}>▸ {b.path} — {b.quantity} {b.unit}{b.unitCost != null ? `, koszt jedn. ${fmtPLN(b.unitCost)} ${currencyCode()}` : ''}, koszt {fmtPLN(b.totalCost)} {currencyCode()}, cena ofert. {fmtPLN(b.offerPrice)} {currencyCode()}</li>
                                                 ))}
                                             </ul>
                                         )}

@@ -3,6 +3,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateNodeDto, UpdateNodeDto, MoveNodeDto, NodeType } from './dto/process-tree.dto';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
+import { AuditAction } from '../audit/audit.types';
+
+// @anchor order-currencies — dozwolone waluty zamówienia (`ProcessNode.currency`)
+export const ORDER_CURRENCIES = ['PLN', 'EUR'];
 
 // @anchor child-order — kolejność rodzeństwa w drzewie: sortOrder (drag&drop w belce), remis → data utworzenia
 const CHILD_ORDER: { sortOrder?: 'asc'; createdAt?: 'asc' }[] = [{ sortOrder: 'asc' }, { createdAt: 'asc' }];
@@ -347,10 +351,41 @@ export class ProcessTreeService {
     /**
      * Get basic node info (lightweight, no relations)
      */
+    // @anchor order-currency-get — waluta zamówienia; dla węzła innego niż zamówienie zawsze PLN
+    async getOrderCurrency(id: string) {
+        const node = await this.prisma.processNode.findUnique({ where: { id }, select: { currency: true } });
+        if (!node) throw new NotFoundException(`Node ${id} not found`);
+        return { currency: node.currency || 'PLN' };
+    }
+
+    // @anchor order-currency-set — znacznik waluty zamówienia. Kwot NIE przelicza: przyjmujemy, że
+    // wszystkie wpisy zamówienia są w wybranej walucie (decyzja użytkownika 2026-11-10).
+    async setOrderCurrency(id: string, currency: string | undefined, user?: any) {
+        const code = String(currency || '').toUpperCase();
+        if (!ORDER_CURRENCIES.includes(code)) {
+            throw new BadRequestException(`Waluta zamówienia: ${ORDER_CURRENCIES.join(' | ')}`);
+        }
+        const node = await this.prisma.processNode.findUnique({ where: { id }, select: { id: true, type: true, currency: true } });
+        if (!node) throw new NotFoundException(`Node ${id} not found`);
+        if (node.type !== NodeType.ORDER) throw new BadRequestException('Walutę ustawia się na zamówieniu');
+        if (node.currency === code) return { currency: code };
+        await this.prisma.processNode.update({ where: { id }, data: { currency: code } });
+        await this.prisma.auditLog.create({
+            data: {
+                action: AuditAction.UPDATE,
+                entity: 'ProcessNode',
+                entityId: id,
+                diff: { currency: { przed: node.currency, po: code } },
+                userId: user?.userId ?? null,
+            },
+        });
+        return { currency: code };
+    }
+
     async getNodeInfo(id: string) {
         const node = await this.prisma.processNode.findUnique({
             where: { id },
-            select: { id: true, name: true, customTypeLabel: true, address: true, nip: true, region: true, contactPerson: true, type: true, taskListSlug: true },
+            select: { id: true, name: true, customTypeLabel: true, address: true, nip: true, region: true, contactPerson: true, type: true, taskListSlug: true, currency: true },
         });
         if (!node) throw new NotFoundException(`Node ${id} not found`);
         return node;

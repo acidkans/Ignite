@@ -1824,6 +1824,42 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | back-funkcja | refresh (cron) | apps/backend/src/exchange-rates/exchange-rates.service.ts | @anchor exchange-rates-cron |
 | back-funkcja | getRates | apps/backend/src/exchange-rates/exchange-rates.service.ts | @anchor exchange-rates-get |
 | back-funkcja | fetchNbpRate | apps/backend/src/exchange-rates/exchange-rates.service.ts | @anchor fetch-nbp-rate |
+| schema-pole | ProcessNode.currency (waluta zamówienia PLN | EUR) | apps/backend/prisma/schema.prisma | @anchor process-node-currency |
+| schema-pole | LeafActual.currency (waluta faktury zakupu, NULL = waluta zamówienia) | apps/backend/prisma/schema.prisma | @anchor leaf-actual-currency |
+| schema-pole | LeafActual.unitCostOriginal (koszt jedn. w walucie faktury) | apps/backend/prisma/schema.prisma | @anchor leaf-actual-unit-cost-original |
+| schema-pole | LeafActual.exchangeRate (kurs waluta faktury → waluta zamówienia) | apps/backend/prisma/schema.prisma | @anchor leaf-actual-exchange-rate |
+| schema-pole | LeafActual.rateDate (data tabeli NBP; NULL = kurs ręczny) | apps/backend/prisma/schema.prisma | @anchor leaf-actual-rate-date |
+| back-stala | dated (cache kursów NBP per waluta i dzień) | apps/backend/src/exchange-rates/exchange-rates.service.ts | @anchor exchange-rates-dated-cache |
+| back-funkcja | fetchNbpRateBefore (kurs NBP z dnia roboczego przed datą) | apps/backend/src/exchange-rates/exchange-rates.service.ts | @anchor fetch-nbp-rate-before |
+| back-funkcja | getCrossRate (kurs krzyżowy przez PLN na dzień zdarzenia) | apps/backend/src/exchange-rates/exchange-rates.service.ts | @anchor exchange-rate-cross |
+| back-endpoint | GET /exchange-rates/cross?from&to&date | apps/backend/src/exchange-rates/exchange-rates.controller.ts | @anchor exchange-rates-cross-endpoint |
+| back-typ | LeafActualInput.currency / unitCostOriginal / exchangeRate | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actual-input-currency |
+| back-funkcja | currencyFields (przeliczenie wpisu zakupu na walutę zamówienia) | apps/backend/src/leaf-actuals/leaf-actuals.service.ts | @anchor leaf-actuals-currency-fields |
+| back-stala | ORDER_CURRENCIES (PLN, EUR) | apps/backend/src/process-tree/process-tree.service.ts | @anchor order-currencies |
+| back-funkcja | getOrderCurrency | apps/backend/src/process-tree/process-tree.service.ts | @anchor order-currency-get |
+| back-funkcja | setOrderCurrency (znacznik, bez przeliczania kwot) | apps/backend/src/process-tree/process-tree.service.ts | @anchor order-currency-set |
+| back-endpoint | GET /process-tree/:id/currency | apps/backend/src/process-tree/process-tree.controller.ts | @anchor order-currency-get-endpoint |
+| back-endpoint | PATCH /process-tree/:id/currency | apps/backend/src/process-tree/process-tree.controller.ts | @anchor order-currency-set-endpoint |
+| ui-stala | ORDER_CURRENCIES / PURCHASE_CURRENCIES | apps/frontend/src/utils/currency.js | @anchor order-currencies-ui |
+| ui-stala | CURRENCY_SYMBOLS | apps/frontend/src/utils/currency.js | @anchor currency-symbols |
+| ui-stan | state (waluta aktywnego zamówienia, store modułowy) | apps/frontend/src/utils/currency.js | @anchor order-currency-store |
+| ui-funkcja | currencyCode | apps/frontend/src/utils/currency.js | @anchor currency-code |
+| ui-funkcja | currencySymbol | apps/frontend/src/utils/currency.js | @anchor currency-symbol |
+| ui-funkcja | fmtMoney | apps/frontend/src/utils/currency.js | @anchor fmt-money |
+| ui-funkcja | excelMoneyFmt | apps/frontend/src/utils/currency.js | @anchor excel-money-fmt |
+| ui-stan | plnRates (bieżące kursy NBP do cen ofert) | apps/frontend/src/utils/currency.js | @anchor pln-rates |
+| ui-funkcja | toOrderCurrency | apps/frontend/src/utils/currency.js | @anchor to-order-currency |
+| ui-funkcja | loadOrderCurrency | apps/frontend/src/utils/currency.js | @anchor load-order-currency |
+| ui-funkcja | saveOrderCurrency | apps/frontend/src/utils/currency.js | @anchor save-order-currency |
+| ui-hook | useOrderCurrency | apps/frontend/src/utils/currency.js | @anchor use-order-currency |
+| ui-funkcja | fetchCrossRate | apps/frontend/src/utils/currency.js | @anchor fetch-cross-rate |
+| ui-dropdown | CurrencyPill (fistaszek waluty zakupu) | apps/frontend/src/components/shared/wbs/CurrencyPill.jsx | @anchor currency-pill |
+| ui-hook | useRatePreview | apps/frontend/src/components/shared/wbs/CurrencyPill.jsx | @anchor use-rate-preview |
+| ui-sekcja | ConvertedNote (przeliczenie i kurs pod kwotą obcą) | apps/frontend/src/components/shared/wbs/CurrencyPill.jsx | @anchor converted-note |
+| ui-funkcja | loadOrderCurrency w Dashboardzie (aktywne zamówienie) | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-load-order-currency |
+| ui-przycisk | Waluta zamówienia PLN / EUR (Informacje o zamówieniu) | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor requirements-order-currency |
+| ui-stan | draft.currency (waluta faktury w formularzu zakupu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-entry-currency |
+| ui-wiersz | CurrencyNoteRow (przeliczenie waluty w wierszu pod wpisem zakupu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-currency-note-row |
 | back-controller | ExchangeRatesController | apps/backend/src/exchange-rates/exchange-rates.controller.ts | @anchor exchange-rates-controller |
 | back-endpoint | GET /exchange-rates | apps/backend/src/exchange-rates/exchange-rates.controller.ts | @anchor exchange-rates-endpoint |
 | back-modul | ExchangeRatesModule | apps/backend/src/exchange-rates/exchange-rates.module.ts | @anchor exchange-rates-module |
