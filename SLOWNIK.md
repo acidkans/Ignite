@@ -265,6 +265,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stan | tylkoSygnaly | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tylko-sygnaly |
 | ui-stala | zakupyApi | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zakupy-api |
 | ui-sekcja | szuflada zakupów pozycji | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szuflada-zakupow |
+| ui-sekcja | dopisek „w tym … z zakupów planowych ponad plan” pod Pozaplanowo w karcie Wykonanie/Zakupy | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-ponad-plan |
 | ui-dropdown | CommentTypeDropdown (typ komentarza: Komentarz/Pytanie/Rozwiązane/Pilne) | apps/frontend/src/components/shared/CommentsSlideOver.jsx | @anchor comment-type-dropdown |
 | ui-hook | useSzerokosciKolumn | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szerokosci-kolumn |
 | ui-stala | boczne karty Kokpitu do krawędzi (margines -24px wątku i blokerów, środek bez zmian) | apps/frontend/src/components/shared/realizacja/realizacja.css | @anchor realizacja-kolumny-do-krawedzi |
@@ -345,21 +346,26 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-ikona | Wpis — kosz pytania bez odpowiedzi | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-wpis-usun-qa |
 | ui-stan | sygnalZakupu | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-sygnal-zakupu |
 | ui-propsy | PurchaseDrawer.addSignal | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor purchase-drawer-add-signal |
+| ui-stan | minPx / przewin (minimalna szerokość tabeli wpisów z czcionek nagłówka i tabeli; przewijanie, gdy karta za wąska) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor purchase-drawer-przewin |
 | ui-sekcja | Harmonogram (wspólny widok robót Planowanie + Realizacja, wygląd Lookahead; zakres 14 dni / miesiąc / całość) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram |
-| ui-funkcja | dniRobocze (dni robocze od..ost włącznie, opcjonalnie z dniami wolnymi) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-dni-robocze |
+| ui-funkcja | dniRobocze (łączna liczba dni pracy od..ost włącznie wg ustawienia gałęzi { sob, nd }) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-dni-robocze |
 | ui-funkcja | przesunPasek (nowe daty paska po przeciągnięciu: move zachowuje dni robocze, l/r zmienia krawędź) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-przesun |
 | ui-stan | przesun (przesunięcie okna: tygodnie w 14 dniach, miesiące w zakresie Miesiąc) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-przesun-okna |
-| ui-stan | wow (gałęzie pracujące w weekendy i święta, stan sesji) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-praca-w-wolne |
+| ui-stan | pracaWolne (gałęzie pracujące w dni wolne: { [galazId]: { sob, nd } }, stan sesji) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-praca-w-wolne |
+| ui-stala | RODZAJE_WOLNYCH (przełączniki „sob.” / „nd.” w nagłówku gałęzi) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-rodzaje-wolnych |
+| ui-funkcja | opisDni (dni pozycji osobno: „17 d. + 3 sob. + 1 nd.”, długi opis w podpowiedzi) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-opis-dni |
+| ui-funkcja | wolneGalezi (ile różnych sobót i niedziel/świąt pracuje gałąź) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-wolne-galezi |
+| ui-stala | harmonogram-pw-css (przełączniki i znaczniki pracy w sobotę / niedzielę-święto) | apps/frontend/src/components/shared/harmonogram/harmonogram.css | @anchor harmonogram-pw-css |
 | ui-stan | szerOsi (dostępna szerokość osi — dzień rozciąga się do pełnej szerokości) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-szerokosc |
 | ui-funkcja | okno osi (start, ileDni, dzienPx dla zakresu) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-okno |
 | ui-stan | drag (ciągnięty pasek: tryb move/l/r, delta dni) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-drag |
-| ui-funkcja | getExcelData (dane arkusza „Harmonogram” — kształt jak dawny Gantt) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-excel-data |
+| ui-funkcja | getExcelData (dane arkusza „Harmonogram” — kształt jak dawny Gantt + rob/sob/nd/pw) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-excel-data |
 | ui-funkcja | getHtml (statyczny HTML harmonogramu do PDF) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-html |
 | ui-sekcja | HarmonogramPlanowanie (sekcja Harmonogram w Planowaniu, zastępuje GanttSection) | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie |
 | ui-stan | projectStart / projectEnd + pola (start/koniec projektu, markery na osi) | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-start |
 | ui-stan | overrides (zapisane daty pasków: baza + zmiany sesji) | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-overrides |
 | ui-funkcja | zmienStart (zmiana Startu przesuwa zapisane paski, zapis z opóźnieniem) | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-przesun-start |
-| ui-funkcja | opisPaskaRobot / czyDostawa (kolor i podpis paska wg osi wykonania, dostawy FORECAST) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-opis-paska |
+| ui-funkcja | opisPaskaRobot (kolor i podpis paska wg osi wykonania) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-opis-paska |
 | ui-funkcja | ganttDatesByNode (daty pasków harmonogramu: zapisane albo domyślne; do = ostatni dzień) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor gantt-daty-wezlow |
 | ui-funkcja | planOd / planDo (daty robót pozycji w danych realizacji, z `ganttDatesByNode`) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-plan-od-do |
 | ui-funkcja | savePlanDates (zapis `ganttStart/ganttEnd` z Harmonogramu w Realizacji) | apps/frontend/src/components/shared/wbs/useRealizationData.js | @anchor realization-save-plan-dates |
@@ -889,13 +895,23 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | splaszczDrzewo (drzewo → płaska lista z parentId) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor splaszcz-drzewo |
 | ui-funkcja | zaleznyOdMilestone ({ id: msId } — rodzeństwo za milestone'em z poddrzewami, łańcuch) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor zalezny-od-milestone |
 | ui-funkcja | zalezniMilestone (zależni przechodnio) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor zalezni-milestone |
-| ui-funkcja | pierwszyDozwolonyDzien (dzień roboczy po końcu milestone'a) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor pierwszy-dozwolony-dzien |
+| ui-funkcja | pierwszyDozwolonyDzien (dzień pracy gałęzi po końcu milestone'a) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor pierwszy-dozwolony-dzien |
+| ui-funkcja | rodzajDnia ('rob' / 'sob' / 'nd'; święto = nd) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor rodzaj-dnia |
+| ui-funkcja | normPw (ustawienie gałęzi { sob, nd }; true = dawne „pracuje w dni wolne”) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor praca-w-wolne |
+| ui-funkcja | czyWolnyDla (dzień wolny dla gałęzi z ustawieniem pw) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor czy-wolny-dla |
+| ui-funkcja | liczDniPracy ({ rob, sob, nd, razem } w zakresie od..ost) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor licz-dni-pracy |
 | ui-funkcja | roznicaDniRoboczych (przesunięcie w dniach roboczych ze znakiem) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor roznica-dni-roboczych |
 | ui-funkcja | przesunORobocze (dzień ± n dni roboczych) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor przesun-o-robocze |
 | ui-funkcja | przesunZaleznych (wariant „zachowaj odstęp”) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor przesun-zaleznych |
+| ui-funkcja | prognozyMilestonow (prognoza końca milestone'ów z blokerów, poślizg przenoszony łańcuchem A → B) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor prognozy-milestonow |
+| ui-funkcja | prognozaZaleznego (gdzie najwcześniej wypadnie pozycja kolidująca z milestone'em) | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor prognoza-zaleznego |
 | ui-funkcja | buildTasksFromTree — reguła „nie wcześniej niż” w domyślnych datach | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor build-tasks-ms-regula |
 | ui-propsy | msZaleznosc / msWezly / savePlanDatesBatch (reguły milestone'ów) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-ms-propsy |
 | ui-funkcja | minOdOf (pierwszy dozwolony start pozycji) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-min-od |
+| ui-funkcja | kolizjaMsOf (kolizja z milestone'em liczona od jego prognozy; tylko ostrzeżenie) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-kolizja-ms |
+| ui-funkcja | cień kolizji (przerywany pasek: gdzie pozycja najwcześniej wypadnie) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-cien-kolizji |
+| ui-stala | harmonogram-cien-kolizji-css (wygląd cienia kolizji i próbki w legendzie) | apps/frontend/src/components/shared/harmonogram/harmonogram.css | @anchor harmonogram-cien-kolizji-css |
+| ui-stala | msWezlyHarm (msWezly z prognozą milestone'ów dla Harmonogramu w Realizacji) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-ms-wezly-prognoza |
 | ui-funkcja | zapisz (dociąganie do milestone'a, przesuwanie zależnych, komunikat hg-info) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-zapisz |
 | ui-stan | podgladZal (podgląd na żywo przesuwanych zależnych) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-podglad-zaleznych |
 | ui-stala | msZaleznosc / msWezly w Planowaniu | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-ms |
@@ -2496,6 +2512,8 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-stala | ENTRY_STATUS / ENTRY_STATUS_META / entryStatusOf (status wpisu) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor leaf-entry-status |
 | ui-funkcja | offerPriceOf (cena ofertowa pozycji) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor offer-price-of |
 | ui-funkcja | realizationOf.byStatus (koszt pozycji wg statusów) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-by-status |
+| ui-funkcja | podzialPlanowych (wpisy „planowy” zajmują plan z wyceny od najwcześniejszego, nadwyżka = pozaplanowo; realizationOf.ponadPlan / .podzial) | apps/frontend/src/components/shared/wbs/realizationShared.js | @anchor realization-planned-split |
+| ui-propsy | EntryRow.podzial (pod statusem wpisu: „planowo X · pozaplanowo Y”, gdy wpis planowy wychodzi ponad plan) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor entry-row-ponad-plan |
 | ui-stan | orphanEntries (wpisy poza baseline do eksportu) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-orphan-entries |
 | ui-funkcja | DeltaLine (Δ w kolumnie Koszt całkowity) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-delta-line |
 | ui-funkcja | offerStatusMetaOf (status oferty z „Poza baseline”) | apps/frontend/src/components/shared/RealizationNewTab.jsx | @anchor realization-new-offer-status-meta |

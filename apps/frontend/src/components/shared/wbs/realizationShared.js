@@ -297,6 +297,29 @@ export function rozliczenieOf(node, card, entry) {
     return { rozl: ROZLICZENIE.OFERTA, powod: '' };
 }
 
+// @anchor realization-planned-split — przydział wpisów „planowy” do planu z wyceny: wpisy planowe,
+// od najwcześniejszej daty zakupu, zajmują plan (`planValueOf`) do wyczerpania, a nadwyżka liczy
+// się jako pozaplanowa. Plan 3910 zł i jeden zakup planowy za 13 860 zł = 3910 planowo + 9950
+// pozaplanowo. Status wpisu w bazie zostaje taki, jak ustawił użytkownik — podział liczy się przy
+// każdym odczycie, więc zmiana planu (nowy baseline, inna cena) przelicza go sama.
+// Zwraca Map id wpisu → { planowo, ponadPlan } (tylko wpisy planowe).
+export function podzialPlanowych(entries, planValue) {
+    const r2 = (x) => Math.round(x * 100) / 100;
+    const czas = (e) => { const t = new Date(e.entryDate || e.createdAt || 0).getTime(); return Number.isFinite(t) ? t : 0; };
+    const planowe = (entries || [])
+        .filter(e => entryStatusOf(e) === ENTRY_STATUS.PLANNED)
+        .sort((a, b) => (czas(a) - czas(b)) || String(a.createdAt || '').localeCompare(String(b.createdAt || '')) || String(a.id).localeCompare(String(b.id)));
+    const out = new Map();
+    let zostalo = Math.max(0, Number(planValue) || 0);
+    for (const e of planowe) {
+        const v = r2((Number(e.qty) || 0) * (Number(e.unitCost) || 0));
+        const planowo = Math.min(v, zostalo);
+        zostalo = r2(zostalo - planowo);
+        out.set(e.id, { planowo: r2(planowo), ponadPlan: r2(v - planowo) });
+    }
+    return out;
+}
+
 // @anchor realization-of — suma wpisów realizacji liścia wobec planu z wyceny.
 // `avg` to średnia ważona (każdy wpis ma własny koszt jedn.), `state` steruje kolorem:
 // none → nic nie zrobione, part → w trakcie, full → plan wykonany, over → ponad plan,
@@ -312,11 +335,21 @@ export function realizationOf(node, entries, card = null) {
     // prognozowany = plan budżetu − zakupy planowe (nie mniej niż 0; pozycja zamknięta nie ma
     // już czego prognozować). Zakupy pozaplanowe nie zjadają prognozy, tylko powiększają
     // `planWydatkow`, a `koszt` = zakupy + prognoza to koszt całkowity pozycji.
+    // Planowo nigdy ponad plan: wpis planowy wychodzący poza wycenę dzieli `podzialPlanowych`.
+    const planV = planValueOf(node, card);
+    const podzial = podzialPlanowych(zakupy, planV);
     const byStatus = { PLANNED: 0, UNPLANNED: 0, FORECAST: 0 };
-    for (const e of zakupy) byStatus[entryStatusOf(e)] += (Number(e.qty) || 0) * (Number(e.unitCost) || 0);
-    byStatus.FORECAST = node?.realizationClosed ? 0 : Math.max(0, planValueOf(node, card) - byStatus.PLANNED);
+    let ponadPlan = 0;
+    for (const e of zakupy) {
+        if (entryStatusOf(e) !== ENTRY_STATUS.PLANNED) { byStatus.UNPLANNED += (Number(e.qty) || 0) * (Number(e.unitCost) || 0); continue; }
+        const p = podzial.get(e.id);
+        byStatus.PLANNED += p.planowo;
+        byStatus.UNPLANNED += p.ponadPlan;
+        ponadPlan += p.ponadPlan;
+    }
+    byStatus.FORECAST = node?.realizationClosed ? 0 : Math.max(0, planV - byStatus.PLANNED);
     for (const k of Object.keys(byStatus)) byStatus[k] = Math.round(byStatus[k] * 100) / 100;
-    const planWydatkow = Math.round((planValueOf(node, card) + byStatus.UNPLANNED) * 100) / 100;
+    const planWydatkow = Math.round((planV + byStatus.UNPLANNED) * 100) / 100;
     const koszt = Math.round((value + byStatus.FORECAST) * 100) / 100;
     const plan = Number(node?.quantity) || 0;
     const pct = plan > 0 ? Math.round((qty / plan) * 100) : (qty > 0 ? 100 : 0);
@@ -332,6 +365,9 @@ export function realizationOf(node, entries, card = null) {
         koszt,
         planWydatkow,
         byStatus,
+        // Część wpisów „planowy” ponad plan z wyceny (już wliczona w `byStatus.UNPLANNED`) i podział per wpis.
+        ponadPlan: Math.round(ponadPlan * 100) / 100,
+        podzial,
         plan,
         pct,
         state,

@@ -15,8 +15,14 @@
 .rz .hg-grp button.n { cursor: pointer; }
 .rz .hg-grp button.n:hover { color: var(--info); }
 .rz .hg-grp .mono { font-weight: 400; }
-.rz .hg-grp .wow { margin-left: auto; flex: none; background: none; border: 1px solid var(--line); border-radius: 10px; padding: 0 7px; font: 500 10px var(--f-mono); color: var(--muted); cursor: pointer; }
-.rz .hg-grp .wow.on { border-color: var(--warn); color: var(--warn); }
+/* @anchor harmonogram-pw-css — praca gałęzi w dni wolne: soboty (żółty) i niedziele/święta (czerwony) osobno */
+.rz .hg-grp .pw { margin-left: auto; flex: none; display: flex; gap: 4px; }
+.rz .hg-grp .wow { flex: none; background: none; border: 1px solid var(--line); border-radius: 10px; padding: 0 7px; font: 500 10px var(--f-mono); color: var(--muted); cursor: pointer; }
+.rz .hg-grp .wow.sob.on { border-color: var(--warn); color: var(--warn); }
+.rz .hg-grp .wow.nd.on { border-color: var(--bad); color: var(--bad); }
+.rz .hg-lbl .daty .pw-l { font-weight: 600; }
+.rz .hg-lbl .daty .pw-l.sob { color: var(--warn); }
+.rz .hg-lbl .daty .pw-l.nd { color: var(--bad); }
 .rz .hg-lbl { padding: 5px 8px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; justify-content: center; gap: 3px; min-width: 0; overflow: hidden; }
 .rz .hg-lbl:hover { background: var(--sunk); }
 .rz .hg-lbl .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -52,7 +58,14 @@
 .rz .hg-tor .bar { top: 13px; }
 .rz .hg-tor .bar .tx { position: relative; z-index: 1; }
 .rz .hg-tor .bar .przerwa { position: absolute; top: 0; bottom: 0; background: rgba(15, 21, 28, .45); pointer-events: none; }
-.rz .hg-tor .diam { top: 15px; }
+/* @anchor harmonogram-cien-kolizji-css — gdzie pozycja kolidująca z milestone'em (jego prognozą) najwcześniej wypadnie */
+.rz .hg-tor .bar-cien { position: absolute; top: 13px; height: 18px; border: 1px dashed var(--bad); border-radius: 4px; background: color-mix(in srgb, var(--bad) 12%, transparent); z-index: 0; }
+.rz .hg-tor .bar-cien.cut-l { border-left-style: none; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.rz .hg-tor .bar-cien.cut-r { border-right-style: none; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.rz .hg .legend .sw-cien-kol { display: inline-block; width: 26px; height: 10px; border: 1px dashed var(--bad); border-radius: 3px; background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.rz .hg-tor .bar .pw-dzien { position: absolute; bottom: 0; height: 4px; pointer-events: none; }
+.rz .hg-tor .bar .pw-dzien.sob { background: var(--warn); }
+.rz .hg-tor .bar .pw-dzien.nd { background: var(--bad); }
 .rz .hg-tor .poza { position: absolute; top: 14px; font: 500 10px var(--f-mono); color: var(--muted); white-space: nowrap; }
 .rz .hg-tor .poza.l { left: 3px; }
 .rz .hg-tor .poza.r { right: 3px; }
@@ -60,6 +73,9 @@
 
 /* legenda — próbki nowych warstw */
 .rz .hg .legend .sw-wolny { display: inline-block; width: 14px; height: 10px; background: var(--sunk); border: 1px solid var(--line); }
+.rz .hg .legend .sw-pw { display: inline-block; width: 14px; height: 4px; }
+.rz .hg .legend .sw-pw.sob { background: var(--warn); }
+.rz .hg .legend .sw-pw.nd { background: var(--bad); }
 .rz .hg .legend .sw-mark { display: inline-block; width: 0; height: 12px; border-left: 2px dashed; }
 .rz .hg .legend .sw-mark.ps { border-color: #22c55e; }
 .rz .hg .legend .sw-mark.pe { border-color: #ef4444; }

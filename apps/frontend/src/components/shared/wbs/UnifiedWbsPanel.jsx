@@ -2447,12 +2447,19 @@ ${ganttSectionHtml}
 
         const tl = data.timeline || { mode: 'Day', columns: [], rowCells: [] };
         const tlColWidth = tl.mode === 'Month' ? 11 : tl.mode === 'Week' ? 8 : 3.6;
+        // Gałąź pracująca w soboty / niedziele i święta — te dni w osobnych kolumnach, a „Dni razem” sumuje.
+        const zWolnymi = data.rows.some(r => r.pw && (r.sob || r.nd));
         const baseCols = [
             { header: 'Gałąź (przedmiot)', key: 'branch', width: 32 },
             { header: 'Zadanie', key: 'name', width: 48 },
             { header: 'Data od', key: 'start', width: 16 },
             { header: 'Data do', key: 'end', width: 16 },
-            { header: 'Dni robocze', key: 'days', width: 14 },
+            ...(zWolnymi ? [
+                { header: 'Dni robocze (pn–pt)', key: 'rob', width: 14 },
+                { header: 'Soboty', key: 'sob', width: 10 },
+                { header: 'Niedziele i święta', key: 'nd', width: 12 },
+                { header: 'Dni razem', key: 'days', width: 12 },
+            ] : [{ header: 'Dni robocze', key: 'days', width: 14 }]),
             { header: 'Komentarz', key: 'comment', width: 36 },
         ];
         const tlCols = tl.columns.map((c, i) => ({ header: c.label, key: `tl${i}`, width: tlColWidth }));
@@ -2526,12 +2533,20 @@ ${ganttSectionHtml}
             // Daty od/do są włączne (oba dni należą do zadania).
             const n = row.number;
             const daysCell = row.getCell('days');
+            const S = `${COL_START}${n}`, E = `${COL_END}${n}`;
+            const robocze = `NETWORKDAYS(${S},${E}${holidaysRef})`;
             if (r.milestone) {
                 daysCell.value = '—';
-            } else if (r.wow) {
-                daysCell.value = { formula: `${COL_END}${n}-${COL_START}${n}+1`, result: r.days };
+            } else if (zWolnymi) {
+                // NETWORKDAYS.INTL (prefiks _xlfn — funkcja z Excela 2010): maska pn..nd, 1 = dzień wolny.
+                // Soboty = same soboty bez świąt; niedziele i święta = dni kalendarzowe − (pn–sob bez świąt).
+                row.getCell('rob').value = { formula: robocze, result: r.rob };
+                if (r.pw?.sob) row.getCell('sob').value = { formula: `_xlfn.NETWORKDAYS.INTL(${S},${E},"1111101"${holidaysRef})`, result: r.sob };
+                if (r.pw?.nd) row.getCell('nd').value = { formula: `${E}-${S}+1-_xlfn.NETWORKDAYS.INTL(${S},${E},"0000001"${holidaysRef})`, result: r.nd };
+                const kol = (k) => sheet.getColumn(k).letter + n;
+                daysCell.value = { formula: `${kol('rob')}+N(${kol('sob')})+N(${kol('nd')})`, result: r.days };
             } else {
-                daysCell.value = { formula: `NETWORKDAYS(${COL_START}${n},${COL_END}${n}${holidaysRef})`, result: r.days };
+                daysCell.value = { formula: robocze, result: r.days };
             }
             const cells = tl.rowCells[ri] || [];
             tl.columns.forEach((c, i) => {
@@ -2548,6 +2563,13 @@ ${ganttSectionHtml}
         }
         if (lastDataRow >= 2) {
             sumRow.getCell('days').value = { formula: `SUBTOTAL(9,${COL_DAYS}2:${COL_DAYS}${lastDataRow})`, result: data.totalDays };
+            if (zWolnymi) {
+                for (const k of ['rob', 'sob', 'nd']) {
+                    const L = sheet.getColumn(k).letter;
+                    sumRow.getCell(k).value = { formula: `SUBTOTAL(9,${L}2:${L}${lastDataRow})`, result: data.rows.reduce((s, r) => s + (r[k] || 0), 0) };
+                    sheet.getColumn(k).alignment = { horizontal: 'center' };
+                }
+            }
         }
         sheet.getColumn('days').alignment = { horizontal: 'center' };
         sheet.views = [{ state: 'frozen', xSplit: baseCols.length, ySplit: 1 }];

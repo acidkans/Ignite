@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import {
     zaleznyOdMilestone, zalezniMilestone, pierwszyDozwolonyDzien, roznicaDniRoboczych, przesunORobocze,
-    przesunZaleznych, buildTasksFromTree, splaszczDrzewo,
+    przesunZaleznych, buildTasksFromTree, splaszczDrzewo, prognozyMilestonow, prognozaZaleznego,
 } from '../apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js';
 
 const d = (s) => { const [y, m, dd] = s.split('-').map(Number); return new Date(y, m - 1, dd); };
@@ -94,6 +94,35 @@ t('buildTasksFromTree: domyślny start zależnego = dzień roboczy po końcu mil
     assert.equal(iso(po.p2.start), '2026-12-07');   // za milestone'em — pn po pt
     assert.equal(iso(po.p3.start), '2026-12-01');   // zapisane daty bez zmian (konflikt, nie korekta)
     assert.deepEqual(Object.keys(zaleznyOdMilestone(splaszczDrzewo(drzewo))).sort(), ['p2', 'p3']);
+});
+
+t('prognozyMilestonow: blokery przesuwają milestone, poślizg idzie łańcuchem A → B', () => {
+    // A 23.11 (pn), bloker +5 dni rob. → 30.11; B 25–26.11 zależy od A → najwcześniej 1.12, wypchnięty o 4 dni rob.
+    const wezly = {
+        A: { type: 'milestone', planOd: d('2026-11-23'), planDo: d('2026-11-23') },
+        B: { type: 'milestone', planOd: d('2026-11-25'), planDo: d('2026-11-26') },
+        C: { type: 'milestone', planOd: d('2026-12-20'), planDo: d('2026-12-21') },
+        p: { type: 'work', planOd: d('2026-11-24'), planDo: d('2026-12-19') },
+    };
+    const zal = { B: 'A', p: 'A', C: 'B' };
+    const pr = prognozyMilestonow(wezly, zal, { A: 5 });
+    assert.equal(iso(pr.A), '2026-11-30');
+    assert.equal(iso(pr.B), '2026-12-02');            // start 25.11 → 1.12 (+4 dni rob.), koniec 26.11 → 2.12
+    assert.equal(pr.C, undefined);                    // C daleko za B — zapas pochłania poślizg
+    assert.equal(pr.p, undefined);                    // pozycje robót nie mają prognozy milestone'a
+    // własny bloker B większy niż wypchnięcie — wygrywa późniejsza data
+    assert.equal(iso(prognozyMilestonow(wezly, zal, { A: 5, B: 10 }).B), '2026-12-10');
+    // nieruchomy (rozpoczęty) nie jest wypychany
+    assert.equal(prognozyMilestonow({ ...wezly, B: { ...wezly.B, nieruchomy: true } }, zal, { A: 5 }).B, undefined);
+});
+
+t("prognozaZaleznego: start po prognozie milestone'a, ta sama liczba dni pracy", () => {
+    // pozycja 24.11–19.12 (19 dni rob.), milestone z prognozą 30.11 → najwcześniej 1.12
+    const c = prognozaZaleznego(d('2026-11-24'), d('2026-12-19'), d('2026-12-01'));
+    assert.equal(iso(c.od), '2026-12-01');
+    assert.equal(iso(c.ost), '2026-12-29');           // 19 dni rob. od 1.12; 24–26.12 święta (Wigilia od 2025), 26–27 weekend
+    // gałąź pracująca w soboty: 23 dni pracy (19 + 4 soboty), 26.12 to święto, nie sobota robocza
+    assert.equal(iso(prognozaZaleznego(d('2026-11-24'), d('2026-12-19'), d('2026-12-01'), { sob: true }).ost), '2026-12-30');
 });
 
 console.log(`\n${ok} testów OK`);

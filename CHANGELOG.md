@@ -1,3 +1,58 @@
+## 2026-11-11 — feat(harmonogram): bez rombów dostaw; pole treści maila w wątku na 5 wierszy (v2026.11.11.1024)
+
+### architektura / API
+- `ui-sekcja` `Harmonogram` — usunięto warstwę dostaw (romby z wpisów FORECAST, checkbox „dostawy”, pozycje legendy); propsy `actualsOf`, `czyDostawa`, `kolizje` usunięte. Kolizje dostaw zostają w Kokpicie (karta „Kolizje dostaw”) i sygnałach drzewa
+- `ui-formularz` `MailWatku` — treść maila startuje z 5 wierszy (`AutoResizeTextarea rows={5}`), dalej rośnie z treścią
+
+### słownik
+- zmieniono `opisPaskaRobot` (`realizacja-opis-paska`) — bez `czyDostawa`
+
+## 2026-11-11 — feat(realizacja): kolizje zależnych od milestone'a liczone od jego prognozy (blokery), poślizg idzie łańcuchem
+
+### architektura / API
+- `ui-funkcja` `prognozyMilestonow` (`harmonogramCzas.js`) — prognoza końca milestone'a = plan + największy wpływ otwartych blokerów (dni rob.); milestone zależny od innego (A → B) jest wypychany, gdy startuje przed pierwszym dniem roboczym po prognozie A; własne blokery vs wypchnięcie — późniejsza data; nieruchomy zostaje
+- `ui-funkcja` `msAnaliza` (`realizacja-ms-analiza`) — kolizje zależnych liczone od prognozy milestone'a (bez prognozy — od planu); pole `zPrognozy` = kolizja tylko przez prognozę; sygnały w drzewie, karta Kokpitu „Kolizje z milestone'em” (plakietka „prognoza”) i treść blokera „Ustaw bloker” to uwzględniają
+- `ui-sekcja` `Harmonogram` — pozycja kolidująca z prognozą: czerwony pasek, podpowiedź z prognozą i planem, przerywany cień „gdzie wypadnie” (`prognozaZaleznego`: start po prognozie, ta sama liczba dni pracy); milestone wypchnięty łańcuchem ma cień prognozy z opisem „poślizg poprzedniego milestone'a”
+- zapisane daty bez zmian — prognoza to ostrzeżenie, nie plan; dociąganie przy przeciąganiu (`minOdOf`) zostaje przy planie milestone'a; Planowanie bez zmian (nie ma blokerów)
+
+### słownik
+- dodano `prognozyMilestonow`, `prognozaZaleznego`, `kolizjaMsOf`, `harmonogram-cien-kolizji`, `harmonogram-cien-kolizji-css`, `msWezlyHarm`
+
+### wytyczne
+- `ui-funkcja` `kolizjaMsOf` / `msAnaliza` — kolizja z milestone'em zawsze wobec jego prognozy (`prognoza || planDo`); twarde reguły zapisu (dociąganie startu) tylko wobec planu
+
+## 2026-11-11 — fix(realizacja): zakup „planowy” liczy się planowo tylko do wysokości planu z wyceny, reszta pozaplanowo
+
+### architektura / API
+- `ui-funkcja` `podzialPlanowych` (`realizationShared.js`) — wpisy `LeafActual` o statusie PLANNED zajmują plan pozycji (`planValueOf`) od najwcześniejszej daty zakupu; część ponad plan liczy się jako pozaplanowa. Przykład: plan 3910 zł, zakup planowy 1260 × 11 = 13 860 zł → planowo 3910, pozaplanowo 9950, prognoza 0
+- `ui-funkcja` `realizationOf` — `byStatus.PLANNED` nigdy ponad plan, nadwyżka w `byStatus.UNPLANNED`; nowe pola `ponadPlan` (suma nadwyżki) i `podzial` (Map id wpisu → { planowo, ponadPlan }). Wszystkie sumy (karta Wykonanie/Zakupy, Kokpit, Realizacja (tabela), arkusz „Realizacja” w Excelu) liczą się z tego jednego miejsca
+- pod statusem wpisu w tabeli zakupów: „planowo X · pozaplanowo Y”, gdy wpis planowy wychodzi ponad plan; plakietka „pozaplanowe +…” w nagłówku tabeli liczy też tę nadwyżkę
+- status wpisu w bazie się nie zmienia — podział liczony przy odczycie, zmiana planu przelicza go sama
+
+### słownik
+- dodano `podzialPlanowych` (`realization-planned-split`), `EntryRow.podzial` (`entry-row-ponad-plan`), `realizacja-ponad-plan`
+
+### wytyczne
+- `schema-pole` `LeafActual.status` = PLANNED oznacza „w planie, o ile plan starcza” — sumy planowe zawsze przez `realizationOf`/`podzialPlanowych`, nigdy przez proste sumowanie wpisów po statusie
+
+## 2026-11-11 — feat(harmonogram): praca w dni wolne osobno dla sobót i niedziel/świąt, dni liczone osobno (v2026.11.11.0825)
+
+### architektura / API
+- `ui-stan` `pracaWolne` (dawniej `wow`) w `ui-sekcja` `Harmonogram` — gałąź ma dwa przełączniki zamiast jednego „pracuje w dni wolne”: `sob.` i `nd.` (niedziele i święta); stan sesji jak dotąd, bez zmian w bazie
+- dni pozycji liczone osobno: przy nazwie i na pasku „17 d. + 3 sob. + 1 nd.”, w podpowiedzi pełny opis z sumą; przycisk gałęzi pokazuje, ile różnych sobót / niedziel-świąt gałąź pracuje
+- na pasku (zakres 14 dni / miesiąc): dzień wolny, w który gałąź nie pracuje = przerwa, sobota pracująca = żółty znacznik, niedziela/święto pracujące = czerwony znacznik
+- `ui-funkcja` `liczDniPracy`, `rodzajDnia`, `czyWolnyDla`, `normPw` w `harmonogramCzas.js`; `advanceToWorkingDay` / `retreatToWorkingDay` / `addWorkingDays` / `pierwszyDozwolonyDzien` przyjmują ustawienie gałęzi `{ sob, nd }` (`true` = dawne „wszystkie dni wolne”)
+- eksport Excel (arkusz „Harmonogram”): gdy któraś gałąź pracuje w dni wolne — kolumny „Dni robocze (pn–pt)”, „Soboty”, „Niedziele i święta”, „Dni razem” z żywymi formułami (`NETWORKDAYS`, `_xlfn.NETWORKDAYS.INTL`) i sumami `SUBTOTAL`
+- eksport PDF harmonogramu: gdy są dni pracy w sobotę/niedzielę — kolumny „Dni rob.”, „Sob.”, „Nd./św.”, przy gałęzi dopisek „pracuje w soboty / niedziele i święta”
+- `addWorkingDays` liczy dni przez `setDate`, nie `− DAY_MS` (doba przy zmianie czasu ma 23/25 h)
+
+### słownik
+- dodano `rodzajDnia`, `normPw`, `czyWolnyDla`, `liczDniPracy`, `RODZAJE_WOLNYCH`, `opisDni`, `wolneGalezi`, `harmonogram-pw-css`
+- zmieniono `wow` → `pracaWolne` (anchor `harmonogram-praca-w-wolne` bez zmian); opisy `dniRobocze`, `getExcelData`, `pierwszyDozwolonyDzien`
+
+### wytyczne
+- `ui-funkcja` `rodzajDnia` — święto w dowolny dzień tygodnia liczy się jak niedziela (Kodeks pracy łączy niedziele i święta); gałąź „sob.” nie pracuje w święto wypadające w sobotę
+- `ui-funkcja` `liczDniPracy` — każde liczenie dni pracy pozycji Harmonogramu idzie przez nią z ustawieniem gałęzi, nie przez własną pętlę po `isNonWorkingDay`
 ## 2026-11-11 — fix(urlopy): liczba dni urlopu pomija święta ustawowe, nie tylko weekendy (v2026.11.11.0905)
 
 ### architektura / API
