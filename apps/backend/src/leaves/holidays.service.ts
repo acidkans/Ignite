@@ -87,6 +87,15 @@ export class HolidaysService {
     ]);
   }
 
+  // @anchor holiday-keys-for-years
+  /// Swieta z kilku lat naraz (`fromYear`..`toYear` wlacznie) — urlop potrafi przejsc
+  /// przez sylwestra, wiec liczac dni trzeba znac swieta obu lat.
+  static holidayKeysForYears(fromYear: number, toYear: number): Set<string> {
+    const keys = new Set<string>();
+    for (let y = fromYear; y <= toYear; y++) HolidaysService.holidayKeys(y).forEach(k => keys.add(k));
+    return keys;
+  }
+
   // @anchor list-holiday-days-off
   /// Lista dni wolnych na rok: propozycje z kalendarza wzbogacone o stan decyzji z bazy
   /// plus dni dodane recznie przez administratora (spoza kalendarza swiat).

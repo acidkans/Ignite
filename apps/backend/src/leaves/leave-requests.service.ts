@@ -954,8 +954,7 @@ export class LeaveRequestsService {
     if (isNaN(start) || isNaN(end) || end < start) return [];
 
     // swieta liczymy raz na rok wystepujacy w zakresie — wniosek potrafi przejsc przez sylwestra
-    const holidays = new Set<string>();
-    for (let y = fy; y <= ty; y++) HolidaysService.holidayKeys(y).forEach(k => holidays.add(k));
+    const holidays = HolidaysService.holidayKeysForYears(fy, ty);
 
     const segments: LeaveEventSegment[] = [];
     let blockStart: number | null = null;
@@ -1650,7 +1649,7 @@ export class LeaveRequestsService {
 
   // @anchor working-days-between-requests
   /// Dni urlopu we wniosku: dni kalendarzowe od poczatku do konca wlacznie,
-  /// z pominieciem sobot i niedziel.
+  /// z pominieciem sobot, niedziel i swiat ustawowych (`HolidaysService.holidayKeys`).
   static workingDaysBetween(from: Date, to: Date): number {
     if (isNaN(from.getTime()) || isNaN(to.getTime())) return 0;
     const [fy, fm, fd] = LeaveRequestsService.warsawDayKey(from).split('-').map(Number);
@@ -1659,10 +1658,13 @@ export class LeaveRequestsService {
     const end = Date.UTC(ty, tm - 1, td);
     if (end < start) return 0;
 
+    // zakres przez sylwestra — swieta obu lat
+    const holidays = HolidaysService.holidayKeysForYears(fy, ty);
     let days = 0;
     for (let ms = start; ms <= end; ms += 86400000) {
-      const dow = new Date(ms).getUTCDay(); // 0 = niedziela, 6 = sobota
-      if (dow !== 0 && dow !== 6) days++;
+      const day = new Date(ms);
+      const dow = day.getUTCDay(); // 0 = niedziela, 6 = sobota
+      if (dow !== 0 && dow !== 6 && !holidays.has(day.toISOString().slice(0, 10))) days++;
     }
     return days;
   }

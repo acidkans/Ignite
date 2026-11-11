@@ -1,3 +1,21 @@
+## 2026-11-11 — fix(urlopy): liczba dni urlopu pomija święta ustawowe, nie tylko weekendy (v2026.11.11.0905)
+
+### architektura / API
+- `back-funkcja` `LeaveRequestsService.workingDaysBetween` (`working-days-between-requests`) — domyślny `daysCount` wniosku (`POST /leave-requests`, zmiana dat w `PATCH`) pomija soboty, niedziele i święta z `HolidaysService.holidayKeys`; urlop 9–13.11.2026 = 4 dni, nie 5
+- `back-funkcja` `LeavesService.workingDaysBetween` (`working-days-between`) — to samo dla domyślnego `daysCount` wpisu urlopowego
+- `back-funkcja` `LeavesService.splitDaysIntoMonths` (`split-days-into-months`) — rozbicie dla DAK liczy dni robocze bez świąt; pole `workingDays` w `GET /leaves/monthly-breakdown` zmienia się dla urlopów obejmujących święto, a stare wpisy z `daysCount` liczonym ze świętem pokażą się jako rozjazd (`mismatch`)
+- `ui-funkcja` `workingDays` w `LeaveRequestModal.jsx` (`working-days-between-front`) — liczy przez `nonWorkingDayReason` z `polishHolidays.js`, ta sama lista co backend
+- `ui-funkcja` `countWorkingDays` w `RequirementsTab.jsx` — „Czas: N dni rob." w Informacjach o zamówieniu (i w PDF) pomija święta przez `isNonWorkingDay` z `harmonogramCzas.js`
+- zapisane wnioski i wpisy zachowują swój `daysCount` — bez przeliczania wstecz
+- test: `test/leave-days-holidays.test.mjs` (nowy), `test/monthly-split-check.js` i `test/leave-calendar-segments.test.js` liczą na prawdziwym kodzie przez wspólny `test/leaves-backend-loader.cjs`
+
+### słownik
+- dodano `HolidaysService.holidayKeysForYears` (`holiday-keys-for-years`) — święta z zakresu lat (urlop przez sylwestra); używa go też `LeaveRequestsService.calendarSegments`
+
+### wytyczne
+- `back-funkcja` liczenie dni urlopu — dzień urlopu = pn–pt i nie święto; zbiór świąt zawsze z `HolidaysService.holidayKeysForYears(rokOd, rokDo)` (backend) albo `nonWorkingDayReason` (frontend), nigdy własna lista ani sam `getUTCDay()`
+- `schema-pole` `LeaveRequest.daysCount` / `Leave.daysCount` — zmiana reguły liczenia nie przelicza zapisanych rekordów; ewentualna korekta wstecz tylko za zgodą użytkownika
+
 ## 2026-11-11 — fix(bezpieczenstwo): globalny guard JWT, koniec samorejestracji, ścieżki plików tylko w uploads, allowlista pól PATCH wymagań i propozycji (v2026.11.11.0809)
 
 ### architektura / API
