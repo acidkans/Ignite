@@ -5,6 +5,7 @@
 
 // @anchor polish-fixed-holidays-frontend
 /// Swieta o stalej dacie. Ruchome licza sie od Wielkanocy — patrz `easter-sunday-frontend`.
+/// `fromYear` = pierwszy rok, w ktorym dzien jest ustawowo wolny (Wigilia od 2025).
 export const POLISH_FIXED_HOLIDAYS = [
     { month: 1, day: 1, name: 'Nowy Rok' },
     { month: 1, day: 6, name: 'Święto Trzech Króli' },
@@ -13,9 +14,14 @@ export const POLISH_FIXED_HOLIDAYS = [
     { month: 8, day: 15, name: 'Wniebowzięcie NMP / Święto Wojska Polskiego' },
     { month: 11, day: 1, name: 'Wszystkich Świętych' },
     { month: 11, day: 11, name: 'Narodowe Święto Niepodległości' },
+    { month: 12, day: 24, name: 'Wigilia Bożego Narodzenia', fromYear: 2025 },
     { month: 12, day: 25, name: 'Boże Narodzenie (pierwszy dzień)' },
     { month: 12, day: 26, name: 'Boże Narodzenie (drugi dzień)' },
 ];
+
+// @anchor fixed-holidays-for-year-frontend
+/// Swieta o stalej dacie obowiazujace w danym roku — lustro `HolidaysService.fixedHolidaysForYear()`.
+export const fixedHolidaysForYear = (year) => POLISH_FIXED_HOLIDAYS.filter(h => !h.fromYear || year >= h.fromYear);
 
 // @anchor easter-sunday-frontend
 /// Niedziela wielkanocna (algorytm Meeusa/Jonesa/Butchera, w UTC).
@@ -47,7 +53,7 @@ export const holidayNames = (year) => {
     const easter = easterSunday(year);
     const shift = (days) => key(new Date(easter.getTime() + days * 86400000));
     const map = new Map();
-    POLISH_FIXED_HOLIDAYS.forEach(h => map.set(key(new Date(Date.UTC(year, h.month - 1, h.day))), h.name));
+    fixedHolidaysForYear(year).forEach(h => map.set(key(new Date(Date.UTC(year, h.month - 1, h.day))), h.name));
     map.set(key(easter), 'Wielkanoc');
     map.set(shift(1), 'Poniedziałek Wielkanocny');
     map.set(shift(49), 'Zielone Świątki');
