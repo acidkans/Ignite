@@ -5,7 +5,9 @@ import { PrismaService } from '../prisma/prisma.service';
 /// Swieta ustawowo wolne o STALEJ dacie. Tylko one moga wypasc w sobote —
 /// swieta ruchome sa przypiete do dnia tygodnia (Poniedzialek Wielkanocny = pn,
 /// Zielone Swiatki = nd, Boze Cialo = czw), wiec nie generuja dnia do odebrania.
-export const POLISH_FIXED_HOLIDAYS: { month: number; day: number; name: string }[] = [
+/// `fromYear` = pierwszy rok, w ktorym dzien jest ustawowo wolny (Wigilia od 2025 —
+/// nowelizacja ustawy o dniach wolnych od pracy z grudnia 2024).
+export const POLISH_FIXED_HOLIDAYS: { month: number; day: number; name: string; fromYear?: number }[] = [
   { month: 1, day: 1, name: 'Nowy Rok' },
   { month: 1, day: 6, name: 'Święto Trzech Króli' },
   { month: 5, day: 1, name: 'Święto Pracy' },
@@ -13,6 +15,7 @@ export const POLISH_FIXED_HOLIDAYS: { month: number; day: number; name: string }
   { month: 8, day: 15, name: 'Wniebowzięcie NMP / Święto Wojska Polskiego' },
   { month: 11, day: 1, name: 'Wszystkich Świętych' },
   { month: 11, day: 11, name: 'Narodowe Święto Niepodległości' },
+  { month: 12, day: 24, name: 'Wigilia Bożego Narodzenia', fromYear: 2025 },
   { month: 12, day: 25, name: 'Boże Narodzenie (pierwszy dzień)' },
   { month: 12, day: 26, name: 'Boże Narodzenie (drugi dzień)' },
 ];
@@ -38,10 +41,16 @@ export interface SaturdayHolidayProposal {
 export class HolidaysService {
   constructor(private prisma: PrismaService) {}
 
+  // @anchor fixed-holidays-for-year
+  /// Swieta o stalej dacie obowiazujace w danym roku — pomija te, ktore weszly pozniej (`fromYear`).
+  static fixedHolidaysForYear(year: number): { month: number; day: number; name: string }[] {
+    return POLISH_FIXED_HOLIDAYS.filter(h => !h.fromYear || year >= h.fromYear);
+  }
+
   // @anchor saturday-holidays-for-year
   /// Propozycje na rok — swieta o stalej dacie, ktore wypadaja w sobote.
   static proposalsForYear(year: number): { date: string; name: string }[] {
-    return POLISH_FIXED_HOLIDAYS
+    return HolidaysService.fixedHolidaysForYear(year)
       .map(h => ({ d: new Date(Date.UTC(year, h.month - 1, h.day)), name: h.name }))
       .filter(x => x.d.getUTCDay() === 6)
       .map(x => ({ date: x.d.toISOString().slice(0, 10), name: x.name }));
@@ -79,7 +88,7 @@ export class HolidaysService {
     const easter = HolidaysService.easterSunday(year);
     const shift = (days: number) => key(new Date(easter.getTime() + days * 86400000));
     return new Set([
-      ...POLISH_FIXED_HOLIDAYS.map(h => key(new Date(Date.UTC(year, h.month - 1, h.day)))),
+      ...HolidaysService.fixedHolidaysForYear(year).map(h => key(new Date(Date.UTC(year, h.month - 1, h.day)))),
       key(easter),
       shift(1), // Poniedzialek Wielkanocny
       shift(49), // Zielone Swiatki

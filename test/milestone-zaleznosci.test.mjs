@@ -44,7 +44,8 @@ t('zalezniMilestone: przechodnio', () => {
 t('pierwszyDozwolonyDzien: dzień roboczy po końcu (pt → pn), w dni wolne kalendarzowo', () => {
     assert.equal(iso(pierwszyDozwolonyDzien(d('2026-12-04'))), '2026-12-07');       // pt → pn
     assert.equal(iso(pierwszyDozwolonyDzien(d('2026-12-04'), true)), '2026-12-05'); // praca w sobotę
-    assert.equal(iso(pierwszyDozwolonyDzien(d('2026-12-23'))), '2026-12-24');       // śr → cz
+    assert.equal(iso(pierwszyDozwolonyDzien(d('2026-12-23'))), '2026-12-28');       // śr → pn: Wigilia (wolna od 2025) + święta + weekend
+    assert.equal(iso(pierwszyDozwolonyDzien(d('2024-12-23'))), '2024-12-24');       // pn → wt: przed 2025 Wigilia była dniem roboczym
     assert.equal(iso(pierwszyDozwolonyDzien(d('2026-12-24'))), '2026-12-28');       // święta 25–26.12 + weekend
 });
 

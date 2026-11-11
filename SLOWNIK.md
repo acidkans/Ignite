@@ -2754,6 +2754,7 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | back-serwis | HolidaysService | apps/backend/src/leaves/holidays.service.ts | @anchor holidays-service |
 | back-stala | POLISH_FIXED_HOLIDAYS | apps/backend/src/leaves/holidays.service.ts | @anchor polish-fixed-holidays |
 | back-funkcja | proposalsForYear | apps/backend/src/leaves/holidays.service.ts | @anchor saturday-holidays-for-year |
+| back-funkcja | HolidaysService.fixedHolidaysForYear | apps/backend/src/leaves/holidays.service.ts | @anchor fixed-holidays-for-year |
 | back-funkcja | lista dni wolnych za swieta | apps/backend/src/leaves/holidays.service.ts | @anchor list-holiday-days-off |
 | back-funkcja | zatwierdzanie dni wolnych | apps/backend/src/leaves/holidays.service.ts | @anchor approve-holiday-days-off |
 | back-funkcja | liczba zatwierdzonych dni wolnych | apps/backend/src/leaves/holidays.service.ts | @anchor approved-holiday-days-count |
@@ -2910,6 +2911,7 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | ui-sekcja | DayOffNotice | apps/frontend/src/components/shared/leaves/LeaveRequestModal.jsx | @anchor day-off-notice |
 | ui-stala | POLISH_FIXED_HOLIDAYS (frontend) | apps/frontend/src/components/shared/leaves/polishHolidays.js | @anchor polish-fixed-holidays-frontend |
 | ui-funkcja | easterSunday (frontend) | apps/frontend/src/components/shared/leaves/polishHolidays.js | @anchor easter-sunday-frontend |
+| ui-funkcja | fixedHolidaysForYear (frontend) | apps/frontend/src/components/shared/leaves/polishHolidays.js | @anchor fixed-holidays-for-year-frontend |
 | ui-funkcja | holidayNames | apps/frontend/src/components/shared/leaves/polishHolidays.js | @anchor polish-holiday-names-frontend |
 | ui-funkcja | nonWorkingDayReason | apps/frontend/src/components/shared/leaves/polishHolidays.js | @anchor non-working-day-reason |
 | ui-funkcja | nextWorkingDayFrom | apps/frontend/src/components/shared/leaves/polishHolidays.js | @anchor next-working-day-from |

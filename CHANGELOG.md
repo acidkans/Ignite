@@ -16,6 +16,20 @@
 - `back-funkcja` liczenie dni urlopu — dzień urlopu = pn–pt i nie święto; zbiór świąt zawsze z `HolidaysService.holidayKeysForYears(rokOd, rokDo)` (backend) albo `nonWorkingDayReason` (frontend), nigdy własna lista ani sam `getUTCDay()`
 - `schema-pole` `LeaveRequest.daysCount` / `Leave.daysCount` — zmiana reguły liczenia nie przelicza zapisanych rekordów; ewentualna korekta wstecz tylko za zgodą użytkownika
 
+## 2026-11-11 — fix(swieta): Wigilia 24.12 dniem ustawowo wolnym od 2025 w harmonogramie, eksporcie Excel i urlopach (v2026.11.11.0858)
+
+### architektura / API
+- `back-stala` `POLISH_FIXED_HOLIDAYS` i `ui-stala` `POLISH_FIXED_HOLIDAYS (frontend)` — nowy wpis 24.12 „Wigilia Bożego Narodzenia” z polem `fromYear: 2025`; `back-funkcja` `HolidaysService.holidayKeys()` i `proposalsForYear()` biorą listę przez `fixedHolidaysForYear(year)` — 24.12 w sobotę (np. 2033) daje propozycję dnia wolnego za sobotę
+- `harmonogramCzas.js` `polishHolidaysSet(year)` — 24.12 od 2025; dni robocze harmonogramu, prognozy i arkusz `Dni_wolne` (NETWORKDAYS) w eksporcie Excel liczą Wigilię jako wolną
+- test: `test/wigilia-dzien-wolny.test.mjs` (3 listy + zgodność dni wolnych 2020–2040), `test/milestone-zaleznosci.test.mjs` — 23.12.2026 → pierwszy dzień roboczy 28.12
+
+### słownik
+- dodano `HolidaysService.fixedHolidaysForYear` (`fixed-holidays-for-year`) i `fixedHolidaysForYear (frontend)` (`fixed-holidays-for-year-frontend`)
+
+### wytyczne
+- `back-stala` `POLISH_FIXED_HOLIDAYS` — święto obowiązujące od danego roku dostaje `fromYear`; czytaj listę przez `fixedHolidaysForYear(year)`, nigdy wprost, inaczej wcześniejsze lata dostaną dzień wolny wstecz
+- listy świąt są trzy i muszą być zgodne: `back-funkcja` `HolidaysService.holidayKeys()`, `ui-funkcja` `holidayNames()` (`leaves/polishHolidays.js`), `ui-funkcja` `polishHolidaysSet()` (`harmonogramCzas.js`) — zmiana w jednej = zmiana w pozostałych, pilnuje `test/wigilia-dzien-wolny.test.mjs` (sekcja 4)
+
 ## 2026-11-11 — fix(bezpieczenstwo): globalny guard JWT, koniec samorejestracji, ścieżki plików tylko w uploads, allowlista pól PATCH wymagań i propozycji (v2026.11.11.0809)
 
 ### architektura / API

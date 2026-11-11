@@ -40,6 +40,8 @@ const polishHolidaysSet = (year) => {
         new Date(year, 7, 15),
         new Date(year, 10, 1), new Date(year, 10, 11),
         new Date(year, 11, 25), new Date(year, 11, 26),
+        // Wigilia — dzień ustawowo wolny od 2025 (lustro `fromYear` w leaves/polishHolidays.js i HolidaysService)
+        ...(year >= 2025 ? [new Date(year, 11, 24)] : []),
     ];
     const set = new Set(days.map(d => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`));
     _holidaysCache[year] = set;
