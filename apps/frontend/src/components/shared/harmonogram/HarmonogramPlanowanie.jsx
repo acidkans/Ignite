@@ -19,6 +19,10 @@ export default function HarmonogramPlanowanie({
     wbsTree, projectName, projectStartDate, projectEndDate,
     onNodeDurationChange, onGanttDateChange, onGanttDatesBatch, onGetHtmlReady, onExcelDataReady, canEdit = true,
     onPrzestaw = null,
+    // @anchor harmonogram-planowanie-widok — Set id poddrzewa gałęzi wybranej w drzewie (`planowanie-focus-widok`)
+    // albo null. Zawęża WIERSZE; reguły milestone'ów (`msZaleznosc`, `msWezly`) liczą się na całym drzewie.
+    // Eksport Excel/PDF Harmonogramu bierze to, co widać — jak przy zoomie w Realizacji.
+    widokIds = null,
 }) {
     const items = useMemo(() => wbsTree?.items || [], [wbsTree]);
 
@@ -129,6 +133,10 @@ export default function HarmonogramPlanowanie({
         timer.current = setTimeout(flush, 800);
     }, [projectStart, overrides, flush]);
 
+    const grupyWidoku = useMemo(() => (widokIds
+        ? grupy.map(g => ({ ...g, liscie: g.liscie.filter(l => widokIds.has(l.id)) })).filter(g => g.liscie.length)
+        : grupy), [grupy, widokIds]);
+
     const onApi = useCallback(({ getExcelData, getHtml }) => {
         onExcelDataReady?.(getExcelData);
         onGetHtmlReady?.(getHtml);
@@ -154,8 +162,9 @@ export default function HarmonogramPlanowanie({
                     </label>
                 </div>
             </div>
+            {widokIds && !grupyWidoku.length && (<div className="p-4 text-center text-gray-500 text-sm">Ta gałąź nie ma pozycji z datami w harmonogramie.</div>)}
             <Harmonogram
-                grupy={grupy} nazwa={nazwaPelna} canEdit={canEdit} savePlanDates={savePlanDates}
+                grupy={grupyWidoku} nazwa={nazwaPelna} canEdit={canEdit} savePlanDates={savePlanDates}
                 msZaleznosc={msZaleznosc} msWezly={msWezly} savePlanDatesBatch={savePlanDatesBatch}
                 onDurationChange={onNodeDurationChange} pokazWciecia
                 domyslnyZakres="calosc" zakresKey="planowanie-harmonogram-zakres"

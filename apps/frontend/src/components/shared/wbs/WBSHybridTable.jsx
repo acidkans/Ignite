@@ -1588,7 +1588,7 @@ function TagChips({ tags = [], tagColor, onRemove, onTagClick }) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 // @anchor wbs-hybrid-table
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null, leafDefaults = null, offerLocked = false, realization = null }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null, leafDefaults = null, offerLocked = false, realization = null, widokGalezi = null }) {
     // @anchor wbs-hybrid-offer-lock — po akceptacji baseline kolumny Ilość / Koszt jedn. / Narzut %
     // przestają przyjmować wpis (każdy typ liścia); kliknięcie otwiera modal `OfferLockGuard`.
     const offerLockProps = offerLockInputProps(offerLocked);
@@ -2468,6 +2468,17 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         }
     }
 
+    // @anchor wbs-hybrid-widok-galezi — zawężenie do gałęzi wybranej w drzewie (`planowanie-focus-widok`):
+    // { id, ids: przodkowie + poddrzewo, sciezka: przodkowie }. TYLKO wyświetlanie — `wbsTree`, numeracja
+    // (wbsPath) i zapis zostają na całym drzewie. Przodkowie są wymuszenie rozwinięci, rodzeństwo ukryte.
+    // Z wyszukiwaniem: część wspólna obu zbiorów.
+    const widocznePoGalezi = widokGalezi?.ids || null;
+    const visibleIds = searchVisibleIds && widocznePoGalezi
+        ? new Set([...searchVisibleIds].filter(id => widocznePoGalezi.has(id)))
+        : (searchVisibleIds || widocznePoGalezi);
+    const widokGaleziId = widokGalezi?.id || null;
+    useEffect(() => { if (widokGaleziId) open(`node_${widokGaleziId}`); }, [widokGaleziId]); // eslint-disable-line react-hooks/exhaustive-deps
+
     // Klik poza otwartym czatem gałęzi zamyka go. Własny przycisk czatu pomijamy — on sam przełącza.
     useEffect(() => {
         const chatIds = Object.keys(nodeDrawerTab).filter(id => nodeDrawerTab[id] === 'chat');
@@ -2665,7 +2676,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             ((c.children || []).length > 0 && isOpen(`node_${c.id}`)) || hasOpenBranchBelow(c));
 
     const renderNode = (node, depth, wbsPath, parentId = null, rootIndex = 0, spine = null) => {
-        if (searchVisibleIds && !searchVisibleIds.has(node.id)) {
+        if (visibleIds && !visibleIds.has(node.id)) {
             (node.children || []).forEach((child, ci) => renderNode(child, depth + 1, `${wbsPath}.${ci + 1}`, node.id, rootIndex, spine));
             return;
         }
@@ -3532,7 +3543,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
             );
         }
 
-        if (searchVisibleIds || isOpen(rowId)) {
+        if (searchVisibleIds || isOpen(rowId) || widokGalezi?.sciezka.has(node.id)) {
             const kids = node.children || [];
             // Akordeon: rodzeństwo jest widoczne jako wiersze, ale tylko rozwinięte dziecko
             // pokazuje swoje pod-drzewo (sterowane przez `isOpen(rowId)` przy każdym wierszu).
@@ -3552,7 +3563,7 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         }
     };
 
-    if (isOpen('root')) {
+    if (isOpen('root') || widokGalezi) {
         if (items.length === 0) {
             rows.push(
                 <tr key="empty">

@@ -99,6 +99,9 @@ export default function BudgetTable({
     // @anchor budget-table-costs-only — checkbox w kaflu Marża: eksport budżetu bez przychodu
     costsOnly = false,
     onCostsOnlyChange,
+    // @anchor budget-table-widok-galezi — Set id pozycji wybranej gałęzi (`planowanie-focus-widok`) albo null.
+    // Działa jak filtr kolumnowy: kafle „Oferta” liczą całe zamówienie, wiersz „Gałąź” i stopka — tylko widoczne.
+    widokIds = null,
 }) {
     useOrderCurrency(); // przerysowanie po wczytaniu/zmianie waluty zamówienia
     const lockProps = offerLockInputProps(offerLocked);
@@ -208,18 +211,21 @@ export default function BudgetTable({
 
     // @anchor budget-has-active-filter — czy jakikolwiek filtr kolumnowy jest ustawiony.
     // Steruje trzecim wierszem kafli KPI: bez filtrów „Zafiltrowane" powielałoby „Ofertę".
-    const hasActiveFilter = useMemo(() => Object.keys(colFilters).some(k => {
+    const hasColFilter = useMemo(() => Object.keys(colFilters).some(k => {
         const v = colFilters[k];
         return Array.isArray(v) ? v.length > 0 : String(v ?? '').trim() !== '';
     }), [colFilters]);
+    const hasActiveFilter = hasColFilter || !!widokIds;
+    const etykietaFiltra = widokIds && !hasColFilter ? 'Gałąź' : 'Zafiltrowane';
 
     const filteredRows = useMemo(() => {
         const activeKeys = Object.keys(colFilters).filter(k => {
             const v = colFilters[k];
             return Array.isArray(v) ? v.length > 0 : String(v ?? '').trim() !== '';
         });
-        if (activeKeys.length === 0) return localRows;
-        return localRows.filter(r => {
+        const base = widokIds ? localRows.filter(r => widokIds.has(r.id)) : localRows;
+        if (activeKeys.length === 0) return base;
+        return base.filter(r => {
             if (r.id === focusedRowId) return true;
             return activeKeys.every(k => {
                 const filt = colFilters[k];
@@ -238,7 +244,7 @@ export default function BudgetTable({
                 return String(val ?? '').toLowerCase().includes(String(filt).toLowerCase().trim());
             });
         });
-    }, [localRows, colFilters, focusedRowId]);
+    }, [localRows, colFilters, focusedRowId, widokIds]);
 
     const displayedRows = useMemo(() => {
         // Podczas edycji (wiersz w focusie) trzymamy zamrożoną kolejność — wiersze
@@ -436,7 +442,7 @@ export default function BudgetTable({
                         )}
                         {hasActiveFilter && (
                             <div className="flex items-baseline justify-between gap-2 italic">
-                                <span className="text-[8px] uppercase tracking-wider text-red-300/60">Zafiltrowane</span>
+                                <span className="text-[8px] uppercase tracking-wider text-red-300/60">{etykietaFiltra}</span>
                                 <span className="text-xs font-bold text-red-200/80">{fmtPLNFull(filteredSums.totalCost)} {currencyCode()}</span>
                             </div>
                         )}
@@ -455,7 +461,7 @@ export default function BudgetTable({
                         )}
                         {hasActiveFilter && (
                             <div className="flex items-baseline justify-between gap-2 italic">
-                                <span className="text-[8px] uppercase tracking-wider text-green-300/60">Zafiltrowane</span>
+                                <span className="text-[8px] uppercase tracking-wider text-green-300/60">{etykietaFiltra}</span>
                                 <span className="text-xs font-bold text-green-200/80">{fmtPLNFull(filteredSums.totalRevenue)} {currencyCode()}</span>
                             </div>
                         )}
@@ -474,7 +480,7 @@ export default function BudgetTable({
                         )}
                         {hasActiveFilter && (
                             <div className="flex items-baseline justify-between gap-2 italic">
-                                <span className="text-[8px] uppercase tracking-wider text-green-300/60">Zafiltrowane</span>
+                                <span className="text-[8px] uppercase tracking-wider text-green-300/60">{etykietaFiltra}</span>
                                 <span className="text-xs font-bold text-green-200/80">{fmtPLNFull(filteredSums.profit)} {currencyCode()}</span>
                             </div>
                         )}
@@ -493,7 +499,7 @@ export default function BudgetTable({
                         )}
                         {hasActiveFilter && (
                             <div className="flex items-baseline justify-between gap-2 italic">
-                                <span className="text-[8px] uppercase tracking-wider text-green-300/60">Zafiltrowane</span>
+                                <span className="text-[8px] uppercase tracking-wider text-green-300/60">{etykietaFiltra}</span>
                                 <span className="text-xs font-bold text-green-200/80">{fmtPctFull(filteredSums.marginPct)}</span>
                             </div>
                         )}

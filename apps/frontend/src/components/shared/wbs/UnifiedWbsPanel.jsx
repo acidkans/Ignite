@@ -8,10 +8,8 @@ import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import HarmonogramPlanowanie from '../harmonogram/HarmonogramPlanowanie';
-import { buildBranchIndex, SYNTHETIC_ROOT } from '../RealizationNewTab';
-import { LEAF_TYPES, OPEN_LEAF_TYPES, TYPE_META, wbsRootOf } from './realizationShared';
-import { useBranchFocus, idGaleziPoKluczu } from '../../../hooks/useBranchFocus';
-import { navZIndeksu } from '../../Layout/SidebarBranchTree';
+import { SYNTHETIC_ROOT } from '../RealizationNewTab';
+import { useDrzewoPlanu } from '../../Layout/DrzewoPlanu';
 import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, PRICED_LEAF_TYPES, orderDefaultsFrom, leafDefaultsMissing, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes, applyGroupMultipliers, groupQtyFactor, isCostNode } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { buildStrategyTasksQaPdfArtifact } from '../../../utils/strategyTasksQaPdfExport';
@@ -32,7 +30,7 @@ import AllTasksModal from './AllTasksModal';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
 import OfferLockGuard, { guardOfferEdit, useOfferLock } from '../OfferLockGuard';
 import { buildQaIndex, resolveStrategyText } from './strategyQuestions';
-import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt, fmtMoney } from '../../../utils/currency';
+import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt } from '../../../utils/currency';
 
 
 const VIEWS = {
@@ -383,65 +381,36 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
 
     // ── Drzewo gałęzi w lewym panelu — soczewka Planowania ──────────────────
     // @anchor planowanie-branch-nav — to samo drzewo co w Realizacji (`realizacja-branch-nav`), ale z WERSJI
-    // ROBOCZEJ i z kosztem planu gałęzi zamiast sygnałów. Wybrana gałąź jest wspólna (`use-branch-focus`),
-    // więc po przełączeniu zakładki zostajesz na tej samej gałęzi. Krótkich nazw tu nie edytujemy: zapis
-    // Struktury (`saveTree`) odsyła całe drzewo ze stanu i nadpisałby świeżo zmienioną nazwę.
-    const navIdx = useMemo(() => buildBranchIndex(wbsData, orderName, isManagerOrAdmin ? LEAF_TYPES : OPEN_LEAF_TYPES), [wbsData, orderName, isManagerOrAdmin]);
-    const navKosztPoId = useMemo(() => {
-        const m = new Map();
-        for (const n of budgetScopeData) {
-            if (isCostNode(n)) m.set(n.id, Math.max(0, parseFloat(n.unitCost) || 0) * Math.max(0, parseFloat(n.quantity) || 0));
-        }
-        return m;
-    }, [budgetScopeData]);
-    const { galezie: navGalezie, pozycje: navPozycje } = useMemo(() => navZIndeksu(navIdx, SYNTHETIC_ROOT, {
-        typLabel: (t) => TYPE_META[t]?.label || t,
-        galaz: (b) => {
-            if (!isManagerOrAdmin) return {};
-            const koszt = navIdx.leavesOfSubtree(b.id).reduce((s, l) => s + (navKosztPoId.get(l.id) || 0), 0);
-            return { koszt, kosztTytul: `Koszt planu (wersja robocza): ${fmtMoney(koszt)}` };
-        },
-    }), [navIdx, navKosztPoId, isManagerOrAdmin]);
-    const [navFocusKlucz, setNavFocusKlucz] = useBranchFocus(nodeId);
-    const navIdPoKluczu = useMemo(() => idGaleziPoKluczu(navIdx.branches, wbsRootOf), [navIdx]);
-    const navFocus = navIdPoKluczu.get(navFocusKlucz) ?? SYNTHETIC_ROOT;
-    const navFocusId = navIdx.nodeById[navFocus] && !LEAF_TYPES.includes(navIdx.nodeById[navFocus]?.type) ? navFocus : SYNTHETIC_ROOT;
-    const [navPozycja, setNavPozycja] = useState(null);
-    const [navPelne, setNavPelneState] = useState(() => { try { return sessionStorage.getItem('realizacja-pelne-nazwy') === '1'; } catch { return false; } });
-    const navRef = useRef({});
-    navRef.current = {
-        idx: navIdx,
-        setFocus: (id) => {
-            const n = navIdx.nodeById[id];
-            setNavFocusKlucz(!n || id === SYNTHETIC_ROOT ? SYNTHETIC_ROOT : wbsRootOf(n));
-        },
-        setPelne: (v) => { setNavPelneState(v); try { sessionStorage.setItem('realizacja-pelne-nazwy', v ? '1' : '0'); } catch { /* tryb prywatny */ } },
-    };
-    useEffect(() => {
-        if (!setBranchNav) return;
-        setBranchNav({
-            lens: 'plan',
-            orderId: nodeId,
-            rootId: SYNTHETIC_ROOT,
-            galezie: navGalezie,
-            pozycje: navPozycje,
-            focusId: navFocusId,
-            selectedId: (navPozycja && navIdx.nodeById[navPozycja]) ? navPozycja : navFocusId,
-            pelne: navPelne,
-            canRename: false,
-            onFocus: (id) => { setNavPozycja(null); navRef.current.setFocus(id); },
-            onPozycja: (id) => {
-                const l = navRef.current.idx.nodeById[id];
-                setNavPozycja(id);
-                if (l) navRef.current.setFocus(l.branchId || SYNTHETIC_ROOT);
-            },
-            onRename: () => {},
-            onPelne: (v) => navRef.current.setPelne(v),
-            sygnaly: false,
-            onSygnaly: () => {},
-        });
-    }, [setBranchNav, nodeId, navGalezie, navPozycje, navFocusId, navPozycja, navPelne, navIdx]);
-    useEffect(() => () => { if (setBranchNav) setBranchNav(null); }, [setBranchNav]);
+    // ROBOCZEJ i z kosztem planu gałęzi zamiast sygnałów (`use-drzewo-planu`). Na żywym `wbsData`, więc zmiany
+    // w Strukturze widać w drzewie od razu. Wybrana gałąź jest wspólna (`use-branch-focus`).
+    const { navFocusId, setFocus: setNavFocus } = useDrzewoPlanu({ nodeId, wbsData, orderName, isManagerOrAdmin, setBranchNav, kosztoweWezly: budgetScopeData });
+
+    // @anchor planowanie-focus-widok — zawężenie sekcji Planowania do gałęzi wybranej w drzewie.
+    // WYŁĄCZNIE filtr wyświetlania: `wbsTree`, `wbsData`, zapis Struktury i eksporty zostają na całym
+    // zamówieniu. Zapis (`saveTree`) kasuje węzły, których nie ma w wysłanym drzewie
+    // (`wbs-nodes-save-tree-hidden-guard`), więc przycięte drzewo nigdy nie trafia do `setWbsTree`.
+    // Liczone z ŻYWEGO `wbsTree`, żeby świeżo dodana pozycja w gałęzi od razu była widoczna.
+    // `ids` = przodkowie + poddrzewo (Struktura potrzebuje ścieżki), `poddrzewo` = sama gałąź z potomkami.
+    const focusWidok = useMemo(() => {
+        if (navFocusId === SYNTHETIC_ROOT) return null;
+        let found = null;
+        let sciezka = [];
+        const znajdz = (nodes, przodkowie) => {
+            for (const n of nodes || []) {
+                if (n.id === navFocusId) { found = n; sciezka = przodkowie; return true; }
+                if (znajdz(n.children, [...przodkowie, n])) return true;
+            }
+            return false;
+        };
+        znajdz(wbsTree?.items, []);
+        if (!found) return null;
+        const poddrzewo = new Set();
+        const zbierz = (n) => { poddrzewo.add(n.id); (n.children || []).forEach(zbierz); };
+        zbierz(found);
+        const ids = new Set([...sciezka.map(n => n.id), ...poddrzewo]);
+        return { id: found.id, node: found, sciezka, sciezkaIds: new Set(sciezka.map(n => n.id)), ids, poddrzewo };
+    }, [navFocusId, wbsTree]);
+    const widokGalezi = useMemo(() => (focusWidok ? { id: focusWidok.id, ids: focusWidok.ids, sciezka: focusWidok.sciezkaIds } : null), [focusWidok]);
 
     const [extractingForWbs, setExtractingForWbs] = useState(false);
     const [unassignedRequirements, setUnassignedRequirements] = useState([]);
@@ -6801,6 +6770,26 @@ ${ganttSectionHtml}
                 className="hidden"
                 onChange={handleBudgetImportFileChange}
             />
+            {/* @anchor planowanie-sciezka-galezi — pasek nad sekcjami, gdy Planowanie jest zawężone do gałęzi
+                (`planowanie-focus-widok`). Klik w przodka zawęża do niego, „całe zamówienie” zdejmuje zawężenie. */}
+            {focusWidok && (
+                <div className="flex flex-shrink-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-1.5 text-[11px]">
+                    <span className="font-bold uppercase tracking-widest text-emerald-300/80">Gałąź</span>
+                    <button onClick={() => setNavFocus(SYNTHETIC_ROOT)} className="text-sky-300/80 hover:text-sky-200" title="Pokaż całe zamówienie">całe zamówienie</button>
+                    {focusWidok.sciezka.map(n => (
+                        <span key={n.id} className="flex items-center gap-1.5">
+                            <span className="text-gray-600">›</span>
+                            <button onClick={() => setNavFocus(n.id)} title={n.name} className="max-w-[220px] truncate text-sky-300/80 hover:text-sky-200">{n.shortName || n.name}</button>
+                        </span>
+                    ))}
+                    <span className="text-gray-600">›</span>
+                    <span className="max-w-[320px] truncate font-semibold text-white" title={focusWidok.node.name}>{focusWidok.node.shortName || focusWidok.node.name}</span>
+                    <span className="ml-auto text-[10px] text-gray-500" title="Oferta, Kalendarz i wszystkie eksporty poza Harmonogramem liczą całe zamówienie">
+                        Struktura, Budżet, Materiały, Harmonogram i Strategie tylko dla tej gałęzi · Oferta i eksporty (poza Harmonogramem): całe zamówienie
+                    </span>
+                    <button onClick={() => setNavFocus(SYNTHETIC_ROOT)} className="rounded px-1.5 text-gray-400 hover:bg-white/10 hover:text-white" title="Zdejmij zawężenie">✕</button>
+                </div>
+            )}
             {sectionOrder.map(key => {
                 if (key === 'oferta') {
                     if (!isManagerOrAdmin) return null;
@@ -6905,6 +6894,7 @@ ${ganttSectionHtml}
                                     <div className="text-sm font-bold uppercase tracking-widest text-gray-500">Strategie gałęzi</div>
                                     {wbsData
                                         .filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0)
+                                        .filter(n => !focusWidok || focusWidok.ids.has(n.id))
                                         .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
                                         .map(n => (
                                             <BranchStrategyField
@@ -6935,6 +6925,7 @@ ${ganttSectionHtml}
                     return renderSection('gantt', 'Harmonogram', BarChart3, 'cyan', (
                         <HarmonogramPlanowanie
                             wbsTree={wbsTree}
+                            widokIds={focusWidok?.poddrzewo || null}
                             projectName={orderName || projectName || 'Projekt'}
                             onNodeDurationChange={handleGanttDurationChange}
                             onGanttDateChange={handleGanttDateChange}
@@ -6956,6 +6947,7 @@ ${ganttSectionHtml}
                         <div className="flex flex-col flex-1 min-h-0">
                             <WBSHybridTable
                                 wbsTree={wbsTree}
+                                widokGalezi={widokGalezi}
                                 setWbsTree={setWbsTreeAndRef}
                                 nodeName={orderName || projectName || 'Projekt'}
                                 processNodeId={nodeId}
@@ -7031,6 +7023,7 @@ ${ganttSectionHtml}
                             {(!budgetAcceptance?.acceptedVersionId || budgetMode === 'live') ? (
                                 <BudgetTable
                                     rows={budgetRows}
+                                    widokIds={focusWidok?.poddrzewo || null}
                                     nodeId={nodeId}
                                     versionId={versionId}
                                     offerLocked={offerLocked}
@@ -7073,6 +7066,7 @@ ${ganttSectionHtml}
                             accepted={!!budgetAcceptance?.acceptedVersionId}
                             offerLocked={offerLocked}
                             externalWbsNodes={wbsData}
+                            widokIds={focusWidok?.poddrzewo || null}
                             onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
                             onQuantityChange={async (id, qty, name) => {
                                 const q = String(qty);

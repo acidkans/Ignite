@@ -72,7 +72,8 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
     const plan = nav.lens === 'plan';
     const l = lensOf(nav);
     const tylkoSyg = !plan && !!nav.sygnaly;
-    const [rozwiniete, setRozwiniete] = useState(() => new Set());
+    // @anchor sidebar-branch-tree-rozwiniete — drzewo domyślnie ROZWINIĘTE do pozycji (liście widać bez klikania);
+    // strzałka zwija gałąź ręcznie (`zwiniete`), ponowny klik ją rozwija.
     const [zwiniete, setZwiniete] = useState(() => new Set());
     const [edycja, setEdycja] = useState(null); // { id, value }
 
@@ -125,7 +126,7 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
     // naciśnięciu klawisza i pole krótkiej nazwy gubiłoby fokus.
     const wiersz = (g, d) => {
         const maDzieci = (dzieci[g.id] || []).length > 0 || (pozycjeOf[g.id] || []).length > 0;
-        const otwarte = !zwiniete.has(g.id) && (rozwiniete.has(g.id) || sciezka.some(s => s.id === g.id));
+        const otwarte = !zwiniete.has(g.id);
         const wybrana = wybrany === g.id;
         return (
             <div key={g.id}>
@@ -135,9 +136,7 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
                     style={pad(d)}>
                     <span onClick={(e) => {
                         e.stopPropagation();
-                        const przelacz = (set, dodaj) => set(prev => { const n = new Set(prev); dodaj ? n.add(g.id) : n.delete(g.id); return n; });
-                        przelacz(setRozwiniete, !otwarte);
-                        przelacz(setZwiniete, otwarte);
+                        setZwiniete(prev => { const n = new Set(prev); otwarte ? n.add(g.id) : n.delete(g.id); return n; });
                     }} className={`flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-white/10 ${maDzieci ? '' : 'invisible'}`}>
                         <ChevronRight size={10} className={otwarte ? 'rotate-90' : ''} />
                     </span>
@@ -174,7 +173,7 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
         );
     };
 
-    // Zawsze całe drzewo od korzenia; ścieżka do wybranej gałęzi rozwija się sama (`sciezka`).
+    // Zawsze całe drzewo od korzenia, rozwinięte do pozycji (`sidebar-branch-tree-rozwiniete`).
     const widok = dzieci[nav.rootId] || [];
 
     return (

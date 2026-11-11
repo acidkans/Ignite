@@ -8,6 +8,7 @@ import SchematTab from './components/shared/SchematTab';
 import LogistykaMaterialListsTab from './components/shared/LogistykaMaterialListsTab';
 import RealizationNewTab from './components/shared/RealizationNewTab';
 import RealizacjaPanel from './components/shared/realizacja/RealizacjaPanel';
+import DrzewoPlanu from './components/Layout/DrzewoPlanu';
 import MaterialDatabaseTab from './components/shared/MaterialDatabaseTab';
 import OffersTab from './components/shared/OffersTab';
 import UnifiedWbsPanel from './components/shared/wbs/UnifiedWbsPanel';
@@ -1299,6 +1300,19 @@ export default function DashboardPage() {
                                     setBranchNav={setBranchNav}
                                 />
                             </div>
+                        )}
+                        {/* @anchor drzewo-planu-zakladki — drzewo gałęzi w lewym panelu na KAŻDEJ zakładce zamówienia.
+                            Planowanie i Realizacja publikują je same (`planowanie-branch-nav`, `realizacja-branch-nav`),
+                            pozostałym zakładkom (Informacje, Dokumentacja, Pliki finansowe, Schemat…) wystawia je `DrzewoPlanu`. */}
+                        {isOrder && setBranchNav && activeTab !== 'unified' && activeTab !== 'realizacja' && (
+                            <DrzewoPlanu
+                                key={`drzewo-${activeAreaId}-${selectedVersionId}`}
+                                nodeId={activeAreaId}
+                                versionId={selectedVersionId}
+                                orderName={activeNode?.name || ''}
+                                userRoles={currentRoles}
+                                setBranchNav={setBranchNav}
+                            />
                         )}
                         {activeTab === 'schematics' && (
                            <div className="absolute inset-0 overflow-hidden">

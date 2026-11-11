@@ -265,8 +265,18 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | navZIndeksu — dane drzewa gałęzi (gałęzie + pozycje) wspólne dla Planowania i Realizacji | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor nav-z-indeksu |
 | ui-stala | LENS — soczewka drzewa: `plan` (koszt planu, zieleń) albo `real` (sygnały, fuksja) | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-lens |
 | ui-ikona | koszt planu gałęzi w drzewie (soczewka Planowania) | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree-koszt |
+| ui-stan | zwiniete — drzewo w sidebarze domyślnie rozwinięte do pozycji, strzałka zwija gałąź | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree-rozwiniete |
 | ui-stala | navGalezie / navPozycje Planowania — drzewo z wersji roboczej z kosztem gałęzi | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor planowanie-branch-nav |
+| ui-hook | useDrzewoPlanu — drzewo gałęzi w soczewce planu (koszt, wspólny wybór gałęzi), Planowanie + pozostałe zakładki | apps/frontend/src/components/Layout/DrzewoPlanu.jsx | @anchor use-drzewo-planu |
+| ui-panel | DrzewoPlanu — publikator drzewa dla zakładek zamówienia bez własnego drzewa | apps/frontend/src/components/Layout/DrzewoPlanu.jsx | @anchor drzewo-planu |
+| ui-sekcja | drzewo gałęzi na każdej zakładce zamówienia (montaż `DrzewoPlanu`) | apps/frontend/src/DashboardPage.jsx | @anchor drzewo-planu-zakladki |
 | ui-hook | Planowanie nie zwija lewego panelu (drzewo gałęzi), zwija tylko panel AI | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor planowanie-lewy-panel |
+| ui-stala | focusWidok — zawężenie Planowania do gałęzi (przodkowie + poddrzewo), tylko filtr wyświetlania | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor planowanie-focus-widok |
+| ui-lista | ścieżka wybranej gałęzi nad sekcjami Planowania (całe zamówienie › … › gałąź, ✕) | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor planowanie-sciezka-galezi |
+| ui-propsy | widokGalezi — Struktura pokazuje tylko gałąź i jej przodków | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-widok-galezi |
+| ui-propsy | widokIds — Budżet: wiersze gałęzi, kafel „Gałąź” obok całego zamówienia | apps/frontend/src/components/shared/wbs/BudgetTable.jsx | @anchor budget-table-widok-galezi |
+| ui-propsy | widokIds — Materiały: lista gałęzi, eksport z całego zamówienia | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-widok-galezi |
+| ui-propsy | widokIds — Harmonogram w Planowaniu: wiersze gałęzi, reguły milestone na całym drzewie | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-widok |
 | ui-stan | tylkoSygnaly | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tylko-sygnaly |
 | ui-stala | zakupyApi | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zakupy-api |
 | ui-sekcja | szuflada zakupów pozycji | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szuflada-zakupow |
