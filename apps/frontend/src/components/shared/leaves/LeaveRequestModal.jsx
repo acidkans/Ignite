@@ -312,8 +312,9 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
     );
 
     // @anchor working-days-between-front
-    // Dni od poczatku do konca wlacznie, z pominieciem sobot i niedziel.
-    // 11.08 00:00 → 12.08 23:59 to dwa dni; weekend w zakresie nie jest liczony.
+    // Dni od poczatku do konca wlacznie, z pominieciem sobot, niedziel i swiat ustawowych
+    // (`nonWorkingDayReason` — ta sama lista co backend, takze przez sylwestra).
+    // 11.08 00:00 → 12.08 23:59 to dwa dni; weekend i swieto w zakresie nie sa liczone.
     const workingDays = (startLocal, endLocal) => {
         if (!startLocal || !endLocal) return 0;
         const [ay, am, ad] = startLocal.slice(0, 10).split('-').map(Number);
@@ -323,8 +324,7 @@ export default function LeaveRequestModal({ request, leaveTypes, employees, curr
         if (isNaN(start) || isNaN(end) || end < start) return 0;
         let days = 0;
         for (let ms = start; ms <= end; ms += 86400000) {
-            const dow = new Date(ms).getUTCDay();
-            if (dow !== 0 && dow !== 6) days++;
+            if (!nonWorkingDayReason(new Date(ms).toISOString().slice(0, 10))) days++;
         }
         return days;
     };

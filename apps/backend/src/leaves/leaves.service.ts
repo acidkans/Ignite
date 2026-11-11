@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { HolidaysService } from './holidays.service';
 
 // @anchor leave-companies
 /// Firmy, dla których moduł Urlopy jest dostępny.
@@ -323,11 +324,11 @@ export class LeavesService {
   }
 
   // @anchor split-days-into-months
-  /// Rozbicie urlopu na miesiace. Podstawa sa dni robocze (pn-pt) w kazdym miesiacu,
-  /// ale suma MUSI sie zgadzac z zapisanym `daysCount` — inaczej DAK dostalby inne
-  /// liczby niz widnieja na wpisie. Gdy `daysCount` odbiega od dni roboczych
-  /// (wpis reczny, urlop godzinowy), rozdzielamy go proporcjonalnie, a reszte
-  /// z zaokraglen dopisujemy do ostatniego miesiaca.
+  /// Rozbicie urlopu na miesiace. Podstawa sa dni robocze (pn-pt bez swiat ustawowych)
+  /// w kazdym miesiacu, ale suma MUSI sie zgadzac z zapisanym `daysCount` — inaczej DAK
+  /// dostalby inne liczby niz widnieja na wpisie. Gdy `daysCount` odbiega od dni roboczych
+  /// (wpis reczny, urlop godzinowy, stary wpis liczony ze swietem), rozdzielamy go
+  /// proporcjonalnie, a reszte z zaokraglen dopisujemy do ostatniego miesiaca.
   private static splitDaysIntoMonths(from: Date, to: Date, daysCount: number): {
     months: Record<string, number>;
     workingDays: number;
@@ -336,17 +337,20 @@ export class LeavesService {
     const end = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
     if (isNaN(start) || isNaN(end) || end < start) return { months: {}, workingDays: 0 };
 
+    // zakres przez sylwestra — swieta obu lat
+    const holidays = HolidaysService.holidayKeysForYears(from.getUTCFullYear(), to.getUTCFullYear());
     const perMonth: Record<string, number> = {};
     let workingDays = 0;
     for (let ms = start; ms <= end; ms += 86400000) {
-      const dow = new Date(ms).getUTCDay();
-      if (dow === 0 || dow === 6) continue;
+      const day = new Date(ms);
+      const dow = day.getUTCDay();
+      if (dow === 0 || dow === 6 || holidays.has(day.toISOString().slice(0, 10))) continue;
       const key = LeavesService.monthKey(ms);
       perMonth[key] = (perMonth[key] || 0) + 1;
       workingDays++;
     }
 
-    // urlop w calosci na weekendzie — bez dni roboczych rozbijamy po dniach kalendarzowych
+    // urlop w calosci na weekendzie / w swieta — bez dni roboczych rozbijamy po dniach kalendarzowych
     if (workingDays === 0) {
       for (let ms = start; ms <= end; ms += 86400000) {
         const key = LeavesService.monthKey(ms);
@@ -442,7 +446,7 @@ export class LeavesService {
         months: visible,
       };
     })
-      // urlop moze zachodzic na okno, ale caly przypadac poza nim po odsianiu weekendow
+      // urlop moze zachodzic na okno, ale caly przypadac poza nim po odsianiu weekendow i swiat
       .filter(r => Object.keys(r.months).length > 0)
       .sort((a, b) => (a.lastName || '').localeCompare(b.lastName || '', 'pl') || a.dateFrom.localeCompare(b.dateFrom));
 
@@ -450,14 +454,16 @@ export class LeavesService {
   }
 
   // @anchor working-days-between
-  /// Liczba dni roboczych (pn–pt) w zakresie włącznie — domyślna wartość daysCount.
+  /// Liczba dni roboczych (pn–pt bez świąt ustawowych) w zakresie włącznie — domyślna wartość daysCount.
   private workingDaysBetween(from: Date, to: Date): number {
     if (isNaN(from.getTime()) || isNaN(to.getTime()) || to < from) return 1;
+    // zakres przez sylwestra — święta obu lat
+    const holidays = HolidaysService.holidayKeysForYears(from.getUTCFullYear(), to.getUTCFullYear());
     let days = 0;
     const cursor = new Date(from.getTime());
     while (cursor <= to) {
       const dow = cursor.getUTCDay();
-      if (dow !== 0 && dow !== 6) days++;
+      if (dow !== 0 && dow !== 6 && !holidays.has(cursor.toISOString().slice(0, 10))) days++;
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
     return days || 1;

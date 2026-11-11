@@ -10,17 +10,21 @@ import NewContactModal from './NewContactModal';
 import { shortCompanyName } from './wbs/realizationShared';
 import { fuzzyMatch } from './trainings/trainingsShared';
 import { ORDER_CURRENCIES, useOrderCurrency, saveOrderCurrency, loadOrderCurrency } from '../../utils/currency';
+import { isNonWorkingDay } from './harmonogram/harmonogramCzas';
 
+// Dni robocze projektu: pn–pt bez świąt ustawowych (`isNonWorkingDay` — lista z harmonogramu).
+// Daty 'YYYY-MM-DD' parsowane lokalnie, bo isNonWorkingDay patrzy na dzień w strefie przeglądarki.
 function countWorkingDays(startStr, endStr) {
     if (!startStr || !endStr) return null;
-    const start = new Date(startStr);
-    const end = new Date(endStr);
+    const parse = (s) => { const [y, m, d] = s.slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
+    const start = parse(startStr);
+    const end = parse(endStr);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
     if (end < start) return 0;
     let count = 0;
     const cur = new Date(start);
     while (cur <= end) {
-        const day = cur.getDay();
-        if (day !== 0 && day !== 6) count++;
+        if (!isNonWorkingDay(cur)) count++;
         cur.setDate(cur.getDate() + 1);
     }
     return count;

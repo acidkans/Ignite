@@ -6,15 +6,6 @@
 //  5. Boze Cialo (swieto ruchome, czwartek) tez przerywa pasek.
 //
 // Uruchomienie: node test/leave-calendar-segments.test.js
-const { execFileSync } = require('child_process');
-const path = require('path');
-const fs = require('fs');
-
-const ROOT = path.resolve(__dirname, '..');
-const BACKEND = path.join(ROOT, 'apps', 'backend');
-fs.mkdirSync(path.join(BACKEND, 'node_modules', '.cache'), { recursive: true });
-const OUT = fs.mkdtempSync(path.join(BACKEND, 'node_modules', '.cache', 'segments-test-'));
-
 let failures = 0;
 const check = (name, cond, extra) => {
     if (cond) return console.log(`  OK  ${name}`);
@@ -22,21 +13,9 @@ const check = (name, cond, extra) => {
     console.error(`  FAIL ${name}${extra ? ` — ${extra}` : ''}`);
 };
 
+// transpilacja przez wspolny loader — dziala tez w worktree bez wlasnych node_modules
 console.log('Kompilacja modulu Urlopy…');
-execFileSync(
-    process.execPath,
-    [
-        path.join(BACKEND, 'node_modules', 'typescript', 'bin', 'tsc'),
-        path.join(BACKEND, 'src', 'leaves', 'leave-requests.service.ts'),
-        '--outDir', OUT, '--module', 'commonjs', '--target', 'es2021',
-        '--experimentalDecorators', '--emitDecoratorMetadata', '--esModuleInterop',
-        '--skipLibCheck', '--moduleResolution', 'node',
-    ],
-    { cwd: BACKEND, stdio: 'inherit' },
-);
-
-require(path.join(BACKEND, 'node_modules', 'reflect-metadata'));
-const mod = require(path.join(OUT, 'leaves', 'leave-requests.service.js'));
+const { leaveRequestsModule: mod, cleanup } = require('./leaves-backend-loader.cjs')();
 const { LeaveRequestsService, buildCalendarInitials, CALENDAR_LABELS } = mod;
 
 // data w strefie Europe/Warsaw tak, jak trzyma ja baza — polnoc UTC
@@ -108,6 +87,6 @@ const godzinowyBezZgody = seg(req({
 }));
 check('rodzaj bez zgody na godziny zostaje calodniowy', !godzinowyBezZgody[0].timeStart);
 
-fs.rmSync(OUT, { recursive: true, force: true });
+cleanup();
 console.log(failures ? `\n${failures} test(ow) nie przeszlo` : '\nWszystkie testy przeszly');
 process.exit(failures ? 1 : 0);

@@ -3073,6 +3073,7 @@ Widoczny tylko dla adresów z `REALIZATION_NEW_PREVIEW_EMAILS`.
 | back-funkcja | LeaveRequestsService.resyncGoogleCalendar | apps/backend/src/leaves/leave-requests.service.ts | @anchor resync-google-calendar |
 | back-funkcja | HolidaysService.easterSunday | apps/backend/src/leaves/holidays.service.ts | @anchor easter-sunday |
 | back-funkcja | HolidaysService.holidayKeys | apps/backend/src/leaves/holidays.service.ts | @anchor polish-holiday-keys |
+| back-funkcja | HolidaysService.holidayKeysForYears | apps/backend/src/leaves/holidays.service.ts | @anchor holiday-keys-for-years |
 | back-endpoint | POST /leave-requests/calendar/resync | apps/backend/src/leaves/leave-requests.controller.ts | @anchor leave-requests-calendar-resync-endpoint |
 | back-typ | CalendarResyncResult | apps/backend/src/leaves/leave-requests.service.ts | @anchor calendar-resync-result |
 | back-funkcja | LeaveRequestsService.calendarSyncStatus | apps/backend/src/leaves/leave-requests.service.ts | @anchor calendar-sync-status |
