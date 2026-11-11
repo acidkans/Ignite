@@ -4,6 +4,7 @@ import { SchematicsService } from './schematics.service';
 import { Response } from 'express';
 import * as path from 'path';
 import { schematicsUploadOptions } from './upload.storage';
+import { Public } from '../auth/decorators/public.decorator';
 
 @Controller('schematics')
 export class SchematicsController {
@@ -43,6 +44,10 @@ export class SchematicsController {
     return this.schematicsService.getSchematic(id);
   }
 
+  // Publiczny: plik ładują <img>/<video>/react-pdf bez nagłówka JWT — serwis wydaje tylko
+  // pliki zarejestrowane jako schemat/załącznik (`schematics-get-file`). Reszta kontrolera
+  // stoi za globalnym JwtAuthGuard.
+  @Public()
   @Get('file/:fileName')
   async getSchematicFile(@Param('fileName') fileName: string, @Res() res: Response) {
       return this.schematicsService.getFile(fileName, res);

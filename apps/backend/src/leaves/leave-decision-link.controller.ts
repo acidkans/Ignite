@@ -2,6 +2,7 @@ import { Controller, Get, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { LeaveRequestsService } from './leave-requests.service';
+import { Public } from '../auth/decorators/public.decorator';
 
 // @anchor escape-decision-page-html
 const esc = (v: string) =>
@@ -11,6 +12,7 @@ const esc = (v: string) =>
 /// Przyciski „Zatwierdz" / „Odrzuc" z maila — kontroler CELOWO bez JwtAuthGuard,
 /// bo przelozony klika z klienta pocztowego, gdzie nie ma sesji aplikacji.
 /// Tozsamosc i akcja pochodza z podpisanego tokenu, nie z parametrow URL.
+@Public()
 @Controller('leave-requests')
 export class LeaveDecisionLinkController {
   constructor(

@@ -45,16 +45,4 @@ export class AuthService {
       access_token: this.jwtService.sign(payload),
     };
   }
-
-  async register(data: any) {
-    console.log(`[AUTH] Registering new user: ${data.email}`);
-    // 1. Create User
-    const user = await this.usersService.create(data);
-
-    // Registration is direct, no email confirmation needed.
-    return {
-      message: 'Konto zostało utworzone. Możesz się teraz zalogować.',
-      userId: user.id
-    };
-  }
 }

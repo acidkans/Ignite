@@ -312,7 +312,9 @@ export default function DashboardPage() {
 
     const fetchVersions = async () => {
         try {
-            const res = await fetch(`/api/ai/versions/${activeAreaId}`);
+            const res = await fetch(`/api/ai/versions/${activeAreaId}`, {
+                headers: { 'Authorization': `Bearer ${sessionStorage.getItem('token')}` }
+            });
             const data = await res.json();
             setVersions(data);
             if (data.length > 0) {

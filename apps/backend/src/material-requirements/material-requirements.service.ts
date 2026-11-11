@@ -11,7 +11,8 @@ import { ExtraOrderNotifierService, EXTRA_ORDER_STATUS } from '../notifications/
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
-import { UPLOADS_ROOT, uploadPath } from '../common/uploads.util';
+import { UPLOADS_ROOT, uploadPath, assertUploadRef } from '../common/uploads.util';
+import { pickPatchFields } from '../common/pick-patch-fields.util';
 import * as mammoth from 'mammoth';
 import { randomUUID } from 'crypto';
 import { normalizeLeafType, DEFAULT_CATALOG_TYPE } from '../common/leaf-types.util';
@@ -20,6 +21,21 @@ const PDFParser = require('pdf2json');
 const pdfParse = require('pdf-parse');
 
 const UPLOADS_DIR = UPLOADS_ROOT;
+
+// @anchor mat-req-patch-fields — kolumny `MaterialRequirement` zapisywalne przez `PATCH /material-requirements/:id`.
+// Poza listą celowo: `nodeId`, `versionId`, `listId`, `imageUrl`, `budgetedPriceNetto`,
+// `offerId`/`offerPositionIdx`/`offerPositionSnapshot`, `sourceRequirementId`, daty.
+const MAT_REQ_PATCH_FIELDS = [
+    'type', 'quantity', 'unit', 'technicalSpec', 'sourceDocument', 'name', 'materialId',
+    'assignedUserTaskId', 'wbsNodeId', 'wbsNodeIds', 'wbsNodeAllocations', 'isAiAssigned', 'aiConfidence',
+    'complianceData', 'ean', 'supplierId', 'status', 'budgetSource',
+] as const;
+
+// @anchor proposal-patch-fields — kolumny `ProductProposal` zapisywalne przez `PATCH /material-requirements/proposals/:id`.
+const PROPOSAL_PATCH_FIELDS = [
+    'productName', 'manufacturer', 'model', 'sourceUrl', 'priceNetto', 'purchasePriceNetto',
+    'seller', 'offerNumber', 'availability', 'isRejected', 'supplierId', 'dataSheetName', 'complianceName',
+] as const;
 
 @Injectable()
 // @anchor material-requirements-service
@@ -600,7 +616,14 @@ export class MaterialRequirementsService {
         const { productName, manufacturer, model, seller, offerNumber, productUrl, stockStatus,
             dataSheetUrl, dataSheetName, complianceUrl, complianceName, availability,
             priceNetto, ...rest } = dto as any;
-        const data: any = { ...rest };
+        // @anchor mat-req-patch-allowlist — do kolumn wymagania trafiają tylko pola z
+        // `MAT_REQ_PATCH_FIELDS`; `budgetedPriceNetto` wyłącznie przez `priceNetto` (guard oferty
+        // wyżej), pliki wyłącznie przez upload, przypięcie do oferty przez `PATCH :id/offer`.
+        const data: any = pickPatchFields(rest, MAT_REQ_PATCH_FIELDS, 'MaterialRequirement.update');
+        // Ścieżki kart kopiowane z katalogu materiałów schodzą do `Material`/propozycji —
+        // muszą wskazywać plik w katalogu uploads, nie dowolną ścieżkę serwera.
+        assertUploadRef(dataSheetUrl);
+        assertUploadRef(complianceUrl);
         // Zapisz availability bezpośrednio na wymaganiu (niezależnie od propozycji)
         if (availability !== undefined) data.availability = availability;
         if (priceNetto !== undefined) data.budgetedPriceNetto = priceNetto;
@@ -1459,16 +1482,10 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
         });
         if (!req) throw new NotFoundException(`MaterialRequirement ${id} not found`);
         if (req.imageUrl) {
-            const filePath = this.resolveUploadPath(req.imageUrl);
+            const filePath = uploadPath(req.imageUrl);
             if (fs.existsSync(filePath)) { try { fs.unlinkSync(filePath); } catch { /* plik mógł zniknąć */ } }
         }
         return this.prisma.materialRequirement.update({ where: { id }, data: { imageUrl: null } });
-    }
-
-    // @anchor resolve-upload-path
-    private resolveUploadPath(stored: string): string {
-        if (path.isAbsolute(stored)) return stored; // legacy: absolutna ścieżka Docker
-        return uploadPath(stored);
     }
 
     async getDatasheetStream(id: string) {
@@ -1477,7 +1494,7 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
         const url = req.dataSheetUrl || req.material?.dataSheetUrl;
         const name = req.dataSheetName || req.material?.dataSheetName || 'karta_katalogowa.pdf';
         if (!url) throw new NotFoundException('No datasheet for this requirement');
-        const filePath = this.resolveUploadPath(url);
+        const filePath = uploadPath(url);
         if (!fs.existsSync(filePath)) throw new NotFoundException('Datasheet file not found');
         const stream = fs.createReadStream(filePath);
         return { stream, name };
@@ -1486,7 +1503,7 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
     async getComplianceStream(id: string) {
         const req = await this.findOne(id);
         if (!req.complianceUrl) throw new NotFoundException('No compliance card for this requirement');
-        const filePath = this.resolveUploadPath(req.complianceUrl);
+        const filePath = uploadPath(req.complianceUrl);
         if (!fs.existsSync(filePath)) throw new NotFoundException('Compliance file not found');
         const stream = fs.createReadStream(filePath);
         const name = req.complianceName || 'karta_zgodnosci.pdf';
@@ -1497,7 +1514,7 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
         // findOne flattenuje `imageUrl` w kolejności: własny obrazek pozycji → katalogowy.
         const req = await this.findOne(id);
         if (!req.imageUrl) throw new NotFoundException('No image for this requirement');
-        const filePath = this.resolveUploadPath(req.imageUrl);
+        const filePath = uploadPath(req.imageUrl);
         if (!fs.existsSync(filePath)) throw new NotFoundException('Image file not found');
         const stream = fs.createReadStream(filePath);
         const ext = path.extname(req.imageUrl).toLowerCase();
@@ -1515,7 +1532,10 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
         });
     }
 
-    async updateProposal(proposalId: string, dto: Partial<{ productName: string; manufacturer: string; model: string; sourceUrl: string; priceNetto: number | null; purchasePriceNetto: number | null; seller: string | null; offerNumber: string | null; availability: string | null; isRejected: boolean; supplierId: string | null; }>, user?: OfferLockUser) {
+    async updateProposal(proposalId: string, body: Partial<{ productName: string; manufacturer: string; model: string; sourceUrl: string; priceNetto: number | null; purchasePriceNetto: number | null; seller: string | null; offerNumber: string | null; availability: string | null; isRejected: boolean; supplierId: string | null; }>, user?: OfferLockUser) {
+        // @anchor proposal-patch-allowlist — role propozycji (`isOffer`/`isPurchase`/`isSelected`)
+        // mają własne endpointy, plik i obraz — upload; tu tylko pola z `PROPOSAL_PATCH_FIELDS`.
+        const dto: typeof body = pickPatchFields(body, PROPOSAL_PATCH_FIELDS, 'ProductProposal.update');
         // @anchor proposal-offer-lock — propozycja z rolą „Wycena" (`isOffer`) jest produktem
         // ofertowym: po akceptacji baseline jej edycja idzie przez ten sam guard co ceny w WBS.
         // Strona „Zakup" (również `purchasePriceNetto` na propozycji pełniącej obie role) zostaje
@@ -1580,14 +1600,19 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
         const filePath = path.join(UPLOADS_DIR, fileName);
         if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
         fs.writeFileSync(filePath, file.buffer);
-        return this.prisma.productProposal.update({ where: { id: proposalId }, data: { imageUrl: filePath } });
+        // Sama nazwa pliku (jak `uploadImage` wymagania) — stare rekordy z absolutną ścieżką
+        // rozwiązuje `uploadPath` przez `legacy-uploads-roots`.
+        return this.prisma.productProposal.update({ where: { id: proposalId }, data: { imageUrl: fileName } });
     }
 
     async deleteProposalImage(proposalId: string) {
         const proposal = await this.prisma.productProposal.findUnique({ where: { id: proposalId } });
         if (!proposal) throw new NotFoundException('Proposal not found');
-        if (proposal.imageUrl && fs.existsSync(proposal.imageUrl)) {
-            try { fs.unlinkSync(proposal.imageUrl); } catch {}
+        if (proposal.imageUrl) {
+            try {
+                const filePath = uploadPath(proposal.imageUrl);
+                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+            } catch { /* plik mógł zniknąć albo ścieżka spoza uploads — rekord i tak czyścimy */ }
         }
         return this.prisma.productProposal.update({ where: { id: proposalId }, data: { imageUrl: null } });
     }
@@ -1595,8 +1620,9 @@ Podaj 3 konkretne modele produktów (producent + symbol). Zwróć WYŁĄCZNIE ta
     async getProposalImageStream(proposalId: string) {
         const proposal = await this.prisma.productProposal.findUnique({ where: { id: proposalId } });
         if (!proposal?.imageUrl) throw new NotFoundException('No image for this proposal');
-        if (!fs.existsSync(proposal.imageUrl)) throw new NotFoundException('Image file not found');
-        const stream = fs.createReadStream(proposal.imageUrl);
+        const filePath = uploadPath(proposal.imageUrl);
+        if (!fs.existsSync(filePath)) throw new NotFoundException('Image file not found');
+        const stream = fs.createReadStream(filePath);
         const ext = path.extname(proposal.imageUrl).toLowerCase();
         const mimeMap: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' };
         return { stream, mimeType: mimeMap[ext] || 'application/octet-stream' };
