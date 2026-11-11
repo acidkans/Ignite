@@ -8,7 +8,8 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { AuditModule } from './audit/audit.module';
 import { ClsModule } from 'nestjs-cls';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { AuditInterceptor } from './audit/audit.interceptor';
 
 import { ProcessTreeModule } from './process-tree/process-tree.module';
@@ -114,6 +115,13 @@ import { WorkwearModule } from './workwear/workwear.module';
   controllers: [AppController],
   providers: [
     AppService,
+    // @anchor global-jwt-guard — JWT wymagany domyślnie na KAŻDEJ trasie; wyjątki tylko przez
+    // `@Public()`. Wcześniej kontroler bez `@UseGuards` był otwarty dla całego internetu
+    // (dokumenty, AI, schematy, sprzęt — audyt 2026-11-10).
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditInterceptor,

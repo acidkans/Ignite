@@ -1,3 +1,24 @@
+## 2026-11-11 — fix(bezpieczenstwo): globalny guard JWT, koniec samorejestracji, ścieżki plików tylko w uploads, allowlista pól PATCH wymagań i propozycji (v2026.11.11.0809)
+
+### architektura / API
+- dodano `back-guard` `JwtAuthGuard` jako globalny `APP_GUARD` (`global-jwt-guard`) — każda trasa wymaga JWT, wyjątki tylko przez `back-guard` `@Public()`; dotąd bez logowania działały całe moduły `documents`, `ai`, `schematics`, `hardware` (m.in. `DELETE /documents/reset/all`, `POST /ai/chat`)
+- `@Public()`: `GET /`, `GET /health`, `POST /auth/login`, `GET /onedrive/callback`, `GET /onedrive/content/:nodeId` (własna weryfikacja tokenu), `GET /leave-requests/decision-link|withdrawal-link`, `GET /schematics/file/:fileName`, `GET /documents/download/:id[/:filename]`
+- `back-endpoint` `GET /schematics/file/:fileName` — wydaje tylko pliki zarejestrowane jako `SchematicDocument.fileUrl` albo `MarkerAttachment.fileUrl` (`schematics-get-file`)
+- usunięto `back-endpoint` `POST /auth/register` i `back-dto` `RegisterDto` — konta zakłada ADMIN przez `POST /users`; formularz rejestracji zniknął z `ui-widok` `LoginPage`
+- `back-funkcja` `uploadPath` — ścieżka absolutna spoza `UPLOADS_ROOT` = 400; stare absolutne `/usr/src/app/uploads/...` mapowane przez `back-stala` `LEGACY_UPLOADS_ROOTS`; usunięto lokalne obejścia `resolveUploadPath` (wymagania, materiały); obraz propozycji zapisuje sam `fileName` i czyta przez `uploadPath`
+- `back-endpoint` `PATCH /material-requirements/:id` zapisuje do kolumn tylko `back-stala` `MAT_REQ_PATCH_FIELDS`; `PATCH /material-requirements/proposals/:id` tylko `back-stala` `PROPOSAL_PATCH_FIELDS` (`back-funkcja` `pickPatchFields`); `dataSheetUrl`/`complianceUrl` z body walidowane przez `back-funkcja` `assertUploadRef`
+- frontend: `GET /ai/config` (AIChatSidebar) i `GET /ai/versions/:nodeId` (DashboardPage) wysyłają nagłówek JWT
+
+### słownik
+- dodano `IS_PUBLIC_KEY`, `Public`, `JwtAuthGuard`, `global-jwt-guard`, `auth-login-endpoint`, `schematics-get-file`, `LEGACY_UPLOADS_ROOTS`, `assertUploadRef`, `pickPatchFields`, `MAT_REQ_PATCH_FIELDS`, `PROPOSAL_PATCH_FIELDS`, `mat-req-patch-allowlist`, `proposal-patch-allowlist`, `LoginPage`
+- usunięto `resolveUploadPath` (`resolve-upload-path`) i `MaterialsService.resolveUploadPath` (`materials-resolve-upload-path`)
+
+### wytyczne
+- `back-guard` `@Public()` — nowa trasa jest domyślnie za JWT; `@Public()` tylko gdy klient z definicji nie ma nagłówka (redirect OAuth, link z maila, plik w `<img>`/`<video>`/react-pdf) i trasa sama ogranicza, co wydaje
+- `back-funkcja` `uploadPath` — każdy odczyt/zapis/usunięcie pliku po wartości z bazy albo z URL-a idzie przez `uploadPath`; nigdy `fs.*(rekord.pole)` wprost
+- `back-funkcja` `pickPatchFields` — PATCH z `@Body() body: any` nie może robić `data: { ...body }`; lista dozwolonych kolumn jawnie, ścieżki plików tylko z uploadu, wartości ofertowe tylko przez pola objęte `assertOfferEditable`
+- frontend: wrapper `fetch` w `App.jsx` wylogowuje na każde 401 — każde wywołanie API poza trasami `@Public()` musi mieć nagłówek `Authorization`
+
 ## 2026-11-10 — feat(waluta): waluta zamówienia PLN/EUR i zakup w walucie obcej przeliczany kursem NBP (v2026.11.10.2133)
 
 ### schema.prisma

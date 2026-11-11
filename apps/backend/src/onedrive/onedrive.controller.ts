@@ -6,6 +6,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Public } from '../auth/decorators/public.decorator';
 import { OneDriveManagerGuard, canManageOneDrive } from './onedrive-manager.guard';
 import { OneDriveService } from './onedrive.service';
 import { OneDriveSyncService } from './onedrive-sync.service';
@@ -34,6 +35,7 @@ export class OneDriveController {
 
   // @anchor onedrive-callback-endpoint
   // Publiczny — Microsoft przy redirectcie nie wysyła JWT; userId pochodzi z parametru `state`.
+  @Public()
   @Get('callback')
   async callback(@Query('code') code: string, @Query('state') userId: string, @Res() res: Response) {
     const frontendUrl = this.config.get('FRONTEND_URL') || 'http://localhost:5174';
@@ -185,6 +187,7 @@ export class OneDriveController {
   // Strumieniuje treść pliku OneDrive do przeglądarki (podgląd w apce).
   // Publiczny na poziomie guarda — react-pdf/<img> nie wysyłają nagłówka Authorization,
   // dlatego JWT przekazywany jest w query param `token` i weryfikowany ręcznie.
+  @Public()
   @Get('content/:nodeId')
   async content(
     @Param('nodeId') nodeId: string,

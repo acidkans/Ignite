@@ -11,18 +11,12 @@ import { normalizeLeafType, DEFAULT_CATALOG_TYPE } from '../common/leaf-types.ut
 export class MaterialsService {
     constructor(private readonly prisma: PrismaService) {}
 
-    // @anchor materials-resolve-upload-path
-    private resolveUploadPath(stored: string): string {
-        if (path.isAbsolute(stored)) return stored; // legacy: absolutna ścieżka Docker
-        return uploadPath(stored);
-    }
-
     // @anchor materials-get-image-stream
     /** Obraz produktu z katalogu (Material.imageUrl — nazwa pliku we wspólnym katalogu uploads) */
     async getImageStream(id: string) {
         const m = await this.findOne(id);
         if (!m.imageUrl) throw new NotFoundException('No image for this material');
-        const filePath = this.resolveUploadPath(m.imageUrl);
+        const filePath = uploadPath(m.imageUrl);
         if (!fs.existsSync(filePath)) throw new NotFoundException('Image file not found');
         const stream = fs.createReadStream(filePath);
         const ext = path.extname(m.imageUrl).toLowerCase();

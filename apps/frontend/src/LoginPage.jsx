@@ -3,75 +3,45 @@ import { APP_VERSION } from './version';
 
 import { useState } from 'react';
 
+// @anchor login-page — tylko logowanie. Samodzielna rejestracja usunięta (audyt 2026-11-10):
+// każdy z internetu zakładał konto z dostępem do danych firmy. Konta zakłada ADMIN w „Użytkownicy".
 export default function LoginPage({ onLogin }) {
-    const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [successMsg, setSuccessMsg] = useState(null);
     const [showPassword, setShowPassword] = useState(false);
 
     // Form Data
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [firstName, setFirstName] = useState('');
-    const [lastName, setLastName] = useState('');
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError(null);
-        setSuccessMsg(null);
         setLoading(true);
 
         try {
             const baseUrl = API_URL;
             console.log('Attempting login to:', `${baseUrl}/auth/login`);
 
-            if (isLogin) {
-                // LOGIN LOGIC
-                const res = await fetch(`${baseUrl}/auth/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
-                });
+            const res = await fetch(`${baseUrl}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
 
-                if (!res.ok) {
-                    const text = await res.text();
-                    let msg = 'Błędne dane logowania';
-                    try { msg = JSON.parse(text)?.message || msg; } catch {}
-                    throw new Error(msg);
-                }
-
-                const data = await res.json();
-
-                // Zapisz token
-                localStorage.setItem('token', data.access_token);
-                sessionStorage.setItem('token', data.access_token); // legacy compat
-                onLogin(data);
-
-            } else {
-                // REGISTER LOGIC
-                const res = await fetch(`${baseUrl}/auth/register`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password, firstName, lastName })
-                });
-
-                if (!res.ok) {
-                    const text = await res.text();
-                    let msg = 'Błąd rejestracji';
-                    try { msg = JSON.parse(text)?.message || msg; } catch {}
-                    if (msg.includes('Unique constraint')) msg = 'Ten adres email jest już zajęty.';
-                    throw new Error(msg);
-                }
-
-                const data = await res.json();
-
-                setSuccessMsg('Konto utworzone! Sprawdź email, aby potwierdzić rejestrację.');
-                setIsLogin(true); // Switch back to login
-
-                // Opcjonalnie: wyczyść hasło
-                setPassword('');
+            if (!res.ok) {
+                const text = await res.text();
+                let msg = 'Błędne dane logowania';
+                try { msg = JSON.parse(text)?.message || msg; } catch {}
+                throw new Error(msg);
             }
+
+            const data = await res.json();
+
+            // Zapisz token
+            localStorage.setItem('token', data.access_token);
+            sessionStorage.setItem('token', data.access_token); // legacy compat
+            onLogin(data);
         } catch (err) {
             // Czasami błąd jest obiektem
             const msg = err.message || JSON.stringify(err);
@@ -92,14 +62,8 @@ export default function LoginPage({ onLogin }) {
                     GIGATEL
                 </h1>
                 <p className="text-gray-400 mb-6 text-sm">
-                    {isLogin ? 'Zaloguj się do systemu' : 'Utwórz nowe konto'}
+                    Zaloguj się do systemu
                 </p>
-
-                {successMsg && (
-                    <div className="mb-4 w-full p-3 bg-green-500/20 border border-green-500/40 rounded text-green-200 text-sm text-center animate-fade-in">
-                        {successMsg}
-                    </div>
-                )}
 
                 {error && (
                     <div className="mb-4 w-full animate-fade-in">
@@ -114,34 +78,6 @@ export default function LoginPage({ onLogin }) {
                 )}
 
                 <form onSubmit={handleSubmit} className="w-full space-y-4">
-
-                    {/* Rejestracja: Imię i Nazwisko */}
-                    {!isLogin && (
-                        <div className="flex gap-2">
-                            <div className="space-y-1 w-1/2">
-                                <label className="text-xs text-gray-400 uppercase tracking-widest ml-1">Imię</label>
-                                <input
-                                    type="text"
-                                    value={firstName}
-                                    onChange={(e) => setFirstName(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all"
-                                    placeholder="Jan"
-                                    required={!isLogin}
-                                />
-                            </div>
-                            <div className="space-y-1 w-1/2">
-                                <label className="text-xs text-gray-400 uppercase tracking-widest ml-1">Nazwisko</label>
-                                <input
-                                    type="text"
-                                    value={lastName}
-                                    onChange={(e) => setLastName(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all"
-                                    placeholder="Kowalski"
-                                    required={!isLogin}
-                                />
-                            </div>
-                        </div>
-                    )}
 
                     <div className="space-y-1">
                         <label className="text-xs text-gray-400 uppercase tracking-widest ml-1">Email</label>
@@ -186,26 +122,13 @@ export default function LoginPage({ onLogin }) {
                                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                                 <span>Przetwarzanie...</span>
                             </div>
-                        ) : (isLogin ? 'Zaloguj się' : 'Zarejestruj się')}
+                        ) : 'Zaloguj się'}
                     </button>
                 </form>
 
-                <div className="mt-6 text-center space-y-2">
-                    <button
-                        onClick={() => { setIsLogin(!isLogin); setError(null); setSuccessMsg(null); }}
-                        className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
-                    >
-                        {isLogin ? 'Nie masz konta? Utwórz tutaj' : 'Masz już konto? Zaloguj się'}
-                    </button>
-
-                    {isLogin && (
-                        <div>
-                            <a href="#" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
-                                Zapomniałeś hasła?
-                            </a>
-                        </div>
-                    )}
-                </div>
+                <p className="mt-6 text-center text-xs text-gray-500">
+                    Nie masz konta albo nie pamiętasz hasła? Skontaktuj się z administratorem.
+                </p>
 
 					<p className="mt-6 text-[10px] text-gray-600 tracking-widest">{APP_VERSION}</p>
             </div>

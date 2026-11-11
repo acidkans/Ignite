@@ -63,7 +63,10 @@ export default function AIChatSidebar({ nodeId, nodes, onClose }) {
     useEffect(() => {
         const fetchConfig = async () => {
             try {
-                const response = await fetch(`${API_URL}/ai/config`);
+                // Moduł AI stoi za JWT (globalny guard) — bez nagłówka 401 wylogowałby użytkownika.
+                const response = await fetch(`${API_URL}/ai/config`, {
+                    headers: { 'Authorization': `Bearer ${sessionStorage.getItem('token')}` }
+                });
                 const data = await response.json();
                 setAiConfig(data);
             } catch (err) {

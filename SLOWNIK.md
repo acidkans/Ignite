@@ -1202,7 +1202,6 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | back-modul | MaterialRequirementsModule | apps/backend/src/material-requirements/material-requirements.module.ts | @anchor material-requirements-module |
 | back-serwis | MaterialRequirementsService | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor material-requirements-service |
 | back-funkcja | getWbsNodeTypes | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor get-wbs-node-types |
-| back-funkcja | resolveUploadPath | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor resolve-upload-path |
 | back-funkcja | getMarkersForWbsNodesBatch | apps/backend/src/schematics/schematics.service.ts | @anchor get-markers-for-wbs-nodes-batch |
 | back-endpoint | GET /material-requirements/database | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-database |
 | back-endpoint | GET /material-requirements/all-materials | apps/backend/src/material-requirements/material-requirements.controller.ts | @anchor mat-req-get-all-materials |
@@ -1261,7 +1260,6 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | back-funkcja | MaterialsService.updateStock | apps/backend/src/materials/materials.service.ts | @anchor materials-update-stock |
 | back-funkcja | MaterialsService.findProposalHistory | apps/backend/src/materials/materials.service.ts | @anchor materials-find-proposal-history |
 | back-funkcja | MaterialsService.createFromDatasheet | apps/backend/src/materials/materials.service.ts | @anchor materials-from-datasheet |
-| back-funkcja | MaterialsService.resolveUploadPath | apps/backend/src/materials/materials.service.ts | @anchor materials-resolve-upload-path |
 | back-funkcja | MaterialsService.getImageStream | apps/backend/src/materials/materials.service.ts | @anchor materials-get-image-stream |
 | back-funkcja | MaterialsService.mergeInto | apps/backend/src/materials/materials.service.ts | @anchor materials-merge-into |
 | back-endpoint | GET /materials | apps/backend/src/materials/materials.controller.ts | @anchor materials-get-all |
@@ -3230,6 +3228,20 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-stala | UPLOADS_ROOT | apps/backend/src/common/uploads.util.ts | @anchor uploads-root |
 | back-env | UPLOADS_ROOT | apps/backend/src/common/uploads.util.ts | @anchor uploads-root |
 | back-funkcja | uploadPath | apps/backend/src/common/uploads.util.ts | @anchor uploads-path |
+| back-stala | LEGACY_UPLOADS_ROOTS | apps/backend/src/common/uploads.util.ts | @anchor legacy-uploads-roots |
+| back-funkcja | assertUploadRef | apps/backend/src/common/uploads.util.ts | @anchor assert-upload-ref |
+| back-funkcja | pickPatchFields | apps/backend/src/common/pick-patch-fields.util.ts | @anchor pick-patch-fields |
+| back-stala | IS_PUBLIC_KEY | apps/backend/src/auth/decorators/public.decorator.ts | @anchor is-public-key |
+| back-guard | Public | apps/backend/src/auth/decorators/public.decorator.ts | @anchor public-decorator |
+| back-guard | JwtAuthGuard | apps/backend/src/auth/guards/jwt-auth.guard.ts | @anchor jwt-auth-guard |
+| back-guard | APP_GUARD JwtAuthGuard | apps/backend/src/app.module.ts | @anchor global-jwt-guard |
+| back-endpoint | POST /auth/login | apps/backend/src/auth/auth.controller.ts | @anchor auth-login-endpoint |
+| back-funkcja | SchematicsService.getFile | apps/backend/src/schematics/schematics.service.ts | @anchor schematics-get-file |
+| back-stala | MAT_REQ_PATCH_FIELDS | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-patch-fields |
+| back-stala | PROPOSAL_PATCH_FIELDS | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor proposal-patch-fields |
+| back-funkcja | MaterialRequirementsService.update (allowlista pól) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor mat-req-patch-allowlist |
+| back-funkcja | MaterialRequirementsService.updateProposal (allowlista pól) | apps/backend/src/material-requirements/material-requirements.service.ts | @anchor proposal-patch-allowlist |
+| ui-widok | LoginPage | apps/frontend/src/LoginPage.jsx | @anchor login-page |
 | back-stala | ORDER_ROOT_FOLDERS | apps/backend/src/onedrive/order-folders.ts | @anchor order-root-folders |
 | back-typ | OrderFolderDef | apps/backend/src/onedrive/order-folders.ts | @anchor order-folder-def |
 | back-stala | ORDER_FOLDERS | apps/backend/src/onedrive/order-folders.ts | @anchor order-folders |

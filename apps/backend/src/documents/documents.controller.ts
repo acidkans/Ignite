@@ -4,6 +4,7 @@ import { DocumentsService } from './documents.service';
 import { Multer } from 'multer';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Public } from '../auth/decorators/public.decorator';
 
 @Controller('documents')
 export class DocumentsController {
@@ -30,11 +31,16 @@ export class DocumentsController {
         return this.documentsService.getDocumentsByNodeTree(nodeId);
     }
 
+    // Pobieranie pliku — publiczne, bo podgląd (react-pdf, <img>, <video>, DocViewer, link „Pobierz")
+    // nie wysyła nagłówka JWT. Dostęp wymaga znajomości UUID dokumentu, a listy dokumentów
+    // (`node/:nodeId`, `tree/:nodeId`) stoją już za globalnym JwtAuthGuard.
+    @Public()
     @Get('download/:id/:filename')
     async downloadDocumentWithName(@Param('id') id: string, @Res() res: Response) {
         return this.downloadDocument(id, res);
     }
 
+    @Public()
     @Get('download/:id')
     async downloadDocument(@Param('id') id: string, @Res() res: Response) {
         const { stream, fileName, mimeType } = await this.documentsService.getFileStream(id);

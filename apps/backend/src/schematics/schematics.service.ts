@@ -112,8 +112,19 @@ export class SchematicsService {
         });
     }
 
+    // @anchor schematics-get-file — trasa `GET /schematics/file/:fileName` jest publiczna, bo plik
+    // ładują <img>/<video>/<audio> i react-pdf, które nie wysyłają nagłówka Authorization.
+    // Dlatego serwuje WYŁĄCZNIE pliki zarejestrowane jako schemat albo załącznik znacznika
+    // (nazwy nadaje serwer: UUID + rozszerzenie) — nie dowolną ścieżkę z katalogu uploads
+    // ani spoza niego (audyt 2026-11-10: `%2Fetc%2F...` czytało pliki systemowe).
     async getFile(fileName: string, res: Response) {
-        const filePath = uploadPath(fileName);
+        const name = String(fileName || '');
+        const known = name && (
+            await this.prisma.schematicDocument.findFirst({ where: { fileUrl: name }, select: { id: true } })
+            || await this.prisma.markerAttachment.findFirst({ where: { fileUrl: name }, select: { id: true } })
+        );
+        if (!known) throw new NotFoundException('Plik nie istnieje na serwerze');
+        const filePath = uploadPath(name);
         if (!fs.existsSync(filePath)) {
             throw new NotFoundException('Plik nie istnieje na serwerze');
         }
