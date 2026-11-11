@@ -14,8 +14,10 @@ import { API_URL } from '../../../config';
 import { useRealizationData } from '../wbs/useRealizationData';
 import { buildBranchIndex, SYNTHETIC_ROOT, PurchaseDrawer } from '../RealizationNewTab';
 import {
-    LEAF_TYPES, OPEN_LEAF_TYPES, TYPE_META, fmtZl, entryStatusOf, offerPriceOf,
+    LEAF_TYPES, OPEN_LEAF_TYPES, TYPE_META, fmtZl, entryStatusOf, offerPriceOf, wbsRootOf,
 } from '../wbs/realizationShared';
+import { useBranchFocus, idGaleziPoKluczu } from '../../../hooks/useBranchFocus';
+import { navZIndeksu } from '../../Layout/SidebarBranchTree';
 import {
     PURCHASE_STATUS_META, EXEC_STATUS_META, execStatusLabel, hasPurchaseAxis, hasExecAxis, axisGateOf,
     DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS, PLAN_STATUS_META, planStatusFromAny, isMilestoneNode,
@@ -37,7 +39,6 @@ import {
 import './realizacja.css';
 import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt } from '../../../utils/currency';
 
-const FOCUS_KEY = (nodeId) => `realizacja-focus-${nodeId}`;
 const WIDOK_KEY = 'realizacja-widok';
 const PELNE_KEY = 'realizacja-pelne-nazwy';
 const SYGNALY_KEY = 'realizacja-tylko-sygnaly';
@@ -169,8 +170,15 @@ export default function RealizacjaPanel({
         return idx.milestones.filter(m => set.has(m.branchId));
     }, [idx]);
 
-    const [focus, setFocusState] = useState(() => czytaj(FOCUS_KEY(nodeId), SYNTHETIC_ROOT));
-    const setFocus = useCallback((id) => { setFocusState(id); zapisz(FOCUS_KEY(nodeId), id); }, [nodeId]);
+    // Wybrana gałąź jest wspólna z Planowaniem (`use-branch-focus`) i zapisana KLUCZEM gałęzi
+    // (`wbsRootOf`), bo Planowanie może stać na innej wersji niż baseline Realizacji.
+    const [focusKlucz, setFocusKlucz] = useBranchFocus(nodeId);
+    const idPoKluczu = useMemo(() => idGaleziPoKluczu(idx.branches, wbsRootOf), [idx]);
+    const focus = idPoKluczu.get(focusKlucz) ?? SYNTHETIC_ROOT;
+    const setFocus = useCallback((id) => {
+        const n = idx.nodeById[id];
+        setFocusKlucz(!n || id === SYNTHETIC_ROOT ? SYNTHETIC_ROOT : wbsRootOf(n));
+    }, [idx, setFocusKlucz]);
     // Zapamiętana gałąź mogła zniknąć w nowej wersji — wtedy wracamy do całego zamówienia.
     const focusId = idx.nodeById[focus] && !LEAF_TYPES.includes(idx.nodeById[focus]?.type) ? focus : SYNTHETIC_ROOT;
 
@@ -380,28 +388,19 @@ export default function RealizacjaPanel({
 
     // ── Drzewo do lewego panelu ──────────────────────────────────────────────
     // @anchor realizacja-branch-nav — gałęzie z sygnałami poddrzewa dla `SidebarBranchTree`.
-    const navGalezie = useMemo(() => idx.branches.filter(b => b.id !== SYNTHETIC_ROOT).map(b => ({
-        id: b.id,
-        parentId: b.parentId,
-        name: b.name,
-        shortName: b.shortName || null,
-        pozycji: idx.leavesOfSubtree(b.id).length,
-        syg: sumaSygnalow(idsPoddrzewa(b.id), sygnaly),
-    })), [idx, idsPoddrzewa, sygnaly]);
     // @anchor realizacja-nav-pozycje — pozycje (liście) do drzewa w sidebarze, przypięte do gałęzi.
-    const navPozycje = useMemo(() => idx.leavesOfSubtree(SYNTHETIC_ROOT).map(l => ({
-        id: l.id,
-        parentId: l.branchId || SYNTHETIC_ROOT,
-        name: l.name,
-        shortName: l.shortName || null,
-        typ: TYPE_META[l.type]?.label || l.type,
-        syg: sumaSygnalow([l.id], sygnaly),
-    })), [idx, sygnaly]);
+    // Kształt danych wspólny z Planowaniem (`nav-z-indeksu`); Realizacja dokłada sygnały.
+    const { galezie: navGalezie, pozycje: navPozycje } = useMemo(() => navZIndeksu(idx, SYNTHETIC_ROOT, {
+        typLabel: (t) => TYPE_META[t]?.label || t,
+        galaz: (b) => ({ syg: sumaSygnalow(idsPoddrzewa(b.id), sygnaly) }),
+        pozycja: (l) => ({ syg: sumaSygnalow([l.id], sygnaly) }),
+    }), [idx, idsPoddrzewa, sygnaly]);
     const navRef = useRef({});
     navRef.current = { setFocus, zapiszShort, setPelne, setSygnaly, setPodglad, idx };
     useEffect(() => {
         if (!setBranchNav) return;
         setBranchNav({
+            lens: 'real',
             orderId: nodeId,
             rootId: SYNTHETIC_ROOT,
             galezie: navGalezie,

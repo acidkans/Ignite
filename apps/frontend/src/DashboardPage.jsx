@@ -72,7 +72,6 @@ export default function DashboardPage() {
     const activeAreaId = context ? context.activeAreaId : null;
     const setActiveAreaId = context?.setActiveAreaId;
     const menuTree = context?.menuTree || [];
-    const setLeftVisible = context?.setLeftVisible;
     const setAiVisible = context?.setAiVisible;
     const contextPendingTabRef = context?.pendingTabRef;
     const contextPendingRequirementIdRef = context?.pendingRequirementIdRef;
@@ -1262,10 +1261,10 @@ export default function DashboardPage() {
                                     userRoles={currentRoles}
                                     onWbsUpdate={() => setWbsUpdateCount(c => c + 1)}
                                     onWbsDataLoad={(data) => setWbsDataCache(prev => ({ ...prev, [activeAreaId]: data }))}
-                                    setLeftVisible={setLeftVisible}
                                     setAiVisible={setAiVisible}
                                     oneDriveFolderName={activeNode?.oneDriveFolderName || null}
                                     realization={realizationForWbs}
+                                    setBranchNav={setBranchNav}
                                 />
                             </div>
                         )}

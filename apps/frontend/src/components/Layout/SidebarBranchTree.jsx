@@ -3,27 +3,75 @@ import { ChevronRight } from 'lucide-react';
 import { nazwaWyswietlana } from '../shared/realizacja/realizacjaShared';
 
 // @anchor sidebar-branch-tree — drzewo gałęzi WBS zamówienia w lewym panelu aplikacji, pod aktywnym
-// zamówieniem. Publikuje je zakładka „Realizacja" (`realizacja-branch-nav`); poza nią go nie ma.
+// zamówieniem. Publikuje je zakładka „Realizacja" (`realizacja-branch-nav`) albo „Planowanie"
+// (`planowanie-branch-nav`) — soczewka w `nav.lens`; na innych zakładkach go nie ma.
 // Całe drzewo: gałęzie i pod nimi pozycje (`realizacja-nav-pozycje`). Klik w gałąź = zoom środka
 // na gałąź, klik w pozycję = podgląd pozycji w środku, dwuklik w gałąź = krótka nazwa. Struktury się tu nie
 // edytuje — po baseline jest zablokowana, a gałęzie dodaje się w Strukturze projektu.
+// @anchor nav-z-indeksu — dane drzewa (gałęzie + pozycje) z indeksu `buildBranchIndex`, wspólne dla
+// Planowania i Realizacji. Każda zakładka dokłada swoje pola: Realizacja `syg` (sygnały poddrzewa),
+// Planowanie `koszt` (koszt planu poddrzewa). `syg` zawsze jest obiektem — drzewo czyta jego pola.
+export function navZIndeksu(idx, rootId, { typLabel = (t) => t, galaz = () => ({}), pozycja = () => ({}) } = {}) {
+    const galezie = idx.branches.filter(b => b.id !== rootId).map(b => ({
+        id: b.id,
+        parentId: b.parentId,
+        name: b.name,
+        shortName: b.shortName || null,
+        pozycji: idx.leavesOfSubtree(b.id).length,
+        syg: {},
+        ...galaz(b),
+    }));
+    const pozycje = idx.leavesOfSubtree(rootId).map(l => ({
+        id: l.id,
+        parentId: l.branchId || rootId,
+        name: l.name,
+        shortName: l.shortName || null,
+        typ: typLabel(l.type),
+        syg: {},
+        ...pozycja(l),
+    }));
+    return { galezie, pozycje };
+}
+
+// @anchor sidebar-branch-lens — soczewka drzewa: `real` (Realizacja: sygnały, fuksja) albo `plan`
+// (Planowanie: koszt planu gałęzi, zieleń). Ta sama gałąź, inny kąt.
+const LENS = {
+    real: { wybrana: 'bg-fuchsia-500/15 text-white ring-1 ring-inset ring-fuchsia-500/30', ramka: 'border-fuchsia-500/20', check: 'accent-fuchsia-500', pole: 'border-fuchsia-500/50' },
+    plan: { wybrana: 'bg-emerald-500/15 text-white ring-1 ring-inset ring-emerald-500/30', ramka: 'border-emerald-500/20', check: 'accent-emerald-500', pole: 'border-emerald-500/50' },
+};
+const lensOf = (nav) => LENS[nav?.lens] || LENS.real;
+
+// Koszt w znaczku: krótko (tys. / mln), pełna kwota w dymku.
+const kosztKrotko = (v) => {
+    const n = Number(v) || 0;
+    if (n >= 1e6) return `${(n / 1e6).toLocaleString('pl-PL', { maximumFractionDigits: 1 })} mln`;
+    if (n >= 1e3) return `${Math.round(n / 1e3).toLocaleString('pl-PL')} tys.`;
+    return Math.round(n).toLocaleString('pl-PL');
+};
+
 // @anchor sidebar-branch-toggles — przełączniki drzewa (sygnały, pełne nazwy) w wierszu zamówienia.
+// „Sygnały” tylko w soczewce Realizacji — Planowanie ich nie liczy.
 export function SidebarBranchToggles({ nav }) {
     const stop = (e) => e.stopPropagation();
+    const l = lensOf(nav);
     return (
         <span className="flex shrink-0 items-center gap-2 text-[10px] font-normal text-gray-400" onClick={stop} onDoubleClick={stop}>
-            <label title="Pokaż tylko gałęzie i pozycje z blokerami, kolizjami dostaw, zagrożonymi milestone'ami, pytaniami albo zadaniami po terminie" className="flex cursor-pointer items-center gap-1">
-                <input type="checkbox" checked={!!nav.sygnaly} onChange={e => nav.onSygnaly(e.target.checked)} className="accent-fuchsia-500" /> sygnały
-            </label>
+            {nav.lens !== 'plan' && (
+                <label title="Pokaż tylko gałęzie i pozycje z blokerami, kolizjami dostaw, zagrożonymi milestone'ami, pytaniami albo zadaniami po terminie" className="flex cursor-pointer items-center gap-1">
+                    <input type="checkbox" checked={!!nav.sygnaly} onChange={e => nav.onSygnaly(e.target.checked)} className={l.check} /> sygnały
+                </label>
+            )}
             <label title="Pełne nazwy zamiast krótkich" className="flex cursor-pointer items-center gap-1">
-                <input type="checkbox" checked={!!nav.pelne} onChange={e => nav.onPelne(e.target.checked)} className="accent-fuchsia-500" /> pełne
+                <input type="checkbox" checked={!!nav.pelne} onChange={e => nav.onPelne(e.target.checked)} className={l.check} /> pełne
             </label>
         </span>
     );
 }
 
 export default function SidebarBranchTree({ nav, level = 0 }) {
-    const tylkoSyg = !!nav.sygnaly;
+    const plan = nav.lens === 'plan';
+    const l = lensOf(nav);
+    const tylkoSyg = !plan && !!nav.sygnaly;
     const [rozwiniete, setRozwiniete] = useState(() => new Set());
     const [zwiniete, setZwiniete] = useState(() => new Set());
     const [edycja, setEdycja] = useState(null); // { id, value }
@@ -83,7 +131,7 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
             <div key={g.id}>
                 <div onClick={() => nav.onFocus(g.id)} title={g.name}
                     className={`group flex cursor-pointer items-center gap-1 rounded-md py-1 pr-1.5 text-[12px] transition-colors ${wybrana
-                        ? 'bg-fuchsia-500/15 text-white ring-1 ring-inset ring-fuchsia-500/30' : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}
+                        ? l.wybrana : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'}`}
                     style={pad(d)}>
                     <span onClick={(e) => {
                         e.stopPropagation();
@@ -100,13 +148,15 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
                             onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') zapiszEdycje(); if (e.key === 'Escape') setEdycja(null); }}
                             onClick={e => e.stopPropagation()}
                             placeholder={nazwaWyswietlana({ name: g.name })}
-                            className="min-w-0 flex-1 rounded border border-fuchsia-500/50 bg-black/40 px-1 text-[12px] text-white focus:outline-none" />
+                            className={`min-w-0 flex-1 rounded border ${l.pole} bg-black/40 px-1 text-[12px] text-white focus:outline-none`} />
                     ) : (
                         <span className={`min-w-0 flex-1 ${nav.pelne ? 'whitespace-normal leading-tight' : 'truncate'}`}
                             onDoubleClick={nav.canRename ? (e) => { e.stopPropagation(); setEdycja({ id: g.id, value: g.shortName || '' }); } : undefined}>
                             {nazwaWyswietlana(g, nav.pelne)}
                         </span>
                     )}
+                    {/* @anchor sidebar-branch-tree-koszt — soczewka Planowania: koszt planu poddrzewa gałęzi */}
+                    {plan && g.koszt != null && <span title={g.kosztTytul || undefined} className="shrink-0 font-mono text-[10px] text-gray-500">{kosztKrotko(g.koszt)}</span>}
                     {g.syg.blok > 0 && <span title="Otwarte blokery (rejestr blokerów i pilne wpisy czatu)" className="shrink-0 rounded bg-red-500/20 px-1 font-mono text-[10px] text-red-300">{g.syg.blok}</span>}
                     {g.syg.kol > 0 && <span title="Kolizje dostaw: dostawa za blisko startu robót" className="shrink-0 rounded bg-orange-500/20 px-1 font-mono text-[10px] text-orange-300">{g.syg.kol}K</span>}
                     {/* @anchor sidebar-branch-tree-ms — zagrożone milestone'y gałęzi (poślizg, prognoza z blokerów, kolizja) */}
@@ -128,7 +178,7 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
     const widok = dzieci[nav.rootId] || [];
 
     return (
-        <div className="mt-0.5 mb-1 border-l border-fuchsia-500/20 ml-3">
+        <div className={`mt-0.5 mb-1 border-l ${l.ramka} ml-3`}>
             {focus && byId[focus] && (
                 <div className="flex flex-wrap items-center gap-x-1 px-2 pb-1 text-[11px]">
                     <button onClick={() => nav.onFocus(nav.rootId)} className="text-sky-300/80 hover:text-sky-200">↑ całe zamówienie</button>

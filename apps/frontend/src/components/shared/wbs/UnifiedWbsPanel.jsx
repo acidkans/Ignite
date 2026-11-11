@@ -8,6 +8,10 @@ import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import HarmonogramPlanowanie from '../harmonogram/HarmonogramPlanowanie';
+import { buildBranchIndex, SYNTHETIC_ROOT } from '../RealizationNewTab';
+import { LEAF_TYPES, OPEN_LEAF_TYPES, TYPE_META, wbsRootOf } from './realizationShared';
+import { useBranchFocus, idGaleziPoKluczu } from '../../../hooks/useBranchFocus';
+import { navZIndeksu } from '../../Layout/SidebarBranchTree';
 import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, PRICED_LEAF_TYPES, orderDefaultsFrom, leafDefaultsMissing, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes, applyGroupMultipliers, groupQtyFactor, isCostNode } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { buildStrategyTasksQaPdfArtifact } from '../../../utils/strategyTasksQaPdfExport';
@@ -28,7 +32,7 @@ import AllTasksModal from './AllTasksModal';
 import { guardSnapshotEdit } from '../SnapshotEditGuard';
 import OfferLockGuard, { guardOfferEdit, useOfferLock } from '../OfferLockGuard';
 import { buildQaIndex, resolveStrategyText } from './strategyQuestions';
-import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt } from '../../../utils/currency';
+import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt, fmtMoney } from '../../../utils/currency';
 
 
 const VIEWS = {
@@ -140,7 +144,7 @@ function BranchStrategyField({ name, value, onSave }) {
     );
 }
 
-export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible, oneDriveFolderName = null, initialSection = null, onInitialSectionApplied, realization = null }) {
+export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setAiVisible, oneDriveFolderName = null, initialSection = null, onInitialSectionApplied, realization = null, setBranchNav = null }) {
     useOrderCurrency(); // przerysowanie po wczytaniu/zmianie waluty zamówienia
     const [wbsData, setWbsData] = useState([]);
     // @anchor budget-scope-data — `wbsData` BEZ pozycji odrzuconych (i bez ich poddrzew).
@@ -376,6 +380,68 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // rabat, ilość, strona „Wycena") na WSZYSTKICH typach liści. Manager może odblokować na sesję
     // przez modal `OfferLockGuard`; dodawanie nowych pozycji pozostaje wolne.
     const { locked: offerLocked } = useOfferLock();
+
+    // ── Drzewo gałęzi w lewym panelu — soczewka Planowania ──────────────────
+    // @anchor planowanie-branch-nav — to samo drzewo co w Realizacji (`realizacja-branch-nav`), ale z WERSJI
+    // ROBOCZEJ i z kosztem planu gałęzi zamiast sygnałów. Wybrana gałąź jest wspólna (`use-branch-focus`),
+    // więc po przełączeniu zakładki zostajesz na tej samej gałęzi. Krótkich nazw tu nie edytujemy: zapis
+    // Struktury (`saveTree`) odsyła całe drzewo ze stanu i nadpisałby świeżo zmienioną nazwę.
+    const navIdx = useMemo(() => buildBranchIndex(wbsData, orderName, isManagerOrAdmin ? LEAF_TYPES : OPEN_LEAF_TYPES), [wbsData, orderName, isManagerOrAdmin]);
+    const navKosztPoId = useMemo(() => {
+        const m = new Map();
+        for (const n of budgetScopeData) {
+            if (isCostNode(n)) m.set(n.id, Math.max(0, parseFloat(n.unitCost) || 0) * Math.max(0, parseFloat(n.quantity) || 0));
+        }
+        return m;
+    }, [budgetScopeData]);
+    const { galezie: navGalezie, pozycje: navPozycje } = useMemo(() => navZIndeksu(navIdx, SYNTHETIC_ROOT, {
+        typLabel: (t) => TYPE_META[t]?.label || t,
+        galaz: (b) => {
+            if (!isManagerOrAdmin) return {};
+            const koszt = navIdx.leavesOfSubtree(b.id).reduce((s, l) => s + (navKosztPoId.get(l.id) || 0), 0);
+            return { koszt, kosztTytul: `Koszt planu (wersja robocza): ${fmtMoney(koszt)}` };
+        },
+    }), [navIdx, navKosztPoId, isManagerOrAdmin]);
+    const [navFocusKlucz, setNavFocusKlucz] = useBranchFocus(nodeId);
+    const navIdPoKluczu = useMemo(() => idGaleziPoKluczu(navIdx.branches, wbsRootOf), [navIdx]);
+    const navFocus = navIdPoKluczu.get(navFocusKlucz) ?? SYNTHETIC_ROOT;
+    const navFocusId = navIdx.nodeById[navFocus] && !LEAF_TYPES.includes(navIdx.nodeById[navFocus]?.type) ? navFocus : SYNTHETIC_ROOT;
+    const [navPozycja, setNavPozycja] = useState(null);
+    const [navPelne, setNavPelneState] = useState(() => { try { return sessionStorage.getItem('realizacja-pelne-nazwy') === '1'; } catch { return false; } });
+    const navRef = useRef({});
+    navRef.current = {
+        idx: navIdx,
+        setFocus: (id) => {
+            const n = navIdx.nodeById[id];
+            setNavFocusKlucz(!n || id === SYNTHETIC_ROOT ? SYNTHETIC_ROOT : wbsRootOf(n));
+        },
+        setPelne: (v) => { setNavPelneState(v); try { sessionStorage.setItem('realizacja-pelne-nazwy', v ? '1' : '0'); } catch { /* tryb prywatny */ } },
+    };
+    useEffect(() => {
+        if (!setBranchNav) return;
+        setBranchNav({
+            lens: 'plan',
+            orderId: nodeId,
+            rootId: SYNTHETIC_ROOT,
+            galezie: navGalezie,
+            pozycje: navPozycje,
+            focusId: navFocusId,
+            selectedId: (navPozycja && navIdx.nodeById[navPozycja]) ? navPozycja : navFocusId,
+            pelne: navPelne,
+            canRename: false,
+            onFocus: (id) => { setNavPozycja(null); navRef.current.setFocus(id); },
+            onPozycja: (id) => {
+                const l = navRef.current.idx.nodeById[id];
+                setNavPozycja(id);
+                if (l) navRef.current.setFocus(l.branchId || SYNTHETIC_ROOT);
+            },
+            onRename: () => {},
+            onPelne: (v) => navRef.current.setPelne(v),
+            sygnaly: false,
+            onSygnaly: () => {},
+        });
+    }, [setBranchNav, nodeId, navGalezie, navPozycje, navFocusId, navPozycja, navPelne, navIdx]);
+    useEffect(() => () => { if (setBranchNav) setBranchNav(null); }, [setBranchNav]);
 
     const [extractingForWbs, setExtractingForWbs] = useState(false);
     const [unassignedRequirements, setUnassignedRequirements] = useState([]);
@@ -919,17 +985,11 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         }
     }, [nodeId, versionId, authHeaders]);
 
-    // Zwinięcie sidebara na wejściu do Planowanie
+    // @anchor planowanie-lewy-panel — Planowanie NIE zwija lewego panelu: siedzi w nim drzewo gałęzi
+    // (`planowanie-branch-nav`), wspólne z Realizacją. Zwijamy tylko panel AI — na wejściu i przy zmianie sekcji.
     useEffect(() => {
-        setLeftVisible?.(false);
         setAiVisible?.(false);
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // Zwinięcie sidebara przy każdej zmianie sekcji
-    useEffect(() => {
-        setLeftVisible?.(false);
-        setAiVisible?.(false);
-    }, [expandedSection, setLeftVisible, setAiVisible]);
+    }, [expandedSection, setAiVisible]);
 
     useEffect(() => {
         let active = true;

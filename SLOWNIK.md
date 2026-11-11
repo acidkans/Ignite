@@ -262,6 +262,11 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | wierszPozycji | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree-pozycja |
 | ui-ikona | ◆ zagrożone milestone'y gałęzi w drzewie | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree-ms |
 | ui-input | SidebarBranchToggles | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-toggles |
+| ui-funkcja | navZIndeksu — dane drzewa gałęzi (gałęzie + pozycje) wspólne dla Planowania i Realizacji | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor nav-z-indeksu |
+| ui-stala | LENS — soczewka drzewa: `plan` (koszt planu, zieleń) albo `real` (sygnały, fuksja) | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-lens |
+| ui-ikona | koszt planu gałęzi w drzewie (soczewka Planowania) | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree-koszt |
+| ui-stala | navGalezie / navPozycje Planowania — drzewo z wersji roboczej z kosztem gałęzi | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor planowanie-branch-nav |
+| ui-hook | Planowanie nie zwija lewego panelu (drzewo gałęzi), zwija tylko panel AI | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor planowanie-lewy-panel |
 | ui-stan | tylkoSygnaly | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tylko-sygnaly |
 | ui-stala | zakupyApi | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zakupy-api |
 | ui-sekcja | szuflada zakupów pozycji | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szuflada-zakupow |
@@ -295,6 +300,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | odpowiedziQa (odpowiedzi czatu pod pytaniem Q&A) | apps/frontend/src/components/shared/realizacja/realizacjaShared.js | @anchor watek-odpowiedzi-qa |
 | ui-sekcja | odpowiedzi czatu pod wpisem Q&A | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-qa-odpowiedzi-czat |
 | ui-hook | auto-odświeżanie wątku (push, powrót do karty, co 60 s) | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-auto-odswiez |
+| ui-hook | useBranchFocus — wybrana gałąź zamówienia wspólna dla Planowania i Realizacji (klucz `wbsRootOf`) | apps/frontend/src/hooks/useBranchFocus.js | @anchor use-branch-focus |
+| ui-funkcja | idGaleziPoKluczu — klucz gałęzi → id węzła w bieżącej wersji | apps/frontend/src/hooks/useBranchFocus.js | @anchor id-galezi-po-kluczu |
 | back-funkcja | push odpowiedzi Q&A — pytanie (`qaQuestion`) w treści powiadomienia | apps/backend/src/comments/comments.controller.ts | @anchor comment-push-qa-question |
 | ui-funkcja | zamknijBloker | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-zamknij-bloker |
 | schema-model | Constraint | apps/backend/prisma/schema.prisma | @anchor constraint |
