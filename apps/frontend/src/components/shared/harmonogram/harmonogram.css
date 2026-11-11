@@ -52,6 +52,12 @@
 .rz .hg-tlo .mark.ps { border-color: #22c55e; }
 .rz .hg-tlo .mark.pe { border-color: #ef4444; }
 .rz .hg-grp-t { background: color-mix(in srgb, var(--sunk) 70%, transparent); border-bottom: 1px solid var(--line); position: relative; z-index: 1; }
+/* @anchor harmonogram-nowy-ms-css — klik w dzień wiersza gałęzi: okienko nazwy nowego milestone'a */
+.rz .hg-grp-t.ms-dodaj { cursor: copy; }
+.rz .hg-nowy-ms { position: absolute; top: 2px; z-index: 40; width: 220px; background: var(--surface); border: 1px solid #8b5cf6; border-radius: 8px; padding: 6px 8px; box-shadow: 0 10px 30px rgba(0,0,0,.45); cursor: default; }
+.rz .hg-nowy-ms-g { font-size: 11px; color: #c4b5fd; margin-bottom: 4px; font-family: var(--mono, monospace); }
+.rz .hg-nowy-ms input { width: 100%; background: rgba(0,0,0,.35); border: 1px solid rgba(139,92,246,.5); border-radius: 5px; padding: 3px 6px; font-size: 12px; color: var(--ink, #fff); outline: none; }
+.rz .hg-nowy-ms-p { font-size: 10.5px; color: var(--muted, #9ca3af); margin-top: 4px; }
 .rz .hg-tor { position: relative; border-bottom: 1px solid var(--line); z-index: 1; }
 .rz .hg-tor.plan { cursor: copy; }
 .rz .hg-tor.plan:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }

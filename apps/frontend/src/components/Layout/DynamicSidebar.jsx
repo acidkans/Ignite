@@ -452,7 +452,7 @@ function AreaWithChildren({ node, activeAreaId, setActiveAreaId, onAddNode, onDe
                 </div>
             </div>
 
-            {/* Gałęzie WBS aktywnego zamówienia — tylko gdy zakładka Realizacja je opublikowała. */}
+            {/* Gałęzie WBS aktywnego zamówienia — publikuje je zakładka Planowanie albo Realizacja (`nav.lens`). */}
             {isActive && branchNav && String(branchNav.orderId) === String(node.id) && (
                 <SidebarBranchTree nav={branchNav} level={level} />
             )}

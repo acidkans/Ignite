@@ -8,6 +8,9 @@ import MaterialRequirementsPanel from './MaterialRequirementsPanel';
 import WbsMaterialsPanel from './WbsMaterialsPanel';
 import TasksCalendarSection from './TasksCalendarSection';
 import HarmonogramPlanowanie from '../harmonogram/HarmonogramPlanowanie';
+import { SYNTHETIC_ROOT } from '../RealizationNewTab';
+import { useDrzewoPlanu } from '../../Layout/DrzewoPlanu';
+import { dodajMilestoneApi } from './milestoneApi';
 import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, PRICED_LEAF_TYPES, orderDefaultsFrom, leafDefaultsMissing, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes, applyGroupMultipliers, groupQtyFactor, isCostNode } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { buildStrategyTasksQaPdfArtifact } from '../../../utils/strategyTasksQaPdfExport';
@@ -140,7 +143,7 @@ function BranchStrategyField({ name, value, onSave }) {
     );
 }
 
-export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setLeftVisible, setAiVisible, oneDriveFolderName = null, initialSection = null, onInitialSectionApplied, realization = null }) {
+export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsDataLoad, userRoles = [], projectName = '', orderName = '', searchQuery = '', setAiVisible, oneDriveFolderName = null, initialSection = null, onInitialSectionApplied, realization = null, setBranchNav = null }) {
     useOrderCurrency(); // przerysowanie po wczytaniu/zmianie waluty zamówienia
     const [wbsData, setWbsData] = useState([]);
     // @anchor budget-scope-data — `wbsData` BEZ pozycji odrzuconych (i bez ich poddrzew).
@@ -376,6 +379,45 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // rabat, ilość, strona „Wycena") na WSZYSTKICH typach liści. Manager może odblokować na sesję
     // przez modal `OfferLockGuard`; dodawanie nowych pozycji pozostaje wolne.
     const { locked: offerLocked } = useOfferLock();
+
+    // ── Drzewo gałęzi w lewym panelu — soczewka Planowania ──────────────────
+    // @anchor planowanie-branch-nav — to samo drzewo co w Realizacji (`realizacja-branch-nav`), ale z WERSJI
+    // ROBOCZEJ i z kosztem planu gałęzi zamiast sygnałów (`use-drzewo-planu`). Na żywym `wbsData`, więc zmiany
+    // w Strukturze widać w drzewie od razu. Wybrana gałąź jest wspólna (`use-branch-focus`).
+    // Szybki milestone (drzewo „+◆”, klik w dzień Harmonogramu, „+ ◆” w Strukturze) — implementacja niżej
+    // (`planowanie-dodaj-ms`), bo potrzebuje `fetchData` i stanu zapisu Struktury.
+    const dodajMsRef = useRef(null);
+    const dodajMsPlanowanie = useCallback((a) => dodajMsRef.current(a), []);
+    // Drzewo publikujemy dopiero po pierwszym wczytaniu WBS — wcześniej zostaje drzewo poprzedniej zakładki.
+    const [wbsWczytane, setWbsWczytane] = useState(false);
+    const { navFocusId, setFocus: setNavFocus, domyslnaDataMs } = useDrzewoPlanu({ nodeId, wbsData, orderName, isManagerOrAdmin, setBranchNav, kosztoweWezly: budgetScopeData, dodajMs: dodajMsPlanowanie, gotowe: wbsWczytane });
+
+    // @anchor planowanie-focus-widok — zawężenie sekcji Planowania do gałęzi wybranej w drzewie.
+    // WYŁĄCZNIE filtr wyświetlania: `wbsTree`, `wbsData`, zapis Struktury i eksporty zostają na całym
+    // zamówieniu. Zapis (`saveTree`) kasuje węzły, których nie ma w wysłanym drzewie
+    // (`wbs-nodes-save-tree-hidden-guard`), więc przycięte drzewo nigdy nie trafia do `setWbsTree`.
+    // Liczone z ŻYWEGO `wbsTree`, żeby świeżo dodana pozycja w gałęzi od razu była widoczna.
+    // `ids` = przodkowie + poddrzewo (Struktura potrzebuje ścieżki), `poddrzewo` = sama gałąź z potomkami.
+    const focusWidok = useMemo(() => {
+        if (navFocusId === SYNTHETIC_ROOT) return null;
+        let found = null;
+        let sciezka = [];
+        const znajdz = (nodes, przodkowie) => {
+            for (const n of nodes || []) {
+                if (n.id === navFocusId) { found = n; sciezka = przodkowie; return true; }
+                if (znajdz(n.children, [...przodkowie, n])) return true;
+            }
+            return false;
+        };
+        znajdz(wbsTree?.items, []);
+        if (!found) return null;
+        const poddrzewo = new Set();
+        const zbierz = (n) => { poddrzewo.add(n.id); (n.children || []).forEach(zbierz); };
+        zbierz(found);
+        const ids = new Set([...sciezka.map(n => n.id), ...poddrzewo]);
+        return { id: found.id, node: found, sciezka, sciezkaIds: new Set(sciezka.map(n => n.id)), ids, poddrzewo };
+    }, [navFocusId, wbsTree]);
+    const widokGalezi = useMemo(() => (focusWidok ? { id: focusWidok.id, ids: focusWidok.ids, sciezka: focusWidok.sciezkaIds } : null), [focusWidok]);
 
     const [extractingForWbs, setExtractingForWbs] = useState(false);
     const [unassignedRequirements, setUnassignedRequirements] = useState([]);
@@ -645,6 +687,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             if (res.ok) {
                 const data = await res.json();
                 setWbsData(data.items || []);
+                setWbsWczytane(true);
                 onWbsDataLoad?.(data.items || []);
                 wbsItemsById = new Map((data.items || []).map(n => [n.id, n]));
                 nextRequirementsQtyByNode = Object.fromEntries(
@@ -919,17 +962,11 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         }
     }, [nodeId, versionId, authHeaders]);
 
-    // Zwinięcie sidebara na wejściu do Planowanie
+    // @anchor planowanie-lewy-panel — Planowanie NIE zwija lewego panelu: siedzi w nim drzewo gałęzi
+    // (`planowanie-branch-nav`), wspólne z Realizacją. Zwijamy tylko panel AI — na wejściu i przy zmianie sekcji.
     useEffect(() => {
-        setLeftVisible?.(false);
         setAiVisible?.(false);
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // Zwinięcie sidebara przy każdej zmianie sekcji
-    useEffect(() => {
-        setLeftVisible?.(false);
-        setAiVisible?.(false);
-    }, [expandedSection, setLeftVisible, setAiVisible]);
+    }, [expandedSection, setAiVisible]);
 
     useEffect(() => {
         let active = true;
@@ -1170,6 +1207,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const handleSaveHybridWBS = useCallback(async () => {
         if (hybridSaveTimeout.current) clearTimeout(hybridSaveTimeout.current);
         hybridSaveTimeout.current = setTimeout(async () => {
+            hybridSaveTimeout.current = null; // `planowanie-dodaj-ms` czeka, aż nic nie czeka na wysłanie
             if (hybridSaveRef.current) {
                 hybridSavePending.current = true; // kolejkuj — wyślij po zakończeniu bieżącego
                 return;
@@ -1208,6 +1246,19 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             }
         }, 400);
     }, [nodeId, versionId, authHeaders, onWbsUpdate, refreshWbsNodes]);
+
+    // @anchor planowanie-dodaj-ms — szybki milestone w Planowaniu: `POST /wbs-nodes/milestone` na WERSJI ROBOCZEJ,
+    // potem pełne przeładowanie drzewa (`fetchData`). Najpierw czekamy, aż Struktura skończy zapis: `saveTree`
+    // kasuje węzły, których nie ma w wysłanym drzewie, więc zapis starego drzewa PO dodaniu usunąłby milestone.
+    dodajMsRef.current = async ({ parentId, name, dzien, beforeId = null }) => {
+        const t0 = Date.now();
+        while ((hybridSaveTimeout.current || hybridSaveRef.current || hybridSavePending.current) && Date.now() - t0 < 10000) {
+            await new Promise(r => setTimeout(r, 150));
+        }
+        const r = await dodajMilestoneApi({ nodeId, versionId, parentId, name, dzien, beforeId });
+        await fetchData();
+        return r;
+    };
 
     // Po wklejeniu skopiowanej pozycji w WBS — natychmiast zapisz drzewo (omijamy debounce, żeby
     // nowe wbs_nodes powstały w bazie), a następnie sklonuj powiązane wymagania techniczne
@@ -6741,6 +6792,26 @@ ${ganttSectionHtml}
                 className="hidden"
                 onChange={handleBudgetImportFileChange}
             />
+            {/* @anchor planowanie-sciezka-galezi — pasek nad sekcjami, gdy Planowanie jest zawężone do gałęzi
+                (`planowanie-focus-widok`). Klik w przodka zawęża do niego, „całe zamówienie” zdejmuje zawężenie. */}
+            {focusWidok && (
+                <div className="flex flex-shrink-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-1.5 text-[11px]">
+                    <span className="font-bold uppercase tracking-widest text-emerald-300/80">Gałąź</span>
+                    <button onClick={() => setNavFocus(SYNTHETIC_ROOT)} className="text-sky-300/80 hover:text-sky-200" title="Pokaż całe zamówienie">całe zamówienie</button>
+                    {focusWidok.sciezka.map(n => (
+                        <span key={n.id} className="flex items-center gap-1.5">
+                            <span className="text-gray-600">›</span>
+                            <button onClick={() => setNavFocus(n.id)} title={n.name} className="max-w-[220px] truncate text-sky-300/80 hover:text-sky-200">{n.shortName || n.name}</button>
+                        </span>
+                    ))}
+                    <span className="text-gray-600">›</span>
+                    <span className="max-w-[320px] truncate font-semibold text-white" title={focusWidok.node.name}>{focusWidok.node.shortName || focusWidok.node.name}</span>
+                    <span className="ml-auto text-[10px] text-gray-500" title="Oferta, Kalendarz i wszystkie eksporty poza Harmonogramem liczą całe zamówienie">
+                        Struktura, Budżet, Materiały, Harmonogram i Strategie tylko dla tej gałęzi · Oferta i eksporty (poza Harmonogramem): całe zamówienie
+                    </span>
+                    <button onClick={() => setNavFocus(SYNTHETIC_ROOT)} className="rounded px-1.5 text-gray-400 hover:bg-white/10 hover:text-white" title="Zdejmij zawężenie">✕</button>
+                </div>
+            )}
             {sectionOrder.map(key => {
                 if (key === 'oferta') {
                     if (!isManagerOrAdmin) return null;
@@ -6845,6 +6916,7 @@ ${ganttSectionHtml}
                                     <div className="text-sm font-bold uppercase tracking-widest text-gray-500">Strategie gałęzi</div>
                                     {wbsData
                                         .filter(n => (n.depth ?? (n.parentId ? 1 : 0)) === 0)
+                                        .filter(n => !focusWidok || focusWidok.ids.has(n.id))
                                         .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
                                         .map(n => (
                                             <BranchStrategyField
@@ -6875,6 +6947,8 @@ ${ganttSectionHtml}
                     return renderSection('gantt', 'Harmonogram', BarChart3, 'cyan', (
                         <HarmonogramPlanowanie
                             wbsTree={wbsTree}
+                            widokIds={focusWidok?.poddrzewo || null}
+                            onDodajMilestone={isManagerOrAdmin ? dodajMsPlanowanie : null}
                             projectName={orderName || projectName || 'Projekt'}
                             onNodeDurationChange={handleGanttDurationChange}
                             onGanttDateChange={handleGanttDateChange}
@@ -6896,6 +6970,8 @@ ${ganttSectionHtml}
                         <div className="flex flex-col flex-1 min-h-0">
                             <WBSHybridTable
                                 wbsTree={wbsTree}
+                                widokGalezi={widokGalezi}
+                                onDodajMilestone={isManagerOrAdmin ? (parentId) => dodajMsPlanowanie({ parentId, name: 'Nowy milestone', dzien: domyslnaDataMs(parentId) }) : null}
                                 setWbsTree={setWbsTreeAndRef}
                                 nodeName={orderName || projectName || 'Projekt'}
                                 processNodeId={nodeId}
@@ -6971,6 +7047,7 @@ ${ganttSectionHtml}
                             {(!budgetAcceptance?.acceptedVersionId || budgetMode === 'live') ? (
                                 <BudgetTable
                                     rows={budgetRows}
+                                    widokIds={focusWidok?.poddrzewo || null}
                                     nodeId={nodeId}
                                     versionId={versionId}
                                     offerLocked={offerLocked}
@@ -7013,6 +7090,7 @@ ${ganttSectionHtml}
                             accepted={!!budgetAcceptance?.acceptedVersionId}
                             offerLocked={offerLocked}
                             externalWbsNodes={wbsData}
+                            widokIds={focusWidok?.poddrzewo || null}
                             onPatchNode={(id, data) => setWbsData(prev => prev.map(n => n.id === id ? { ...n, ...data } : n))}
                             onQuantityChange={async (id, qty, name) => {
                                 const q = String(qty);

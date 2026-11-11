@@ -1,8 +1,8 @@
 import { randomBytes } from 'crypto';
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../prisma/prisma.service';
-import { isClosedLeafType, isManagerRoles, nodeHasOwnStatus, isPurchaseLeafType, isCostNode, isMilestoneType } from '../common/leaf-types.util';
+import { isClosedLeafType, isManagerRoles, nodeHasOwnStatus, isPurchaseLeafType, isCostNode, isMilestoneType, ALL_LEAF_TYPES, MILESTONE_TYPE } from '../common/leaf-types.util';
 import { defaultLogisticianOwner } from '../common/default-logistician.util';
 import { resolveVersionId } from '../common/version.util';
 import { assertOfferEditable, pickOfferChanges, OfferLockUser } from '../common/offer-lock.util';
@@ -648,6 +648,89 @@ export class WbsNodesService {
         });
     }
 
+    // @anchor wbs-create-milestone-service — szybkie dodanie milestone'a pod gałęzią w JEDNEJ transakcji:
+    // węzeł `type = 'milestone'` z datą (`ganttStart`, `ganttEnd` = koniec wyłączny, domyślnie +1 dzień)
+    // i od razu we właściwym miejscu kolejności rodzeństwa. Miejsce decyduje o zależnościach (zależni =
+    // rodzeństwo ZA milestone'em do następnego milestone'a, `zaleznyOdMilestone`), więc:
+    //   - `beforeId` (rodzeństwo) — front zna daty domyślne z Harmonogramu i wskazuje miejsce sam,
+    //   - bez `beforeId` — przed pierwsze rodzeństwo, którego poddrzewo startuje (najwcześniejszy zapisany
+    //     `ganttStart`) w dniu końca milestone'a albo później; rodzeństwo bez zapisanych dat nie decyduje.
+    // Tylko ADMIN/MANAGER. Milestone jest niekosztowy, więc blokada wartości ofertowych go nie dotyczy.
+    // Zwraca { node, zaleznych } — `zaleznych` = rodzeństwo za milestone'em do następnego milestone'a.
+    async createMilestone(
+        data: { nodeId: string; versionId?: string; parentId: string; name: string; ganttStart: string; ganttEnd?: string | null; beforeId?: string | null },
+        user?: OfferLockUser,
+    ) {
+        if (!isManagerRoles(user?.roles)) throw new ForbiddenException("Milestone'y dodaje kierownik projektu albo administrator.");
+        const name = String(data?.name || '').trim();
+        if (!name) throw new BadRequestException("Podaj nazwę milestone'a.");
+        if (name.length > 500) throw new BadRequestException('Nazwa za długa (maks. 500 znaków).');
+        if (!data?.nodeId || !data?.parentId) throw new BadRequestException(MILESTONE_ERR_ROOT);
+        const start = data.ganttStart ? new Date(data.ganttStart) : null;
+        if (!start || isNaN(start.getTime())) throw new BadRequestException("Podaj datę milestone'a.");
+        const end = data.ganttEnd ? new Date(data.ganttEnd) : new Date(start.getTime() + 24 * 60 * 60 * 1000);
+        if (isNaN(end.getTime()) || end <= start) throw new BadRequestException("Koniec milestone'a przed startem.");
+        const vId = await resolveVersionId(this.prisma, data.nodeId, data.versionId);
+
+        return this.prisma.$transaction(async (tx) => {
+            const parent = await tx.wbsNode.findUnique({ where: { id: data.parentId }, select: { id: true, nodeId: true, versionId: true, type: true } });
+            if (!parent || parent.nodeId !== data.nodeId || (parent.versionId ?? null) !== (vId ?? null)) throw new NotFoundException('Nie ma takiej gałęzi w tej wersji WBS.');
+            if (isMilestoneType(parent.type)) throw new BadRequestException(MILESTONE_ERR_CHILD);
+            if (ALL_LEAF_TYPES.includes(String(parent.type || '').toLowerCase())) throw new BadRequestException("Milestone dodaje się pod gałęzią, nie pod pozycją kosztową.");
+
+            const wszystkie = await tx.wbsNode.findMany({
+                where: { nodeId: data.nodeId, versionId: vId },
+                select: { id: true, parentId: true, type: true, sortOrder: true, ganttStart: true },
+            });
+            const dzieci = new Map<string | null, typeof wszystkie>();
+            for (const n of wszystkie) {
+                const k = n.parentId ?? null;
+                if (!dzieci.has(k)) dzieci.set(k, []);
+                dzieci.get(k)!.push(n);
+            }
+            const rodzenstwo = [...(dzieci.get(parent.id) || [])].sort((a, b) => a.sortOrder - b.sortOrder);
+            // Najwcześniejszy zapisany start w poddrzewie (null = brak zapisanych dat).
+            const startPoddrzewa = (id: string, n0?: { ganttStart: Date | null }): number | null => {
+                let min: number | null = n0?.ganttStart ? n0.ganttStart.getTime() : null;
+                for (const c of dzieci.get(id) || []) {
+                    const t = startPoddrzewa(c.id, c);
+                    if (t != null && (min == null || t < min)) min = t;
+                }
+                return min;
+            };
+            let pos: number;
+            if (data.beforeId) {
+                pos = rodzenstwo.findIndex(n => n.id === data.beforeId);
+                if (pos < 0) throw new BadRequestException("Wskazana pozycja nie stoi w tej gałęzi.");
+            } else {
+                pos = rodzenstwo.findIndex(n => { const t = startPoddrzewa(n.id, n); return t != null && t >= end.getTime(); });
+                if (pos < 0) pos = rodzenstwo.length;
+            }
+
+            const node = await tx.wbsNode.create({
+                data: {
+                    nodeId: data.nodeId, versionId: vId, parentId: parent.id, name, type: MILESTONE_TYPE,
+                    sortOrder: pos, ganttStart: start, ganttEnd: end,
+                },
+            });
+            // Kolejność rodzeństwa od nowa 0..n z milestone'em na `pos` — zapisujemy tylko zmienione.
+            const nowa = [...rodzenstwo.slice(0, pos), { id: node.id, sortOrder: pos }, ...rodzenstwo.slice(pos)];
+            for (let i = 0; i < nowa.length; i++) {
+                if (nowa[i].id !== node.id && nowa[i].sortOrder !== i) await tx.wbsNode.update({ where: { id: nowa[i].id }, data: { sortOrder: i } });
+            }
+            let zaleznych = 0;
+            for (const n of rodzenstwo.slice(pos)) { if (isMilestoneType(n.type)) break; zaleznych++; }
+
+            await tx.auditLog.create({
+                data: {
+                    action: AuditAction.CREATE, entity: 'WbsNode.milestone', entityId: data.nodeId, userId: user?.userId ?? null,
+                    diff: { versionId: vId ?? null, id: node.id, parentId: parent.id, name, ganttStart: start.toISOString(), ganttEnd: end.toISOString(), sortOrder: pos, zaleznych },
+                },
+            });
+            return { node, zaleznych };
+        });
+    }
+
     /**
      * Aktualizuje pola węzła WBS (nazwa, typ, status, owner, quantity).
      * Gdy quantity się zmienia, synchronizuje powiązane MaterialRequirement
@@ -661,11 +744,18 @@ export class WbsNodesService {
         if (!pn?.acceptedVersionId) return { acceptedVersionId: null, acceptedAt: null, items: {} };
         const ms = await this.prisma.wbsNode.findMany({
             where: { nodeId, versionId: pn.acceptedVersionId, type: 'milestone' },
-            select: { id: true, sourceWbsNodeId: true, ganttStart: true, ganttEnd: true },
+            select: { id: true, sourceWbsNodeId: true, ganttStart: true, ganttEnd: true, createdAt: true },
         });
-        const items: Record<string, { ganttStart: string | null; ganttEnd: string | null; root: string }> = {};
+        const items: Record<string, { ganttStart: string | null; ganttEnd: string | null; root: string; nowy?: boolean }> = {};
         const iso = (d: Date | null) => (d ? d.toISOString() : null);
-        for (const m of ms) items[m.id] = { ganttStart: iso(m.ganttStart), ganttEnd: iso(m.ganttEnd), root: m.sourceWbsNodeId || m.id };
+        // @anchor wbs-milestones-baseline-nowy — milestone dodany do zaakceptowanej wersji PO akceptacji nie ma
+        // baselinu: `nowy: true` i puste daty (Kokpit pisze „nowy”, zamiast liczyć poślizg od dnia dodania).
+        for (const m of ms) {
+            const nowy = !!(pn.acceptedAt && m.createdAt > pn.acceptedAt);
+            items[m.id] = nowy
+                ? { ganttStart: null, ganttEnd: null, root: m.sourceWbsNodeId || m.id, nowy: true }
+                : { ganttStart: iso(m.ganttStart), ganttEnd: iso(m.ganttEnd), root: m.sourceWbsNodeId || m.id };
+        }
         if (ms.length) {
             const wpisy = await this.prisma.auditLog.findMany({
                 where: { entity: 'WbsNode.ganttDates', entityId: nodeId, ...(pn.acceptedAt ? { createdAt: { gte: pn.acceptedAt } } : {}) },
@@ -676,7 +766,7 @@ export class WbsNodesService {
                 const diff: any = w.diff;
                 if (diff?.versionId !== pn.acceptedVersionId) continue;
                 for (const it of diff?.items || []) {
-                    if (!items[it.id] || odtworzone.has(it.id)) continue;
+                    if (!items[it.id] || items[it.id].nowy || odtworzone.has(it.id)) continue;
                     odtworzone.add(it.id);
                     items[it.id] = { ...items[it.id], ganttStart: it.przed?.ganttStart ?? null, ganttEnd: it.przed?.ganttEnd ?? null };
                 }

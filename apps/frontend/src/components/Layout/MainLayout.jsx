@@ -74,8 +74,11 @@ export default function MainLayout({ onLogout }) {
 
     // Data State
     const [menuTree, setMenuTree] = useState([]);
-    // @anchor main-layout-branch-nav — drzewo gałęzi realizacji aktywnego zamówienia do lewego panelu
-    // (publikuje je `RealizacjaPanel`, rysuje `SidebarBranchTree`); null = brak.
+    // @anchor main-layout-branch-nav — drzewo gałęzi aktywnego zamówienia do lewego panelu (publikują je
+    // `RealizacjaPanel`, Planowanie i `DrzewoPlanu`, rysuje `SidebarBranchTree`); null = brak.
+    // @anchor branch-nav-bez-czyszczenia — panele NIE czyszczą drzewa przy odmontowaniu: przy zmianie zakładki
+    // stare drzewo zostaje, aż nowa zakładka wczyta dane i opublikuje swoje (bez mignięcia i bez gubienia
+    // zwiniętych gałęzi). Obce zamówienie go nie pokaże — `DynamicSidebar` porównuje `orderId`.
     const [branchNav, setBranchNav] = useState(null);
     const [loadingMenu, setLoadingMenu] = useState(true);
 

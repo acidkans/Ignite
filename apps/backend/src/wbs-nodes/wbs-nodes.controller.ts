@@ -41,6 +41,20 @@ export class WbsNodesController {
     }
 
     /**
+     * Szybkie dodanie milestone'a pod gałęzią: węzeł z datą od razu we właściwym miejscu kolejności
+     * (decyduje o zależnych). Body: { nodeId, versionId?, parentId, name, ganttStart, ganttEnd?, beforeId? }.
+     * Zwraca { node, zaleznych }. Tylko ADMIN/MANAGER. Trasa jednosegmentowa — nie koliduje z `POST /`.
+     */
+    // @anchor wbs-nodes-create-milestone
+    @Post('milestone')
+    createMilestone(
+        @Body() body: { nodeId: string; versionId?: string; parentId: string; name: string; ganttStart: string; ganttEnd?: string | null; beforeId?: string | null },
+        @Req() req: any,
+    ) {
+        return this.service.createMilestone(body, req.user);
+    }
+
+    /**
      * Daty baseline milestone'ów zamówienia: z zaakceptowanej wersji, a gdy Realizacja przesunęła je
      * po akceptacji — z pierwszego wpisu AuditLog `WbsNode.ganttDates` (stan „przed”).
      */

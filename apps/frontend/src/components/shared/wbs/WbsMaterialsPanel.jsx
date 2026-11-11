@@ -2200,6 +2200,9 @@ export default function WbsMaterialsPanel({
     projectName = '',
     orderName = '',
     onExportReady,
+    // @anchor wbs-materials-widok-galezi — Set id pozycji wybranej gałęzi (`planowanie-focus-widok`) albo null.
+    // Zawęża TYLKO listę na ekranie (i sumy w stopce); eksport Excel liczy z `matNodes` — całe zamówienie.
+    widokIds = null,
 }) {
     useOrderCurrency(); // przerysowanie po wczytaniu/zmianie waluty zamówienia
     const token = sessionStorage.getItem('token') || localStorage.getItem('token');
@@ -2270,7 +2273,7 @@ export default function WbsMaterialsPanel({
     const entriesOf = useCallback((node) => actualsByRoot[wbsRootOf(node)] || [], [actualsByRoot]);
 
     const sortedFilteredNodes = useMemo(() => {
-        let nodes = [...matNodes];
+        let nodes = widokIds ? matNodes.filter(n => widokIds.has(n.id)) : [...matNodes];
 
         const matchTokens = (text, q) =>
             q.split(/[\s/]+/).filter(Boolean).every(t => text.toLowerCase().includes(t));
@@ -2355,7 +2358,7 @@ export default function WbsMaterialsPanel({
         });
 
         return nodes;
-    }, [matNodes, cards, sortConfig, colFilters, searchQuery, actualsByRoot]);
+    }, [matNodes, cards, sortConfig, colFilters, searchQuery, actualsByRoot, widokIds]);
 
     // ─ Data fetching ─────────────────────────────────────────────────────────
 

@@ -1,3 +1,19 @@
+## 2026-11-11 — feat(wbs,realizacja): szybkie dodawanie milestone'a (POST /wbs-nodes/milestone), milestone dodany po akceptacji bez baselinu, mniejsze czcionki zrealizowanych zakupów w Realizacji (v2026.11.11.1729)
+
+### architektura / API
+- `back-endpoint` `POST /wbs-nodes/milestone` — body `{ nodeId, versionId?, parentId, name, ganttStart, ganttEnd?, beforeId? }` → `{ node, zaleznych }`; tylko ADMIN/MANAGER (403); rodzic = gałąź tej samej wersji (nie milestone, nie pozycja kosztowa); jedna transakcja: węzeł `type = 'milestone'` z datą (`ganttEnd` wyłączny, domyślnie +1 dzień) + przenumerowanie `sortOrder` rodzeństwa + wpis `AuditLog` CREATE `WbsNode.milestone`
+- miejsce w kolejności: `beforeId` albo przed pierwsze rodzeństwo, którego poddrzewo startuje (zapisany `ganttStart`) w dniu końca milestone'a lub później; `zaleznych` = rodzeństwo za milestone'em do następnego milestone'a
+- `back-funkcja` `getMilestonesBaseline` — milestone utworzony po `ProcessNode.acceptedAt` dostaje `nowy: true` i puste daty (bez odtwarzania „przed” z AuditLog)
+- `ui-tabela` Kokpit „Najbliższe milestone'y” — w kolumnie Baseline „nowy” zamiast daty, bez poślizgu; opis milestone'a na Harmonogramie „nowy — bez baselinu”
+
+### słownik
+- dodano `wbs-nodes-create-milestone`, `wbs-create-milestone-service`, `wbs-milestones-baseline-nowy`, `realizacja-ms-nowy`
+
+### wytyczne
+- `back-endpoint` `POST /wbs-nodes/milestone` — kolejność rodzeństwa wyznacza zależnych; front znający daty domyślne (Harmonogram) podaje `beforeId`, bez niego backend decyduje tylko po zapisanych `ganttStart`
+- `ui-funkcja` `dodajMilestoneApi` — każda zakładka zapisuje milestone do wersji, którą pokazuje: Planowanie (i pozostałe zakładki) do wersji roboczej, Realizacja do baseline — jak przy zmianie dat w Harmonogramie
+- `ui-funkcja` `planowanie-dodaj-ms` — w Planowaniu przed `POST` czekać na koniec zapisu Struktury i po nim przeładować drzewo (`fetchData`): `saveTree` ze starym drzewem skasowałby nowy milestone
+
 ## 2026-11-11 — feat(harmonogram): bez rombów dostaw; pole treści maila w wątku na 5 wierszy (v2026.11.11.1024)
 
 ### architektura / API
