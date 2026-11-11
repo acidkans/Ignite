@@ -127,7 +127,7 @@ export function MailForm({ wbsNodeId, odpowiedz = null, onWyslano, onAnuluj }) {
                     <input className="in" value={temat} onChange={e => setTemat(e.target.value)} />
                     <div className="lab">Treść</div>
                     <div onPaste={naWklejenie} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); dodajPliki(e.dataTransfer.files); }}>
-                        <AutoResizeTextarea className="in" value={tresc} onChange={e => setTresc(e.target.value)} placeholder="Dzień dobry, … (zrzut ekranu wklejasz Ctrl+V, pliki możesz przeciągnąć)" />
+                        <AutoResizeTextarea className="in" rows={5} value={tresc} onChange={e => setTresc(e.target.value)} placeholder="Dzień dobry, … (zrzut ekranu wklejasz Ctrl+V, pliki możesz przeciągnąć)" />
                     </div>
                     <div className="zal-lista">
                         {zal.map((z, i) => (

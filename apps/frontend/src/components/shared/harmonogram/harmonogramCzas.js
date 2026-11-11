@@ -126,26 +126,64 @@ export const isNonWorkingDay = (date) => {
     return dow === 0 || dow === 6 || isPolishHoliday(date);
 };
 
-export const advanceToWorkingDay = (date) => {
+// @anchor rodzaj-dnia — 'rob' (pn–pt) | 'sob' | 'nd'. Święto w dowolny dzień tygodnia liczy się jak
+// niedziela (Kodeks pracy łączy pracę w niedziele i święta) — gałąź pracująca tylko w soboty
+// nie pracuje w święto wypadające w sobotę.
+export const rodzajDnia = (date) => {
+    const dow = date.getDay();
+    if (dow === 0 || isPolishHoliday(date)) return 'nd';
+    return dow === 6 ? 'sob' : 'rob';
+};
+
+// @anchor praca-w-wolne — ustawienie gałęzi „pracuje w dni wolne”: { sob, nd } (nd = niedziele i święta).
+// `true` = dawne „pracuje w dni wolne” (soboty + niedziele + święta); brak / oba false = null.
+export const normPw = (pw) => {
+    if (pw === true) return { sob: true, nd: true };
+    return pw && (pw.sob || pw.nd) ? { sob: !!pw.sob, nd: !!pw.nd } : null;
+};
+
+// @anchor czy-wolny-dla — dzień wolny dla gałęzi z ustawieniem `pw`; bez ustawienia = isNonWorkingDay.
+export const czyWolnyDla = (date, pw) => {
+    const r = rodzajDnia(date);
+    if (r === 'rob') return false;
+    const p = normPw(pw);
+    return !(p && p[r]);
+};
+
+// @anchor licz-dni-pracy — dni pracy w zakresie od..ost (oba włącznie) rozbite na rodzaj dnia:
+// { rob, sob, nd, razem } — soboty i niedziele/święta liczone tylko, gdy gałąź w nie pracuje.
+export const liczDniPracy = (od, ost, pw) => {
+    const out = { rob: 0, sob: 0, nd: 0, razem: 0 };
+    const a = new Date(od); a.setHours(0, 0, 0, 0);
+    const b = new Date(ost); b.setHours(0, 0, 0, 0);
+    if (isNaN(a) || isNaN(b) || b < a) return out;
+    const p = normPw(pw);
+    for (const c = new Date(a); c <= b; c.setDate(c.getDate() + 1)) {
+        const r = rodzajDnia(c);
+        if (r === 'rob' || (p && p[r])) out[r]++;
+    }
+    out.razem = out.rob + out.sob + out.nd;
+    return out;
+};
+
+export const advanceToWorkingDay = (date, pw) => {
     const d = new Date(date);
-    while (isNonWorkingDay(d)) d.setDate(d.getDate() + 1);
+    while (czyWolnyDla(d, pw)) d.setDate(d.getDate() + 1);
     return d;
 };
 
-export const retreatToWorkingDay = (date) => {
+export const retreatToWorkingDay = (date, pw) => {
     const d = new Date(date);
-    while (isNonWorkingDay(d)) d.setDate(d.getDate() - 1);
+    while (czyWolnyDla(d, pw)) d.setDate(d.getDate() - 1);
     return d;
 };
 
-export const addWorkingDays = (start, dur) => {
+export const addWorkingDays = (start, dur, pw) => {
     const d = new Date(start);
     let remaining = dur;
     while (remaining > 0) {
+        if (!czyWolnyDla(d, pw)) remaining -= 1;
         d.setDate(d.getDate() + 1);
-        if (!isNonWorkingDay(new Date(d.getTime() - DAY_MS))) {
-            remaining -= 1;
-        }
     }
     return d;
 };
@@ -204,11 +242,8 @@ export const zalezniMilestone = (zaleznosc, msId) => {
 };
 
 // @anchor pierwszy-dozwolony-dzien — najwcześniejszy start zależnego: pierwszy dzień roboczy po
-// ostatnim dniu milestone'a (`msOst` włącznie); gałąź pracująca w dni wolne liczy kalendarzowo.
-export const pierwszyDozwolonyDzien = (msOst, wow = false) => {
-    const d = plusDni(msOst, 1);
-    return wow ? d : advanceToWorkingDay(d);
-};
+// ostatnim dniu milestone'a (`msOst` włącznie); `pw` = praca gałęzi w soboty / niedziele i święta.
+export const pierwszyDozwolonyDzien = (msOst, pw = null) => advanceToWorkingDay(plusDni(msOst, 1), pw);
 
 // @anchor roznica-dni-roboczych — o ile dni roboczych (ze znakiem) przesunął się dzień `a` do `b`.
 export const roznicaDniRoboczych = (a, b) => {
@@ -253,7 +288,52 @@ export const przesunZaleznych = (wezly, ids, deltaRob) => {
     return out;
 };
 
-// branchWorkOnHolidays: { [nodeId]: boolean } – per-branch setting for depth-0 nodes
+// @anchor prognozy-milestonow — prognozowany koniec milestone'ów: własne blokery (`wlasneN` = { [msId]: N dni
+// rob. }, największy wpływ otwartych blokerów) przesuwają `planDo` o N dni roboczych, a łańcuch A → B
+// przenosi poślizg — B nie zacznie się przed pierwszym dniem roboczym po prognozie A, więc wypycha się
+// o brakujące dni robocze. Własne blokery i wypchnięcie: wygrywa późniejsza data. Nieruchomy zostaje.
+// `wezly`/`zaleznosc` jak w `przesunZaleznych` / `zaleznyOdMilestone`. Zwraca { [msId]: Date } tylko z prognozą.
+export const prognozyMilestonow = (wezly, zaleznosc, wlasneN = {}) => {
+    const memo = new Map();
+    const licz = (id, stos) => {
+        if (memo.has(id)) return memo.get(id);
+        const w = wezly?.[id];
+        if (!w?.planDo || stos.has(id)) return null;
+        stos.add(id);
+        const N = Number(wlasneN[id]) || 0;
+        let p = N > 0 ? przesunORobocze(w.planDo, N) : null;
+        const up = zaleznosc?.[id];
+        if (up && w.planOd && !w.nieruchomy) {
+            const upP = licz(up, stos);
+            const min = upP ? pierwszyDozwolonyDzien(upP) : null;
+            if (min && dzien0(w.planOd) < min) {
+                const pchniety = przesunORobocze(w.planDo, roznicaDniRoboczych(w.planOd, min));
+                if (!p || pchniety > p) p = pchniety;
+            }
+        }
+        stos.delete(id);
+        memo.set(id, p);
+        return p;
+    };
+    const out = {};
+    for (const [id, w] of Object.entries(wezly || {})) {
+        if (!isMilestoneType(w?.type)) continue;
+        const p = licz(id, new Set());
+        if (p) out[id] = p;
+    }
+    return out;
+};
+
+// @anchor prognoza-zaleznego — gdzie najwcześniej wypadnie pozycja kolidująca z milestone'em: start na
+// pierwszym dniu pracy od `minOd`, ta sama liczba dni pracy (`pw` = { sob, nd } gałęzi). { od, ost } (ost włącznie).
+export const prognozaZaleznego = (planOd, planDo, minOd, pw = null) => {
+    let ile = 0;
+    for (const c = dzien0(planOd), b = dzien0(planDo); c <= b; c.setDate(c.getDate() + 1)) if (!czyWolnyDla(c, pw)) ile++;
+    const od = advanceToWorkingDay(dzien0(minOd), pw);
+    return { od, ost: plusDni(addWorkingDays(od, Math.max(1, ile), pw), -1) };
+};
+
+// branchWorkOnHolidays: { [nodeId]: { sob, nd } | boolean } – per-branch setting for depth-0 nodes
 export const buildTasksFromTree = (items, projectStart, projectName, overrides, branchWorkOnHolidays) => {
     const tasks = [];
     // @anchor build-tasks-ms-regula — domyślny start zależnego od milestone'a = max(start projektu,
@@ -296,14 +376,14 @@ export const buildTasksFromTree = (items, projectStart, projectName, overrides, 
 
             // Czysto grupująca gałąź (nie-zadanie z dziećmi) — bez paska, schodzimy w dzieci.
             if (hasChildren && !isTaskNode) {
-                if (depth === 0 && !wow) cursor = advanceToWorkingDay(cursor);
+                if (depth === 0) cursor = advanceToWorkingDay(cursor, wow);
                 walk(node.children, parentId, depth + 1, wow, thisBranchId);
                 continue;
             }
 
             {
                 taskBranchMap[node.id] = thisBranchId;
-                if (depth === 0 && !wow) cursor = advanceToWorkingDay(cursor);
+                if (depth === 0) cursor = advanceToWorkingDay(cursor, wow);
 
                 // Per-task WoH override — jeśli zadanie ma własne ustawienie, nadpisuje gałąź
                 const effectiveWow = Object.prototype.hasOwnProperty.call(branchWorkOnHolidays, node.id)
@@ -315,7 +395,7 @@ export const buildTasksFromTree = (items, projectStart, projectName, overrides, 
                 let start, end, type;
                 // tylko praca z jednostką dni może aktualizować ilość przez timeline
                 const canUpdateDuration = isWorkType(node.type) && isDayUnit(node.unit);
-                let defaultStart = effectiveWow ? new Date(projectStart) : advanceToWorkingDay(new Date(projectStart));
+                let defaultStart = advanceToWorkingDay(new Date(projectStart), effectiveWow);
                 const rzadzi = zaleznosc[node.id];
                 if (rzadzi && koniecMs[rzadzi]) {
                     const min = pierwszyDozwolonyDzien(new Date(koniecMs[rzadzi].getTime() - DAY_MS), effectiveWow);
@@ -343,15 +423,11 @@ export const buildTasksFromTree = (items, projectStart, projectName, overrides, 
                         if (!isNonWorkingDay(c)) workDays++;
                     }
                     workDays = Math.max(1, workDays);
-                    end = effectiveWow
-                        ? new Date(start.getTime() + workDays * DAY_MS)
-                        : addWorkingDays(start, workDays);
+                    end = addWorkingDays(start, workDays, effectiveWow);
                     type = 'task';
                 } else if (dur > 0) {
                     start = defaultStart;
-                    end = effectiveWow
-                        ? new Date(start.getTime() + dur * DAY_MS)
-                        : addWorkingDays(start, dur);
+                    end = addWorkingDays(start, dur, effectiveWow);
                     type = 'task';
                 } else {
                     // Praca z jednostką inną niż dni (sztuki, kpl, usługa…) — pasek 1-dniowy,
@@ -453,11 +529,8 @@ export const taskDays = (task, branchWorkOnHolidays = {}, taskBranchMap = {}) =>
     const wow = Object.prototype.hasOwnProperty.call(branchWorkOnHolidays, task.id)
         ? branchWorkOnHolidays[task.id]
         : (branchWorkOnHolidays[branchId] ?? false);
-    if (wow) return Math.max(0, Math.round((end - start) / DAY_MS));
-    let count = 0;
-    const cur = new Date(start);
-    while (cur < end) { if (!isNonWorkingDay(cur)) count++; cur.setDate(cur.getDate() + 1); }
-    return count;
+    const ost = new Date(end); ost.setDate(ost.getDate() - 1); // bez DAY_MS — doba przy zmianie czasu ma 23/25 h
+    return liczDniPracy(start, ost, wow).razem;
 };
 
 
@@ -499,7 +572,7 @@ export const buildExcelTimeline = (tasks, viewMode, branchWorkOnHolidays, taskBr
             // Milestone: romb jednego dnia albo całe okno (dni kalendarzowe, termin to termin).
             if (t.type === 'milestone') return te > ts ? (d >= ts && d < te) : d.getTime() === ts.getTime();
             if (d < ts || d >= te) return false;
-            return wow || !isNonWorkingDay(d);
+            return !czyWolnyDla(d, wow);
         });
     });
 

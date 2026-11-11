@@ -1374,7 +1374,6 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
     // wpisy planowe; pozaplanowe w całości powiększają koszt i plan wydatków.
     const nadmiar = r.entries.filter(e => entryStatusOf(e) === ENTRY_STATUS.UNPLANNED);
     const qtyNadmiar = Math.round(nadmiar.reduce((s, e) => s + (Number(e.qty) || 0), 0) * 1000) / 1000;
-    const valNadmiar = round2(nadmiar.reduce((s, e) => s + (Number(e.qty) || 0) * (Number(e.unitCost) || 0), 0));
     const qtyWOfercie = Math.round((r.qty - qtyNadmiar) * 1000) / 1000;
     // Domyślna ilość nowego wpisu = ile brakuje do planu. Koszt jedn. zostaje PUSTY świadomie:
     // podpowiedziana cena zapisywała się kwotą, której nikt nie przeczytał, a to rozliczenie.
@@ -1385,30 +1384,62 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
     // Kolumny o stałej treści (data, ilość, kwoty, status) mają szerokość w `em`, więc rosną RAZEM
     // z czcionką — procent sumy rozjeżdżał się przy powiększeniu (czcionka rosła, kolumna nie)
     // i pola nachodziły na siebie. Tekstowe (zakres, komentarz, producent, model) dzielą resztę.
+    // Ilość 6em — mieści 4–5 cyfr (4.5em ucinało „1260”); koszt jedn. 10em — pole + znacznik waluty.
     const BASE = withCard
         ? [['entryDate', 'Data', 10.5], ['docNumber', 'Dokument', 8], ['supplier', 'Oferent', 12.5],
            ['manufacturer', 'Producent', 0], ['model', 'Model', 0], ['ean', 'EAN', 10],
-           ['qty', 'Ilość', 4.5, 1], ['unitCost', 'Koszt jedn.', 8.5, 1], ['wartosc', 'Wartość', 7.5, 1], ['surplus', 'Status', 12.5], ['comment', 'Komentarz', 0]]
+           ['qty', 'Ilość', 6, 1], ['unitCost', 'Koszt jedn.', 10, 1], ['wartosc', 'Wartość', 7.5, 1], ['surplus', 'Status', 12.5], ['comment', 'Komentarz', 0]]
         : [['entryDate', 'Data', 10.5], ['docNumber', 'Dokument', 8], ['supplier', 'Oferent', 12.5],
            ['scope', 'Zakres', 0],
-           ['qty', 'Ilość', 4.5, 1], ['unitCost', 'Koszt jedn.', 8.5, 1], ['wartosc', 'Wartość', 7.5, 1], ['surplus', 'Status', 12.5], ['comment', 'Komentarz', 0]];
+           ['qty', 'Ilość', 6, 1], ['unitCost', 'Koszt jedn.', 10, 1], ['wartosc', 'Wartość', 7.5, 1], ['surplus', 'Status', 12.5], ['comment', 'Komentarz', 0]];
     // Kolumna akcji: sam kosz w zapisanych wpisach, szerzej tylko przy „Zapisz" nowego wpisu.
     const COLS = readOnly ? BASE : [...BASE, ['akcje', '', adding ? 6 : 2.5, 1]];
-    // Elastyczne kolumny nie schodzą poniżej 9em — przy dużym powiększeniu tabela woli wyjść
-    // poza kartę niż wcisnąć pole tekstowe pod sąsiednie.
+    // Elastyczne kolumny nie schodzą poniżej 9em — przy dużym powiększeniu tabela woli się
+    // przewinąć (`purchase-drawer-przewin`) niż wcisnąć pole tekstowe pod sąsiednie.
     const MIN_FLEX_EM = 9;
     const minTableEm = COLS.reduce((a, c) => a + (c[2] || MIN_FLEX_EM), 0);
     const widthOf = (c) => (c[2] ? `${c[2]}em` : undefined);
+    // @anchor purchase-drawer-przewin — minimalna szerokość tabeli w px liczona z czcionek, w których
+    // naprawdę stoją kolumny: szerokości `em` na `<th>` liczą się od czcionki NAGŁÓWKA (w Realizacji
+    // 11 px), a `minWidth: Xem` na tabeli od czcionki tabeli (13 px) — minimum wychodziło o ~15%
+    // za duże i tabela z koszem wystawała poza kartę. Gdy i prawdziwe minimum się nie mieści
+    // (zwężona kolumna szczegółów), tabela przewija się w poziomie; tylko wtedy, bo `overflow-x: auto`
+    // przycina też w pionie rozwijaną listę `SupplierPicker`.
+    const tabelaWrap = useRef(null);
+    const [minPx, setMinPx] = useState(null);
+    const [przewin, setPrzewin] = useState(false);
+    const maTabele = r.entries.length > 0 || adding;
+    const szerokosciKey = COLS.map(c => c[2]).join();
+    useLayoutEffect(() => {
+        const el = tabelaWrap.current;
+        if (!el) return undefined;
+        const sprawdz = () => {
+            const t = el.querySelector('table');
+            if (!t) return;
+            const fsT = parseFloat(getComputedStyle(t).fontSize) || 13;
+            const fsTh = parseFloat(getComputedStyle(t.querySelector('th') || t).fontSize) || fsT;
+            const potrzeba = Math.ceil(COLS.reduce((a, c) => a + (c[2] ? c[2] * fsTh : MIN_FLEX_EM * fsT), 0));
+            setMinPx(potrzeba);
+            setPrzewin(potrzeba > el.clientWidth + 1);
+        };
+        sprawdz();
+        if (typeof ResizeObserver === 'undefined') return undefined;
+        const ro = new ResizeObserver(sprawdz);
+        ro.observe(el);
+        return () => ro.disconnect();
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- COLS opisuje `szerokosciKey`
+    }, [szerokosciKey, maTabele]);
 
     const head = (
         <div className={DRAWER.cardHead}>
             <span className={`${DRAWER.cardTitle} ${DRAWER.accent.real.title} text-[length:var(--rn-lg)]`}>
                 Zrealizowane zakupy
             </span>
-            {nadmiar.length > 0 && (
+            {r.byStatus.UNPLANNED > 0 && (
                 <span className="rounded border border-red-400/40 bg-red-500/10 px-2 py-0.5 text-[length:var(--rn-md)] text-red-300"
-                    title="Zakupy pozaplanowe — bez wartości ofertowej, w całości powiększają koszt">
-                    pozaplanowe +{fmtZl(valNadmiar)} {currencySymbol()}
+                    title={`Koszt pozaplanowy — bez wartości ofertowej, w całości powiększa koszt.${r.ponadPlan > 0
+                        ? `\nW tym ${fmtZl(r.ponadPlan)} ${currencySymbol()} z zakupów oznaczonych jako planowe, ponad plan z wyceny (${fmtZl(planValue)} ${currencySymbol()}).` : ''}`}>
+                    pozaplanowe +{fmtZl(r.byStatus.UNPLANNED)} {currencySymbol()}
                 </span>
             )}
             {!readOnly && (
@@ -1474,9 +1505,10 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
                 </div>
             )}
             {!r.entries.length && pusta()}
-            {(r.entries.length > 0 || adding) && (
+            {maTabele && (
+                <div ref={tabelaWrap} className={przewin ? 'overflow-x-auto' : undefined}>
                 <table className="w-full table-fixed border-separate border-spacing-0 text-[length:var(--rn-lg)]"
-                    style={{ minWidth: `${minTableEm}em` }}>
+                    style={{ minWidth: minPx ? `${minPx}px` : `${minTableEm}em` }}>
                     <thead>
                         <tr>
                             {/* `!text-` — w zakładce „Realizacja" reguła `.rz th { text-align: left }`
@@ -1489,7 +1521,7 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
                     </thead>
                     <tbody>
                         {wpisy.map(a => (
-                            <EntryRow key={a.id} entry={a} cols={COLS}
+                            <EntryRow key={a.id} entry={a} cols={COLS} podzial={r.podzial?.get(a.id)}
                                 readOnly={readOnly} onSave={onUpdate} onDelete={onDelete} />
                         ))}
                         {adding && (
@@ -1514,6 +1546,7 @@ export function PurchaseDrawer({ node, card, r, planValue, readOnly, searchTerms
                         </tfoot>
                     )}
                 </table>
+                </div>
             )}
         </div>
     );
@@ -1586,7 +1619,8 @@ const ENTRY_ROW_BG = {
 // @anchor realization-new-entry-row — zapisany wpis `LeafActual` jako wiersz szuflady,
 // edytowalny w miejscu. Zapis idzie na blur i TYLKO dla pola, które faktycznie się zmieniło —
 // jeden `PATCH` na jedną poprawioną wartość, bez przepisywania całego wpisu.
-function EntryRow({ entry, cols, readOnly, onSave, onDelete }) {
+// `podzial` — { planowo, ponadPlan } wpisu planowego (`realization-planned-split`): ile mieści się w planie.
+function EntryRow({ entry, cols, readOnly, onSave, onDelete, podzial = null }) {
     const [draft, setDraft] = useState({});
     const autor = [entry.author?.firstName, entry.author?.lastName].filter(Boolean).join(' ') || entry.author?.email || '';
 
@@ -1647,8 +1681,22 @@ function EntryRow({ entry, cols, readOnly, onSave, onDelete }) {
                 </>
             );
             case 'wartosc':      return <span className="text-red-400">{fmtZl(wartosc)}</span>;
-            case 'surplus':      return <StatusPicker value={entryStatusOf(entry)} readOnly={readOnly}
-                                     onChange={v => onSave(entry.id, { status: v })} />;
+            case 'surplus':      return (
+                <>
+                    <StatusPicker value={entryStatusOf(entry)} readOnly={readOnly}
+                        onChange={v => onSave(entry.id, { status: v })} />
+                    {/* @anchor entry-row-ponad-plan — wpis planowy większy niż reszta planu z wyceny:
+                        planowo tylko do wyczerpania planu, nadwyżka liczona jako pozaplanowa. */}
+                    {podzial?.ponadPlan > 0 && (
+                        <div className="mt-0.5 text-[10px] leading-tight"
+                            title={`Plan z wyceny mieści ${fmtZl(podzial.planowo)} ${currencySymbol()} tego zakupu — reszta liczy się jako koszt pozaplanowy.`}>
+                            <span className="text-teal-300">planowo {fmtZl(podzial.planowo)}</span>
+                            <span className="text-gray-600"> · </span>
+                            <span className="text-red-300">pozaplanowo {fmtZl(podzial.ponadPlan)}</span>
+                        </div>
+                    )}
+                </>
+            );
             case 'comment':      return (
                 <>
                     {pole('comment', '', { placeholder: 'komentarz — co zrobione', label: 'Komentarz wpisu' })}
