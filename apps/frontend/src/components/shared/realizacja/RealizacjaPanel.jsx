@@ -445,16 +445,47 @@ export default function RealizacjaPanel({
             onPelne: (v) => navRef.current.setPelne(v),
             sygnaly: tylkoSygnaly,
             onSygnaly: (v) => navRef.current.setSygnaly(v),
+            fraza: searchQuery, // `sidebar-branch-tree-szukaj`
         });
-    }, [setBranchNav, loading, nodeId, navGalezie, navPozycje, focusId, podglad, pelne, tylkoSygnaly, canEdit]);
+    }, [setBranchNav, loading, nodeId, navGalezie, navPozycje, focusId, podglad, pelne, tylkoSygnaly, canEdit, searchQuery]);
 
     // ── Pozycje w zoomie ─────────────────────────────────────────────────────
+    // @anchor realizacja-szukaj — fraza z wyszukiwarki w nagłówku aplikacji. Szuka w CAŁYM zamówieniu
+    // (`zakresId` = korzeń), nie tylko w gałęzi zoomu — inaczej fraza spoza zaznaczonej gałęzi nic nie
+    // znajdowała. Pozycja/milestone trafia, gdy fraza siedzi w nazwie, krótkiej nazwie albo właścicielu —
+    // jej albo gałęzi nad nią (szukanie po nazwie gałęzi pokazuje jej pozycje). `trafione` = id trafionych
+    // pozycji, milestone'ów i gałęzi; null = brak frazy.
     const fraza = String(searchQuery || '').trim().toLowerCase();
+    const zakresId = fraza ? SYNTHETIC_ROOT : focusId;
+    const trafione = useMemo(() => {
+        if (!fraza) return null;
+        const pasuje = (n) => [n?.name, n?.shortName, n?.owner].some(t => String(t || '').toLowerCase().includes(fraza));
+        const galazTrafiona = new Map();
+        const wTrafionej = (id) => {
+            if (!id || id === SYNTHETIC_ROOT) return false;
+            if (galazTrafiona.has(id)) return galazTrafiona.get(id);
+            galazTrafiona.set(id, false); // ochrona przed cyklem
+            const b = idx.nodeById[id];
+            const v = !!b && (pasuje(b) || wTrafionej(b.parentId));
+            galazTrafiona.set(id, v);
+            return v;
+        };
+        const ids = new Set();
+        for (const b of idx.branches) if (wTrafionej(b.id)) ids.add(b.id);
+        for (const n of [...idx.leaves, ...idx.milestones]) if (pasuje(n) || wTrafionej(n.branchId)) ids.add(n.id);
+        return ids;
+    }, [idx, fraza]);
     const liscie = useMemo(() => {
-        let list = idx.leavesOfSubtree(focusId);
-        if (fraza) list = list.filter(n => [n.name, n.shortName, n.owner].some(t => String(t || '').toLowerCase().includes(fraza)));
-        return list;
-    }, [idx, focusId, fraza]);
+        const list = idx.leavesOfSubtree(zakresId);
+        return trafione ? list.filter(n => trafione.has(n.id)) : list;
+    }, [idx, zakresId, trafione]);
+    const milestonyZakresu = useCallback((id, tylkoWprost = false) => {
+        const ms = milestonyPoddrzewa(id, tylkoWprost);
+        return trafione ? ms.filter(m => trafione.has(m.id)) : ms;
+    }, [milestonyPoddrzewa, trafione]);
+    // Wpis wątku przy szukaniu: dotyczy trafionego węzła albo sam zawiera frazę.
+    const wpisPasuje = useCallback((w) => !trafione || trafione.has(w.nodeId)
+        || [w.tekst, w.kto, w.notatka, w.temat, w.zadanie?.title].some(t => String(t || '').toLowerCase().includes(fraza)), [trafione, fraza]);
 
     // Grupy = bezpośrednie podgałęzie zoomu (+ pozycje wiszące wprost pod nim).
     // `milestony` = milestone'y gałęzi (wprost: te, które stoją bezpośrednio w gałęzi zoomu),
@@ -469,19 +500,19 @@ export default function RealizacjaPanel({
                 _msOpis: [i.nowy ? 'nowy — bez baselinu' : null, i.baseOst ? `baseline ${dzienMies(i.baseOst)}` : null, i.posliz > 0 ? `poślizg +${i.posliz} d.` : null, i.kolizje ? `kolizje: ${i.kolizje}` : null].filter(Boolean).join(' · '),
             };
         });
-        const dzieci = idx.childrenOf[focusId] || [];
+        const dzieci = idx.childrenOf[zakresId] || [];
         const out = [];
-        const wprost = liscie.filter(l => l.branchId === focusId);
-        const msWprost = wzbogac(milestonyPoddrzewa(focusId, true));
+        const wprost = liscie.filter(l => l.branchId === zakresId);
+        const msWprost = wzbogac(milestonyZakresu(zakresId, true));
         if (wprost.length || msWprost.length) out.push({ galaz: null, liscie: wprost, milestony: msWprost });
         for (const d of dzieci) {
             const ids = new Set(idx.subtreeIds(d.id));
             const ls = liscie.filter(l => ids.has(l.branchId));
-            const ms = wzbogac(milestonyPoddrzewa(d.id));
+            const ms = wzbogac(milestonyZakresu(d.id));
             if (ls.length || ms.length) out.push({ galaz: d, liscie: ls, milestony: ms });
         }
         return out;
-    }, [idx, focusId, liscie, milestonyPoddrzewa, msAnaliza]);
+    }, [idx, zakresId, liscie, milestonyZakresu, msAnaliza]);
 
     // @anchor realizacja-grupy-harmonogramu — w Harmonogramie milestone ma WŁASNY wiersz („◆ nazwa ·
     // milestone data”, jak w Planowaniu), wstawiony w kolejności drzewa WBS; sam romb w nagłówku gałęzi
@@ -542,6 +573,8 @@ export default function RealizacjaPanel({
     const msPodgladu = podglad && !pozPodgladu ? msById[podglad] || null : null;
     const wPodgladzie = pozPodgladu || msPodgladu;
     const sygFokus = sumaSygnalow(idsPoddrzewa(focusId), sygnaly);
+    const idsZakresu = idsPoddrzewa(zakresId);
+    const trafionychPozycji = trafione ? liscie.length + milestonyZakresu(zakresId).length : 0;
     const otworzPozycje = (id) => {
         // Wpis gałęzi (czat gałęzi) = zoom na nią; pozycja = jej szczegóły w środku (`realizacja-podglad`).
         const n = idx.nodeById[id];
@@ -579,6 +612,8 @@ export default function RealizacjaPanel({
                     {sygFokus.blok > 0 && <span className="pill p-bad">{sygFokus.blok} bloker{sygFokus.blok > 1 ? 'y' : ''}</span>}
                     {sygFokus.pyt > 0 && <span className="pill p-warn">{sygFokus.pyt} pytań otwartych</span>}
                     {sygFokus.kol > 0 && <span className="pill p-bad" title="Dostawy za blisko startu robót, bez blokera">{sygFokus.kol} kolizj{sygFokus.kol > 1 ? 'e' : 'a'} dostaw</span>}
+                    {/* @anchor realizacja-szukaj-pill — przy aktywnej frazie: widoki pokazują trafienia z całego zamówienia */}
+                    {trafione && <span className="pill p-warn" title="Wyszukiwarka w nagłówku szuka w całym zamówieniu, nie tylko w zaznaczonej gałęzi">szukasz „{searchQuery.trim()}” w całym zamówieniu · {trafionychPozycji} poz.</span>}
                     <div className="mtools">
                         <label><input type="checkbox" checked={pelne} onChange={e => setPelne(e.target.checked)} /> pełne nazwy</label>
                         <span className="seg">
@@ -637,14 +672,14 @@ export default function RealizacjaPanel({
                 )}
                 {!wPodgladzie && widok === 'kokpit' && (
                     <Kokpit
-                        liscie={idx.leavesOfSubtree(focusId)} rowOf={rowOf} actualsOf={actualsOf}
-                        wpisy={wpisy.filter(w => idsPoddrzewa(focusId).has(w.nodeId))}
+                        liscie={liscie} rowOf={rowOf} actualsOf={actualsOf}
+                        wpisy={wpisy.filter(w => idsZakresu.has(w.nodeId) && wpisPasuje(w))}
                         protocols={protocols} sygFokus={sygFokus} canSeeMoney={canSeeMoney} canEdit={canEdit}
                         nodeById={nazwyWezlow} pelne={pelne} filtr={filtr} setFiltr={setFiltr}
                         onOtworz={otworzPozycje} akcje={akcje} gotowosc={gotowosc} edycja={edycjaWatku}
-                        kolizje={kolizje.filter(k => idsPoddrzewa(focusId).has(k.materialId))}
-                        milestony={milestonyPoddrzewa(focusId).map(m => ({ m, ...(msAnaliza.info[m.id] || {}) }))}
-                        kolizjeMs={msAnaliza.kolizjeMs.filter(k => idsPoddrzewa(focusId).has(k.id) || idsPoddrzewa(focusId).has(k.msId))}
+                        kolizje={kolizje.filter(k => idsZakresu.has(k.materialId) && (!trafione || trafione.has(k.materialId) || trafione.has(k.robota?.id)))}
+                        milestony={milestonyZakresu(zakresId).map(m => ({ m, ...(msAnaliza.info[m.id] || {}) }))}
+                        kolizjeMs={msAnaliza.kolizjeMs.filter(k => (idsZakresu.has(k.id) || idsZakresu.has(k.msId)) && (!trafione || trafione.has(k.id) || trafione.has(k.msId)))}
                         galazId={focusId !== SYNTHETIC_ROOT ? focusId : null} wyslij={wyslij} dodajBloker={dodajBloker} ownerUsers={ownerUsers}
                         pytaniaZamowienia={pytaniaZamowienia} orderId={nodeId} orderName={orderName} onQaWyslane={qaWyslane}
                     />
@@ -658,7 +693,7 @@ export default function RealizacjaPanel({
                             gotowosc={gotowosc} GotowoscChipy={GotowoscChipy}
                             canEdit={canEdit} savePlanDates={savePlanDates}
                             msZaleznosc={msZaleznosc} msWezly={msWezlyHarm} savePlanDatesBatch={savePlanDatesBatch}
-                            onZoom={setFocus} onOtworz={otworzPozycje} onPrzestaw={canEdit ? zapiszKolejnosc : null} onDodajMs={dodajMsHarm} galazWprostId={focusId !== SYNTHETIC_ROOT ? focusId : null}
+                            onZoom={setFocus} onOtworz={otworzPozycje} onPrzestaw={canEdit ? zapiszKolejnosc : null} onDodajMs={dodajMsHarm} galazWprostId={zakresId !== SYNTHETIC_ROOT ? zakresId : null}
                             domyslnyZakres="14" zakresKey="realizacja-kokpit-harmonogram-zakres"
                         />
                     </div>
@@ -682,7 +717,7 @@ export default function RealizacjaPanel({
                         gotowosc={gotowosc} GotowoscChipy={GotowoscChipy}
                         canEdit={canEdit} savePlanDates={savePlanDates}
                         msZaleznosc={msZaleznosc} msWezly={msWezlyHarm} savePlanDatesBatch={savePlanDatesBatch}
-                        onZoom={setFocus} onOtworz={otworzPozycje} onPrzestaw={canEdit ? zapiszKolejnosc : null} onDodajMs={dodajMsHarm} galazWprostId={focusId !== SYNTHETIC_ROOT ? focusId : null}
+                        onZoom={setFocus} onOtworz={otworzPozycje} onPrzestaw={canEdit ? zapiszKolejnosc : null} onDodajMs={dodajMsHarm} galazWprostId={zakresId !== SYNTHETIC_ROOT ? zakresId : null}
                         domyslnyZakres="14" zakresKey="realizacja-harmonogram-zakres"
                     />
                 )}

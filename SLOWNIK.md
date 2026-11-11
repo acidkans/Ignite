@@ -279,6 +279,8 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-propsy | widokIds — Materiały: lista gałęzi, eksport z całego zamówienia | apps/frontend/src/components/shared/wbs/WbsMaterialsPanel.jsx | @anchor wbs-materials-widok-galezi |
 | ui-propsy | widokIds — Harmonogram w Planowaniu: wiersze gałęzi, reguły milestone na całym drzewie | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-widok |
 | ui-stan | tylkoSygnaly | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-tylko-sygnaly |
+| ui-stala | fraza / zakresId / trafione — wyszukiwarka nagłówka w Realizacji, szuka w całym zamówieniu | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szukaj |
+| ui-karta | pill „szukasz … w całym zamówieniu · N poz.” w nagłówku Realizacji | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szukaj-pill |
 | ui-stala | zakupyApi | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zakupy-api |
 | ui-sekcja | szuflada zakupów pozycji | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szuflada-zakupow |
 | ui-sekcja | dopisek „w tym … z zakupów planowych ponad plan” pod Pozaplanowo w karcie Wykonanie/Zakupy | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-ponad-plan |
@@ -611,6 +613,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-funkcja | domyslnaDataMs — domyślna data milestone'a z drzewa (koniec zapisanych dat gałęzi) | apps/frontend/src/components/Layout/DrzewoPlanu.jsx | @anchor drzewo-planu-data-ms |
 | ui-funkcja | navZIndeksu — milestone'y jako wiersze ◆ drzewa w kolejności gałęzi | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor nav-z-indeksu-milestony |
 | ui-formularz | „+◆” przy gałęzi w drzewie: nazwa + data, Enter/Esc | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree-nowy-ms |
+| ui-stala | widoczne — filtr drzewa gałęzi frazą `nav.fraza` (trafienia + droga do nich, rozwinięte) | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree-szukaj |
 | ui-funkcja | dodajMsRef — milestone w Planowaniu: czeka na zapis Struktury, POST, przeładowanie drzewa | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor planowanie-dodaj-ms |
 | ui-propsy | onDodajMs / galazWprostId — klik w dzień wiersza gałęzi Harmonogramu = nowy milestone | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-dodaj-ms |
 | ui-formularz | okienko nazwy nowego milestone'a przy klikniętym dniu | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-okno-nowego-ms |
