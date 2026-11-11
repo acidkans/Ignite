@@ -18,6 +18,7 @@ export function navZIndeksu(idx, rootId, { typLabel = (t) => t, galaz = () => ({
         parentId: b.parentId,
         name: b.name,
         shortName: b.shortName || null,
+        owner: b.owner || null,
         pozycji: idx.leavesOfSubtree(b.id).length,
         // Klucz gałęzi wspólny dla wersji (`sourceWbsNodeId ?? id`) — zwinięcie w drzewie przeżywa zmianę zakładki.
         klucz: b.sourceWbsNodeId || b.id,
@@ -41,6 +42,7 @@ export function navZIndeksu(idx, rootId, { typLabel = (t) => t, galaz = () => ({
         parentId: l.branchId || rootId,
         name: l.name,
         shortName: l.shortName || null,
+        owner: l.owner || null,
         typ: ms ? 'Milestone' : typLabel(l.type),
         ms,
         syg: {},
@@ -110,6 +112,32 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
         return { byId, dzieci, pozycjeOf };
     }, [nav.galezie, nav.pozycje]);
 
+    // @anchor sidebar-branch-tree-szukaj — fraza z wyszukiwarki w nagłówku (`nav.fraza`): drzewo pokazuje tylko
+    // trafione gałęzie i pozycje (nazwa, krótka nazwa, właściciel) z drogą do nich, rozwinięte niezależnie od
+    // zwinięć; gałąź trafiona nazwą — z całą zawartością. Ta sama reguła co środek Realizacji (`realizacja-szukaj`).
+    const fraza = String(nav.fraza || '').trim().toLowerCase();
+    const widoczne = useMemo(() => {
+        if (!fraza) return null;
+        const pasuje = (x) => [x.name, x.shortName, x.owner].some(t => String(t || '').toLowerCase().includes(fraza));
+        const trafiona = new Map();
+        const wTrafionej = (id) => {
+            if (!byId[id]) return false;
+            if (trafiona.has(id)) return trafiona.get(id);
+            trafiona.set(id, false); // ochrona przed cyklem
+            const v = pasuje(byId[id]) || wTrafionej(byId[id].parentId);
+            trafiona.set(id, v);
+            return v;
+        };
+        const ids = new Set();
+        // Droga do trafienia: gdy węzeł już jest w zbiorze, jego przodkowie też są.
+        const dodajDroge = (id) => { for (let g = byId[id]; g && !ids.has(g.id); g = byId[g.parentId]) ids.add(g.id); };
+        for (const g of nav.galezie) if (wTrafionej(g.id)) dodajDroge(g.id);
+        let pozycji = 0;
+        for (const p of nav.pozycje || []) if (pasuje(p) || wTrafionej(p.parentId)) { ids.add(p.id); dodajDroge(p.parentId); pozycji++; }
+        return { ids, pozycji };
+    }, [fraza, nav.galezie, nav.pozycje, byId]);
+    const pokaz = (x) => !widoczne || widoczne.ids.has(x.id);
+
     const focus = nav.focusId;
     const sciezka = useMemo(() => {
         const out = [];
@@ -173,7 +201,7 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
     const wiersz = (g, d) => {
         const maDzieci = (dzieci[g.id] || []).length > 0 || (pozycjeOf[g.id] || []).length > 0;
         const kluczZw = g.klucz || g.id;
-        const otwarte = !zwiniete.has(kluczZw);
+        const otwarte = !!widoczne || !zwiniete.has(kluczZw);
         const wybrana = wybrany === g.id;
         return (
             <div key={g.id}>
@@ -235,10 +263,10 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
                 )}
                 {komunikat?.id === g.id && <div className="py-0.5 pr-1.5 text-[10.5px] text-emerald-300" style={pad(d + 1)}>{komunikat.tekst}</div>}
                 {maDzieci && otwarte && (dzieci[g.id] || [])
-                    .filter(c => !tylkoSyg || maSyg(c))
+                    .filter(c => (!tylkoSyg || maSyg(c)) && pokaz(c))
                     .map(c => wiersz(c, d + 1))}
                 {otwarte && (pozycjeOf[g.id] || [])
-                    .filter(p => !tylkoSyg || maSyg(p))
+                    .filter(p => (!tylkoSyg || maSyg(p)) && pokaz(p))
                     .map(p => wierszPozycji(p, d + 1))}
             </div>
         );
@@ -260,8 +288,13 @@ export default function SidebarBranchTree({ nav, level = 0 }) {
                     ))}
                 </div>
             )}
-            {widok.filter(g => !tylkoSyg || maSyg(g) || sciezka.some(s => s.id === g.id)).map(g => wiersz(g, 0))}
-            {(pozycjeOf[nav.rootId] || []).filter(p => !tylkoSyg || maSyg(p)).map(p => wierszPozycji(p, 0))}
+            {widoczne && (
+                <p className="px-2 pb-1 text-[11px] text-amber-300/80">
+                    {widoczne.pozycji ? `Szukasz „${String(nav.fraza).trim()}” · ${widoczne.pozycji} poz.` : `Brak pozycji dla „${String(nav.fraza).trim()}”`}
+                </p>
+            )}
+            {widok.filter(g => (!tylkoSyg || maSyg(g) || sciezka.some(s => s.id === g.id)) && pokaz(g)).map(g => wiersz(g, 0))}
+            {(pozycjeOf[nav.rootId] || []).filter(p => (!tylkoSyg || maSyg(p)) && pokaz(p)).map(p => wierszPozycji(p, 0))}
             {!widok.length && !(pozycjeOf[nav.rootId] || []).length && <p className="px-3 py-1 text-[11px] italic text-gray-600">Zamówienie nie ma gałęzi.</p>}
         </div>
     );
