@@ -6,6 +6,7 @@ import { applyGroupMultipliers, stripRejectedNodes, isCostNode } from '../shared
 import { useBranchFocus, idGaleziPoKluczu } from '../../hooks/useBranchFocus';
 import { fmtMoney } from '../../utils/currency';
 import { navZIndeksu } from './SidebarBranchTree';
+import { dodajMilestoneApi, dataIsoLokalna } from '../shared/wbs/milestoneApi';
 
 const PELNE_KEY = 'realizacja-pelne-nazwy'; // wspólny z Realizacją przełącznik „pełne nazwy”
 
@@ -15,7 +16,8 @@ const PELNE_KEY = 'realizacja-pelne-nazwy'; // wspólny z Realizacją przełącz
 // Krótkich nazw tu nie edytujemy: zapis Struktury (`saveTree`) odsyła całe drzewo ze stanu i nadpisałby
 // świeżo zmienioną nazwę. `gotowe = false` wstrzymuje publikację (np. w trakcie wczytywania).
 // Zwraca { navIdx, navFocusId, setFocus } — `navFocusId` to id gałęzi w TEJ wersji albo `SYNTHETIC_ROOT`.
-export function useDrzewoPlanu({ nodeId, wbsData, orderName = '', isManagerOrAdmin = false, setBranchNav, gotowe = true, kosztoweWezly = null }) {
+// `dodajMs({ parentId, name, dzien })` → { zaleznych } — szybki milestone z drzewa (`+◆`), tylko ADMIN/MANAGER.
+export function useDrzewoPlanu({ nodeId, wbsData, orderName = '', isManagerOrAdmin = false, setBranchNav, gotowe = true, kosztoweWezly = null, dodajMs = null }) {
     const navIdx = useMemo(
         () => buildBranchIndex(wbsData || [], orderName, isManagerOrAdmin ? LEAF_TYPES : OPEN_LEAF_TYPES),
         [wbsData, orderName, isManagerOrAdmin],
@@ -46,12 +48,26 @@ export function useDrzewoPlanu({ nodeId, wbsData, orderName = '', isManagerOrAdm
         setFocusKlucz(!n || id === SYNTHETIC_ROOT ? SYNTHETIC_ROOT : wbsRootOf(n));
     }, [navIdx, setFocusKlucz]);
 
+    // @anchor drzewo-planu-data-ms — domyślna data nowego milestone'a: ostatni dzień zapisanych dat poddrzewa
+    // gałęzi (koniec robót), a gdy gałąź nie ma dat — dziś.
+    const domyslnaDataMs = useCallback((id) => {
+        const dzieci = new Map();
+        for (const n of wbsData || []) { const k = n.parentId || ''; if (!dzieci.has(k)) dzieci.set(k, []); dzieci.get(k).push(n); }
+        let max = null;
+        const walk = (pid) => { for (const c of dzieci.get(pid) || []) { if (c.ganttEnd) { const t = new Date(c.ganttEnd).getTime(); if (!isNaN(t) && (max == null || t > max)) max = t; } walk(c.id); } };
+        walk(id);
+        return dataIsoLokalna(max != null ? max - 24 * 60 * 60 * 1000 : Date.now());
+    }, [wbsData]);
+
     const [pozycja, setPozycja] = useState(null);
     const [pelne, setPelneState] = useState(() => { try { return sessionStorage.getItem(PELNE_KEY) === '1'; } catch { return false; } });
     const ref = useRef({});
     ref.current = {
         idx: navIdx,
+        poId: { ...navIdx.nodeById, ...Object.fromEntries((navIdx.milestones || []).map(m => [m.id, m])) },
         setFocus,
+        dodajMs,
+        domyslnaDataMs,
         setPelne: (v) => { setPelneState(v); try { sessionStorage.setItem(PELNE_KEY, v ? '1' : '0'); } catch { /* tryb prywatny */ } },
     };
 
@@ -64,24 +80,26 @@ export function useDrzewoPlanu({ nodeId, wbsData, orderName = '', isManagerOrAdm
             galezie,
             pozycje,
             focusId: navFocusId,
-            selectedId: (pozycja && navIdx.nodeById[pozycja]) ? pozycja : navFocusId,
+            selectedId: (pozycja && ref.current.poId[pozycja]) ? pozycja : navFocusId,
             pelne,
             canRename: false,
             onFocus: (id) => { setPozycja(null); ref.current.setFocus(id); },
             onPozycja: (id) => {
-                const l = ref.current.idx.nodeById[id];
+                const l = ref.current.poId[id];
                 setPozycja(id);
                 if (l) ref.current.setFocus(l.branchId || SYNTHETIC_ROOT);
             },
             onRename: () => {},
+            onDodajMs: isManagerOrAdmin && dodajMs ? (id, name, dzien) => ref.current.dodajMs({ parentId: id, name, dzien }) : null,
+            domyslnaDataMs: (id) => ref.current.domyslnaDataMs(id),
             onPelne: (v) => ref.current.setPelne(v),
             sygnaly: false,
             onSygnaly: () => {},
         });
-    }, [setBranchNav, gotowe, nodeId, galezie, pozycje, navFocusId, pozycja, pelne, navIdx]);
-    useEffect(() => () => { if (setBranchNav) setBranchNav(null); }, [setBranchNav]);
+    }, [setBranchNav, gotowe, nodeId, galezie, pozycje, navFocusId, pozycja, pelne, navIdx, isManagerOrAdmin, !!dodajMs]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Bez czyszczenia przy odmontowaniu — następna zakładka nadpisze drzewo (`branch-nav-bez-czyszczenia`).
 
-    return { navIdx, navFocusId, setFocus };
+    return { navIdx, navFocusId, setFocus, domyslnaDataMs };
 }
 
 // @anchor drzewo-planu — publikator drzewa gałęzi dla zakładek zamówienia, które same go nie publikują
@@ -91,6 +109,7 @@ export function useDrzewoPlanu({ nodeId, wbsData, orderName = '', isManagerOrAdm
 export default function DrzewoPlanu({ nodeId, versionId = null, orderName = '', userRoles = [], setBranchNav }) {
     const isManagerOrAdmin = userRoles.some(r => ['ADMIN', 'MANAGER'].includes(r));
     const [wbsData, setWbsData] = useState(null);
+    const [odswiez, setOdswiez] = useState(0);
     useEffect(() => {
         if (!nodeId) return undefined;
         let anulowane = false;
@@ -104,7 +123,12 @@ export default function DrzewoPlanu({ nodeId, versionId = null, orderName = '', 
             } catch { if (!anulowane) setWbsData([]); }
         })();
         return () => { anulowane = true; };
+    }, [nodeId, versionId, odswiez]);
+    const dodajMs = useCallback(async ({ parentId, name, dzien }) => {
+        const r = await dodajMilestoneApi({ nodeId, versionId, parentId, name, dzien });
+        setOdswiez(x => x + 1);
+        return r;
     }, [nodeId, versionId]);
-    useDrzewoPlanu({ nodeId, wbsData, orderName, isManagerOrAdmin, setBranchNav, gotowe: wbsData !== null });
+    useDrzewoPlanu({ nodeId, wbsData, orderName, isManagerOrAdmin, setBranchNav, gotowe: wbsData !== null, dodajMs });
     return null;
 }

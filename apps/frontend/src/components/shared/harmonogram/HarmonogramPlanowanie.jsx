@@ -7,7 +7,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Harmonogram from './Harmonogram';
 import {
     DAY_MS, isValidGanttDate, buildTasksFromTree, inclusiveEnd, advanceToWorkingDay, addWorkingDays, isNonWorkingDay,
-    zaleznyOdMilestone, splaszczDrzewo,
+    zaleznyOdMilestone, splaszczDrzewo, miejsceMilestona,
 } from './harmonogramCzas';
 import '../realizacja/realizacja.css';
 
@@ -23,6 +23,9 @@ export default function HarmonogramPlanowanie({
     // albo null. Zawęża WIERSZE; reguły milestone'ów (`msZaleznosc`, `msWezly`) liczą się na całym drzewie.
     // Eksport Excel/PDF Harmonogramu bierze to, co widać — jak przy zoomie w Realizacji.
     widokIds = null,
+    // @anchor harmonogram-planowanie-dodaj-ms — `onDodajMilestone({ parentId, name, dzien, beforeId })` → { zaleznych };
+    // miejsce w kolejności z dat widocznych na Harmonogramie (także domyślnych), `miejsce-milestona`.
+    onDodajMilestone = null,
 }) {
     const items = useMemo(() => wbsTree?.items || [], [wbsTree]);
 
@@ -137,6 +140,11 @@ export default function HarmonogramPlanowanie({
         ? grupy.map(g => ({ ...g, liscie: g.liscie.filter(l => widokIds.has(l.id)) })).filter(g => g.liscie.length)
         : grupy), [grupy, widokIds]);
 
+    const dodajMs = useMemo(() => (onDodajMilestone ? async (galazId, dzien, nazwa) => {
+        const beforeId = miejsceMilestona(splaszczDrzewo(items), galazId, dzien, (id) => msWezly[id]?.planOd || null);
+        return onDodajMilestone({ parentId: galazId, name: nazwa, dzien, beforeId });
+    } : null), [onDodajMilestone, items, msWezly]);
+
     const onApi = useCallback(({ getExcelData, getHtml }) => {
         onExcelDataReady?.(getExcelData);
         onGetHtmlReady?.(getHtml);
@@ -170,6 +178,7 @@ export default function HarmonogramPlanowanie({
                 domyslnyZakres="calosc" zakresKey="planowanie-harmonogram-zakres"
                 projectStart={projectStart} projectEnd={projectEnd || null}
                 nazwaProjektu={projectName} onApi={onApi} onPrzestaw={canEdit ? onPrzestaw : null}
+                onDodajMs={canEdit ? dodajMs : null}
             />
         </div>
     );

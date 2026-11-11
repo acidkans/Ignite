@@ -18,6 +18,7 @@ import {
 } from '../wbs/realizationShared';
 import { useBranchFocus, idGaleziPoKluczu } from '../../../hooks/useBranchFocus';
 import { navZIndeksu } from '../../Layout/SidebarBranchTree';
+import { dodajMilestoneApi, dataIsoLokalna } from '../wbs/milestoneApi';
 import {
     PURCHASE_STATUS_META, EXEC_STATUS_META, execStatusLabel, hasPurchaseAxis, hasExecAxis, axisGateOf,
     DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS, PLAN_STATUS_META, planStatusFromAny, isMilestoneNode,
@@ -34,7 +35,7 @@ import TaskModal from '../wbs/TaskModal';
 import QaMailModal from '../wbs/QaMailModal';
 import { ensureQaIds } from '../wbs/strategyQuestions';
 import {
-    zaleznyOdMilestone, pierwszyDozwolonyDzien, roznicaDniRoboczych, DAY_MS, prognozyMilestonow,
+    zaleznyOdMilestone, pierwszyDozwolonyDzien, roznicaDniRoboczych, DAY_MS, prognozyMilestonow, miejsceMilestona,
 } from '../harmonogram/harmonogramCzas';
 import './realizacja.css';
 import { currencySymbol, currencyCode, useOrderCurrency, excelMoneyFmt } from '../../../utils/currency';
@@ -117,7 +118,7 @@ export default function RealizacjaPanel({
     // Ta sama reguła co w „Realizacji (tabela)" (`realization-new-visible-types`).
     const visibleTypes = isManagerOrAdmin ? LEAF_TYPES : OPEN_LEAF_TYPES;
 
-    const { loading, wbsNodes, actuals, saveAxis, savePlanDates, savePlanDatesBatch, zapiszKolejnosc, actualsOf, rowOf, ownerUsers, addActual, updateActual, deleteActual, odswiezQa } =
+    const { loading, wbsNodes, actuals, fetchAll, saveAxis, savePlanDates, savePlanDatesBatch, zapiszKolejnosc, actualsOf, rowOf, ownerUsers, addActual, updateActual, deleteActual, odswiezQa } =
         useRealizationData({ nodeId, versionId, acceptedAt, isManagerOrAdmin });
     // @anchor realizacja-zakupy-api — dodawanie/edycja/usuwanie wpisów zakupu (`LeafActual`), te same
     // funkcje co szuflada w „Realizacja (tabela)" (`realization-new-purchase-drawer`).
@@ -152,6 +153,7 @@ export default function RealizacjaPanel({
     // @anchor realizacja-ms-baseline — daty baseline milestone'ów (`GET /wbs-nodes/milestones/baseline/:nodeId`);
     // puste, gdy zamówienie nie ma zaakceptowanej wersji.
     const [msBaseline, setMsBaseline] = useState({});
+    const [msBaselineOdswiez, setMsBaselineOdswiez] = useState(0); // po dodaniu milestone'a (`realizacja-dodaj-ms`)
     useEffect(() => {
         let anulowane = false;
         (async () => {
@@ -162,7 +164,7 @@ export default function RealizacjaPanel({
             } catch { if (!anulowane) setMsBaseline({}); }
         })();
         return () => { anulowane = true; };
-    }, [nodeId]);
+    }, [nodeId, msBaselineOdswiez]);
     // Milestone'y poddrzewa gałęzi — po `branchId`, jak pozycje.
     const milestonyPoddrzewa = useCallback((id, tylkoWprost = false) => {
         if (tylkoWprost) return idx.milestones.filter(m => m.branchId === id);
@@ -232,7 +234,8 @@ export default function RealizacjaPanel({
             const b = msBaseline[m.id] || poKorzeniu[m.sourceWbsNodeId || m.id];
             const baseOst = b?.ganttEnd ? dzien(new Date(b.ganttEnd).getTime() - DAY_MS) : null;
             info[m.id] = {
-                N, prognoza, zLancucha: N > (wlasneN[m.id] || 0), baseOst,
+                // @anchor realizacja-ms-nowy — milestone dodany po akceptacji: bez baselinu i bez poślizgu.
+                N, prognoza, zLancucha: N > (wlasneN[m.id] || 0), baseOst, nowy: !!b?.nowy,
                 posliz: baseOst ? roznicaDniRoboczych(baseOst, prognoza || m.planDo) : null, kolizje: 0,
             };
         }
@@ -396,9 +399,30 @@ export default function RealizacjaPanel({
         pozycja: (l) => ({ syg: sumaSygnalow([l.id], sygnaly) }),
     }), [idx, idsPoddrzewa, sygnaly]);
     const navRef = useRef({});
-    navRef.current = { setFocus, zapiszShort, setPelne, setSygnaly, setPodglad, idx };
+    // @anchor realizacja-dodaj-ms — szybki milestone w Realizacji (drzewo „+◆”, klik w dzień Harmonogramu):
+    // `POST /wbs-nodes/milestone` na wersji, którą pokazuje Realizacja (baseline), miejsce w kolejności z dat planu
+    // (`miejsce-milestona`), potem ciche przeładowanie danych. Milestone dodany po akceptacji jest „nowy” (bez baselinu).
+    const dodajMs = useCallback(async ({ parentId, name, dzien }) => {
+        const planOd = new Map(nodes.map(n => [n.id, n.planOd || null]));
+        const beforeId = miejsceMilestona(nodes, parentId, dzien, (id) => planOd.get(id));
+        const r = await dodajMilestoneApi({ nodeId, versionId, parentId, name, dzien, beforeId });
+        await fetchAll(true);
+        setMsBaselineOdswiez(x => x + 1);
+        return r;
+    }, [nodes, nodeId, versionId, fetchAll]);
+    // Domyślna data nowego milestone'a z drzewa: ostatni dzień planu poddrzewa gałęzi, bez planu — dziś.
+    const domyslnaDataMs = useCallback((id) => {
+        let max = null;
+        const poddrzewo = new Set(idx.subtreeIds(id));
+        for (const n of [...idx.leavesOfSubtree(id), ...idx.milestones.filter(m => poddrzewo.has(m.branchId))]) {
+            if (n.planDo && (!max || new Date(n.planDo) > max)) max = new Date(n.planDo);
+        }
+        return dataIsoLokalna(max || new Date());
+    }, [idx]);
+    navRef.current = { setFocus, zapiszShort, setPelne, setSygnaly, setPodglad, idx, msById, dodajMs, domyslnaDataMs };
+    const dodajMsHarm = useMemo(() => (isManagerOrAdmin ? (galazId, dzien, nazwa) => dodajMs({ parentId: galazId, name: nazwa, dzien }) : null), [isManagerOrAdmin, dodajMs]);
     useEffect(() => {
-        if (!setBranchNav) return;
+        if (!setBranchNav || loading) return; // w trakcie wczytywania zostaje poprzednie drzewo (`branch-nav-bez-czyszczenia`)
         setBranchNav({
             lens: 'real',
             orderId: nodeId,
@@ -411,17 +435,18 @@ export default function RealizacjaPanel({
             canRename: canEdit,
             onFocus: (id) => { navRef.current.setPodglad(null); navRef.current.setFocus(id); },
             onPozycja: (id) => {
-                const l = navRef.current.idx.nodeById[id];
+                const l = navRef.current.idx.nodeById[id] || navRef.current.msById[id];
                 navRef.current.setPodglad(id);
                 if (l) navRef.current.setFocus(l.branchId || SYNTHETIC_ROOT);
             },
             onRename: (id, v) => navRef.current.zapiszShort(id, v),
+            onDodajMs: isManagerOrAdmin ? (id, name, dzien) => navRef.current.dodajMs({ parentId: id, name, dzien }) : null,
+            domyslnaDataMs: (id) => navRef.current.domyslnaDataMs(id),
             onPelne: (v) => navRef.current.setPelne(v),
             sygnaly: tylkoSygnaly,
             onSygnaly: (v) => navRef.current.setSygnaly(v),
         });
-    }, [setBranchNav, nodeId, navGalezie, navPozycje, focusId, podglad, pelne, tylkoSygnaly, canEdit]);
-    useEffect(() => () => { if (setBranchNav) setBranchNav(null); }, [setBranchNav]);
+    }, [setBranchNav, loading, nodeId, navGalezie, navPozycje, focusId, podglad, pelne, tylkoSygnaly, canEdit]);
 
     // ── Pozycje w zoomie ─────────────────────────────────────────────────────
     const fraza = String(searchQuery || '').trim().toLowerCase();
@@ -441,7 +466,7 @@ export default function RealizacjaPanel({
             if (!i) return m;
             return {
                 ...m, _prognoza: i.prognoza, _prognozaDni: i.N, _prognozaZLancucha: i.zLancucha, _msKonflikt: zagrozone.has(m.id),
-                _msOpis: [i.baseOst ? `baseline ${dzienMies(i.baseOst)}` : null, i.posliz > 0 ? `poślizg +${i.posliz} d.` : null, i.kolizje ? `kolizje: ${i.kolizje}` : null].filter(Boolean).join(' · '),
+                _msOpis: [i.nowy ? 'nowy — bez baselinu' : null, i.baseOst ? `baseline ${dzienMies(i.baseOst)}` : null, i.posliz > 0 ? `poślizg +${i.posliz} d.` : null, i.kolizje ? `kolizje: ${i.kolizje}` : null].filter(Boolean).join(' · '),
             };
         });
         const dzieci = idx.childrenOf[focusId] || [];
@@ -633,7 +658,7 @@ export default function RealizacjaPanel({
                             gotowosc={gotowosc} GotowoscChipy={GotowoscChipy}
                             canEdit={canEdit} savePlanDates={savePlanDates}
                             msZaleznosc={msZaleznosc} msWezly={msWezlyHarm} savePlanDatesBatch={savePlanDatesBatch}
-                            onZoom={setFocus} onOtworz={otworzPozycje} onPrzestaw={canEdit ? zapiszKolejnosc : null}
+                            onZoom={setFocus} onOtworz={otworzPozycje} onPrzestaw={canEdit ? zapiszKolejnosc : null} onDodajMs={dodajMsHarm} galazWprostId={focusId !== SYNTHETIC_ROOT ? focusId : null}
                             domyslnyZakres="14" zakresKey="realizacja-kokpit-harmonogram-zakres"
                         />
                     </div>
@@ -657,7 +682,7 @@ export default function RealizacjaPanel({
                         gotowosc={gotowosc} GotowoscChipy={GotowoscChipy}
                         canEdit={canEdit} savePlanDates={savePlanDates}
                         msZaleznosc={msZaleznosc} msWezly={msWezlyHarm} savePlanDatesBatch={savePlanDatesBatch}
-                        onZoom={setFocus} onOtworz={otworzPozycje} onPrzestaw={canEdit ? zapiszKolejnosc : null}
+                        onZoom={setFocus} onOtworz={otworzPozycje} onPrzestaw={canEdit ? zapiszKolejnosc : null} onDodajMs={dodajMsHarm} galazWprostId={focusId !== SYNTHETIC_ROOT ? focusId : null}
                         domyslnyZakres="14" zakresKey="realizacja-harmonogram-zakres"
                     />
                 )}
@@ -1700,13 +1725,13 @@ function NajblizszeMilestony({ milestony, pelne, onOtworz }) {
             <table>
                 <thead><tr><th>Milestone</th><th>Plan</th><th>Baseline</th><th>Prognoza</th><th className="num">Poślizg</th></tr></thead>
                 <tbody>
-                    {lista.map(({ m, N, prognoza, baseOst, posliz, kolizje }) => {
+                    {lista.map(({ m, N, prognoza, baseOst, posliz, kolizje, nowy }) => {
                         const minal = new Date(m.planDo) < dzis;
                         return (
                             <tr key={m.id} className="row" onClick={() => onOtworz(m.id)} style={minal ? { opacity: .55 } : undefined}>
                                 <td className="nm-cell"><span className="t ms-n" title={m.name}>◆ {nazwaWyswietlana(m, pelne)}</span>{kolizje > 0 && <span className="cnt c-bad" title="Pozycje startujące przed końcem milestone'a">{kolizje} kol.</span>}</td>
                                 <td className="mono" style={{ fontSize: 12 }}>{zakresMs(m)}{minal ? ' · minął' : ''}</td>
-                                <td className="mono" style={{ fontSize: 12 }} title={baseOst ? 'Data z zaakceptowanej wersji (baseline)' : 'Brak baselinu — zamówienie nie ma zaakceptowanej wersji'}>{baseOst ? dzienMies(baseOst) : '—'}</td>
+                                <td className="mono" style={{ fontSize: 12 }} title={nowy ? "Milestone dodany po akceptacji — nie ma daty w baselinie" : baseOst ? 'Data z zaakceptowanej wersji (baseline)' : 'Brak baselinu — zamówienie nie ma zaakceptowanej wersji'}>{nowy ? <span className="muted">nowy</span> : baseOst ? dzienMies(baseOst) : '—'}</td>
                                 <td className="mono" style={{ fontSize: 12 }} title={N ? `Największy wpływ otwartego blokera na milestonie: +${N} dni rob.` : 'Brak otwartych blokerów z wpływem'}>
                                     {prognoza ? <span className="dpos">{dzienMies(prognoza)} (+{N})</span> : <span className="muted">= plan</span>}
                                 </td>

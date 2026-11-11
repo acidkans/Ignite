@@ -266,6 +266,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stala | LENS — soczewka drzewa: `plan` (koszt planu, zieleń) albo `real` (sygnały, fuksja) | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-lens |
 | ui-ikona | koszt planu gałęzi w drzewie (soczewka Planowania) | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree-koszt |
 | ui-stan | zwiniete — drzewo w sidebarze domyślnie rozwinięte do pozycji, strzałka zwija gałąź | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree-rozwiniete |
+| ui-stan | branchNav — drzewo nie jest czyszczone przy zmianie zakładki; nowa zakładka nadpisuje je po wczytaniu danych | apps/frontend/src/components/Layout/MainLayout.jsx | @anchor branch-nav-bez-czyszczenia |
 | ui-stala | navGalezie / navPozycje Planowania — drzewo z wersji roboczej z kosztem gałęzi | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor planowanie-branch-nav |
 | ui-hook | useDrzewoPlanu — drzewo gałęzi w soczewce planu (koszt, wspólny wybór gałęzi), Planowanie + pozostałe zakładki | apps/frontend/src/components/Layout/DrzewoPlanu.jsx | @anchor use-drzewo-planu |
 | ui-panel | DrzewoPlanu — publikator drzewa dla zakładek zamówienia bez własnego drzewa | apps/frontend/src/components/Layout/DrzewoPlanu.jsx | @anchor drzewo-planu |
@@ -402,6 +403,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-karta | NajblizszeMilestony (plan · baseline · prognoza · poślizg) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-najblizsze-milestony |
 | ui-karta | KolizjeMilestone (pozycje przed końcem milestone'a + „Ustaw bloker”) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kolizje-milestone |
 | ui-stan | msBaseline (daty baseline milestone'ów) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-ms-baseline |
+| ui-stan | msAnaliza.info[].nowy — milestone dodany po akceptacji (Kokpit: „nowy”, bez poślizgu) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-ms-nowy |
 | ui-stala | msAnaliza (prognoza z impactDays, poślizg, kolizje, zagrożone) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-ms-analiza |
 | ui-funkcja | akcje.zKolizjiMs (bloker TECH z kolizji z milestone'em, sourceType MILESTONE) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-bloker-kolizji-ms |
 | ui-funkcja | cień prognozy milestone'a na Harmonogramie (+N dni z blokerów) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-cien-prognozy |
@@ -602,6 +604,22 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | back-endpoint | GET /wbs-nodes/milestones/baseline/:nodeId (daty baseline milestone'ów) | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-milestones-baseline |
 | back-funkcja | getMilestonesBaseline (zaakceptowana wersja + stan „przed” z AuditLog po akceptacji) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-milestones-baseline-service |
 | back-funkcja | updateGanttDatesBatch (transakcja + jeden wpis AuditLog `WbsNode.ganttDates`) | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-gantt-dates-batch-service |
+| back-endpoint | POST /wbs-nodes/milestone (szybkie dodanie milestone'a pod gałęzią) | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-create-milestone |
+| ui-funkcja | dodajMilestoneApi — wywołanie POST /wbs-nodes/milestone (dzień, beforeId, wersja zakładki) | apps/frontend/src/components/shared/wbs/milestoneApi.js | @anchor dodaj-milestone-api |
+| ui-funkcja | dataIsoLokalna — YYYY-MM-DD w czasie lokalnym (pole daty) | apps/frontend/src/components/shared/wbs/milestoneApi.js | @anchor data-iso-lokalna |
+| ui-funkcja | miejsceMilestona — beforeId nowego milestone'a z dat widocznych na Harmonogramie | apps/frontend/src/components/shared/harmonogram/harmonogramCzas.js | @anchor miejsce-milestona |
+| ui-funkcja | domyslnaDataMs — domyślna data milestone'a z drzewa (koniec zapisanych dat gałęzi) | apps/frontend/src/components/Layout/DrzewoPlanu.jsx | @anchor drzewo-planu-data-ms |
+| ui-funkcja | navZIndeksu — milestone'y jako wiersze ◆ drzewa w kolejności gałęzi | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor nav-z-indeksu-milestony |
+| ui-formularz | „+◆” przy gałęzi w drzewie: nazwa + data, Enter/Esc | apps/frontend/src/components/Layout/SidebarBranchTree.jsx | @anchor sidebar-branch-tree-nowy-ms |
+| ui-funkcja | dodajMsRef — milestone w Planowaniu: czeka na zapis Struktury, POST, przeładowanie drzewa | apps/frontend/src/components/shared/wbs/UnifiedWbsPanel.jsx | @anchor planowanie-dodaj-ms |
+| ui-propsy | onDodajMs / galazWprostId — klik w dzień wiersza gałęzi Harmonogramu = nowy milestone | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-dodaj-ms |
+| ui-formularz | okienko nazwy nowego milestone'a przy klikniętym dniu | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-okno-nowego-ms |
+| ui-stala | style okienka nowego milestone'a (.hg-nowy-ms) | apps/frontend/src/components/shared/harmonogram/harmonogram.css | @anchor harmonogram-nowy-ms-css |
+| ui-propsy | onDodajMilestone — Harmonogram Planowania liczy beforeId i dodaje milestone | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-dodaj-ms |
+| ui-funkcja | dodajMs — milestone w Realizacji (wersja baseline, beforeId z planu, fetchAll) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-dodaj-ms |
+| ui-przycisk | „+◆” w wierszu gałęzi Struktury (Nowy milestone z datą końca robót) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-dodaj-ms |
+| back-funkcja | createMilestone — węzeł z datą, miejsce w kolejności wg daty, transakcja + AuditLog `WbsNode.milestone` | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-create-milestone-service |
+| back-funkcja | getMilestonesBaseline — milestone dodany po akceptacji: `nowy`, bez dat baselinu | apps/backend/src/wbs-nodes/wbs-nodes.service.ts | @anchor wbs-milestones-baseline-nowy |
 | back-endpoint | PATCH /wbs-nodes/:id/budget | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-update-budget |
 | back-endpoint | DELETE /wbs-nodes/:id | apps/backend/src/wbs-nodes/wbs-nodes.controller.ts | @anchor wbs-nodes-delete |
 

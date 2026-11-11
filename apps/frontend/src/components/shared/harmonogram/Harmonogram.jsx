@@ -122,6 +122,10 @@ export default function Harmonogram({
     // @anchor harmonogram-przestaw — przeciąganie wiersza za nazwę: `onPrzestaw(id, celId, 'przed'|'po')`
     // zmienia kolejność w WBS (`sortOrder`); błąd (np. inna gałąź WBS) wraca jako komunikat.
     onPrzestaw = null,
+    // @anchor harmonogram-dodaj-ms — klik w dzień w wierszu gałęzi = nowy milestone w tej gałęzi:
+    // `onDodajMs(galazId, dzien, nazwa)` → { zaleznych } (miejsce w kolejności liczy wołający, `miejsce-milestona`).
+    // `galazWprostId` = gałąź dla wiersza „Ta gałąź” (pozycje wprost pod zoomem w Realizacji).
+    onDodajMs = null, galazWprostId = null,
 }) {
     const przeciagany = useRef(null);
     const [cel, setCel] = useState(null); // { id, gdzie } — linia wstawienia pod kursorem
@@ -143,6 +147,7 @@ export default function Harmonogram({
     const przelaczWolne = (galazId, rodzaj) => setPracaWolne(p => ({ ...p, [galazId]: { ...p[galazId], [rodzaj]: !p[galazId]?.[rodzaj] } }));
     const [edycjaDat, setEdycjaDat] = useState(null);
     const [info, setInfo] = useState(null);
+    const [nowyMs, setNowyMs] = useState(null); // { galazId, i, nazwa, blad, zapis }
     useEffect(() => { if (!info) return; const t = setTimeout(() => setInfo(null), 4500); return () => clearTimeout(t); }, [info]);
 
     const pwOf = useCallback((galazId) => normPw(pracaWolne[galazId]), [pracaWolne]);
@@ -575,6 +580,31 @@ export default function Harmonogram({
         ? `${MIESIACE[start.getMonth()]} ${start.getFullYear()}`
         : `${dzienMies(dni[0])}–${dzienMies(dni[ileDni - 1])}`;
 
+    // @anchor harmonogram-okno-nowego-ms — okienko nazwy nowego milestone'a przy klikniętym dniu wiersza gałęzi.
+    const zapiszNowyMs = async () => {
+        if (!nowyMs || nowyMs.zapis) return;
+        const nazwaMs = nowyMs.nazwa.trim();
+        if (!nazwaMs) { setNowyMs(v => ({ ...v, blad: "Wpisz nazwę milestone'a" })); return; }
+        const dzien = dni[nowyMs.i];
+        setNowyMs(v => ({ ...v, zapis: true, blad: '' }));
+        try {
+            const r = await onDodajMs(nowyMs.galazId, dzien, nazwaMs);
+            setNowyMs(null);
+            setInfo([<>Dodano <b>◆ {nazwaMs}</b> na <b>{dzienMies(dzien)}</b> · zależnych pozycji: <b>{r?.zaleznych ?? 0}</b></>]);
+        } catch (e) {
+            setNowyMs(v => (v ? { ...v, zapis: false, blad: e?.message || 'Nie udało się zapisać' } : v));
+        }
+    };
+    const oknoNowegoMs = (st) => (
+        <div className="hg-nowy-ms" style={{ left: Math.max(0, st.i * dzienPx - 4) }} onClick={e => e.stopPropagation()}>
+            <div className="hg-nowy-ms-g">◆ {dzienMies(dni[st.i])}</div>
+            <input autoFocus value={st.nazwa} placeholder="Nazwa milestone'a" disabled={st.zapis}
+                onChange={e => setNowyMs(v => ({ ...v, nazwa: e.target.value, blad: '' }))}
+                onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') zapiszNowyMs(); if (e.key === 'Escape') setNowyMs(null); }} />
+            <div className="hg-nowy-ms-p">{st.blad ? <span className="hg-info-bad">{st.blad}</span> : (st.zapis ? 'Zapisuję…' : 'Enter — dodaj · Esc — anuluj')}</div>
+        </div>
+    );
+
     return (
         <div className="hg" ref={hgRef}>
             <div className="lahead">
@@ -705,12 +735,26 @@ export default function Harmonogram({
                                 </div>
                                 {wiersze.map(({ galaz, pozycje, milestony }) => (
                                     <React.Fragment key={galaz?.id || '_wprost'}>
-                                        {(galaz || milestony.length > 0) && (
-                                            <div className="hg-grp-t" style={{ height: GRP_H }}>
-                                                {milestony.map(m => rysujMs(m, galaz?.id || null, canEdit && !!savePlanDates && !opisPaska(m).zablokowany, true))}
-                                                {podpisyMs(milestony)}
-                                            </div>
-                                        )}
+                                        {(galaz || milestony.length > 0) && (() => {
+                                            const gId = galaz?.id || galazWprostId;
+                                            const mozna = !!onDodajMs && !!gId;
+                                            const otwarty = mozna && nowyMs?.galazId === gId;
+                                            return (
+                                                <div className={`hg-grp-t${mozna ? ' ms-dodaj' : ''}`} style={{ height: GRP_H, ...(otwarty ? { zIndex: 30 } : {}) }}
+                                                    title={mozna ? "Klik w dzień — nowy milestone w tej gałęzi" : undefined}
+                                                    onClick={mozna ? (e) => {
+                                                        if (drag || poDragu.current || e.target?.closest?.('.ms, .ms-okno, .ms-tx, .ms-poza, .hg-nowy-ms')) return;
+                                                        const r = e.currentTarget.getBoundingClientRect();
+                                                        const i = Math.floor((e.clientX - r.left) / dzienPx);
+                                                        if (i < 0 || i >= ileDni) return;
+                                                        setNowyMs({ galazId: gId, i, nazwa: '', blad: '', zapis: false });
+                                                    } : undefined}>
+                                                    {milestony.map(m => rysujMs(m, galaz?.id || null, canEdit && !!savePlanDates && !opisPaska(m).zablokowany, true))}
+                                                    {podpisyMs(milestony)}
+                                                    {otwarty && oknoNowegoMs(nowyMs)}
+                                                </div>
+                                            );
+                                        })()}
                                         {pozycje.map(({ l, pasek, d0: r0, d1: r1 }) => {
                                             const galazId = galaz?.id || null;
                                             const w = pwOf(galazId);

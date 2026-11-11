@@ -229,10 +229,16 @@
 .rz .podglad-head .typ { font-size: 11px; text-transform: uppercase; opacity: .7; }
 /* @anchor realizacja-szuflada-zakupow-css — wpisy zakupów w karcie „Zakupy" (środkowa kolumna) */
 /* bez overflow: przycinał rozwijane listy (SupplierPicker) — ta sama uwaga co w `realization-new-purchase-drawer` */
-.rz .zakupy-pozycji { padding: 0 8px 8px; }
-/* skala `realization-fluid-scale` przypięta do rozmiaru pozostałych kart (12–13px zamiast 13–22px) */
-.rz .zakupy-pozycji.rn-fluid { --rn-base: 12px; --rn-field-h: 26px; }
-.rz .zakupy-pozycji [data-entry-drawer] > div:first-child svg { width: 14px; height: 14px; }
+.rz .zakupy-pozycji { padding: 0 8px 8px; font-size: 12px; }
+/* skala `realization-fluid-scale` przypięta o 1px POD pozostałe karty (11–12px zamiast 13–22px):
+   ramki pól i wysokie wiersze sprawiały, że przy tym samym rozmiarze tabela wyglądała na większą.
+   `--rn-md` trzyma próg 10px — niżej mikro-etykiety przestają być czytelne. */
+.rz .zakupy-pozycji.rn-fluid { --rn-base: 11px; --rn-md: 10px; --rn-field-h: 24px; }
+/* `.rz table` (13px) i `.rz th` (11px) biją tailwindowe `text-[length:…]` szuflady — stąd jawne rozmiary;
+   przyciski (`.rz button { font: inherit }`) dziedziczą z komórki/nagłówka karty */
+.rz .zakupy-pozycji table { font-size: 12px; }
+.rz .zakupy-pozycji th { font-size: 10px; }
+.rz .zakupy-pozycji [data-entry-drawer] > div:first-child svg { width: 12px; height: 12px; }
 /* szczegóły pozycji: trzy karty o szerokościach z `realizacja-szerokosci-kolumn` */
 .rz .expin.rs { gap: 0; align-items: stretch; }
 /* równa wysokość kolumn: ostatnia karta w kolumnie wypełnia ją do dołu, a w wątku pole odpowiedzi

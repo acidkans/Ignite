@@ -10,6 +10,7 @@ import TasksCalendarSection from './TasksCalendarSection';
 import HarmonogramPlanowanie from '../harmonogram/HarmonogramPlanowanie';
 import { SYNTHETIC_ROOT } from '../RealizationNewTab';
 import { useDrzewoPlanu } from '../../Layout/DrzewoPlanu';
+import { dodajMilestoneApi } from './milestoneApi';
 import { fmtPLN, fmtQty, fmtPct, STRUCTURE_STATUS_META, normKey, makeMaterialLookupKey, parseLocaleNumber, normalizeStatusCode, TYPE_LABELS, TYPE_OPTIONS, UNIT_OPTIONS, MATERIAL_STATUS_LABELS, defaultUnitForType, buildHierarchy, wbsTypeFromAny, LEAF_TYPE_OPTIONS, ZERO_LEAF_DEFAULTS, mergeLeafDefaults, getLeafDefaultFrom, PRICED_LEAF_TYPES, orderDefaultsFrom, leafDefaultsMissing, usesWorkStatuses, statusLabelForType, resolveStatusCode, buildAggregatedStatusMap, PLAN_STATUS_META, planStatusFromAny, stripRejectedNodes, applyGroupMultipliers, groupQtyFactor, isCostNode } from './wbsConstants';
 import { buildProjectPdfArtifact } from '../../../utils/projectPdfExport';
 import { buildStrategyTasksQaPdfArtifact } from '../../../utils/strategyTasksQaPdfExport';
@@ -383,7 +384,13 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     // @anchor planowanie-branch-nav — to samo drzewo co w Realizacji (`realizacja-branch-nav`), ale z WERSJI
     // ROBOCZEJ i z kosztem planu gałęzi zamiast sygnałów (`use-drzewo-planu`). Na żywym `wbsData`, więc zmiany
     // w Strukturze widać w drzewie od razu. Wybrana gałąź jest wspólna (`use-branch-focus`).
-    const { navFocusId, setFocus: setNavFocus } = useDrzewoPlanu({ nodeId, wbsData, orderName, isManagerOrAdmin, setBranchNav, kosztoweWezly: budgetScopeData });
+    // Szybki milestone (drzewo „+◆”, klik w dzień Harmonogramu, „+ ◆” w Strukturze) — implementacja niżej
+    // (`planowanie-dodaj-ms`), bo potrzebuje `fetchData` i stanu zapisu Struktury.
+    const dodajMsRef = useRef(null);
+    const dodajMsPlanowanie = useCallback((a) => dodajMsRef.current(a), []);
+    // Drzewo publikujemy dopiero po pierwszym wczytaniu WBS — wcześniej zostaje drzewo poprzedniej zakładki.
+    const [wbsWczytane, setWbsWczytane] = useState(false);
+    const { navFocusId, setFocus: setNavFocus, domyslnaDataMs } = useDrzewoPlanu({ nodeId, wbsData, orderName, isManagerOrAdmin, setBranchNav, kosztoweWezly: budgetScopeData, dodajMs: dodajMsPlanowanie, gotowe: wbsWczytane });
 
     // @anchor planowanie-focus-widok — zawężenie sekcji Planowania do gałęzi wybranej w drzewie.
     // WYŁĄCZNIE filtr wyświetlania: `wbsTree`, `wbsData`, zapis Struktury i eksporty zostają na całym
@@ -680,6 +687,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             if (res.ok) {
                 const data = await res.json();
                 setWbsData(data.items || []);
+                setWbsWczytane(true);
                 onWbsDataLoad?.(data.items || []);
                 wbsItemsById = new Map((data.items || []).map(n => [n.id, n]));
                 nextRequirementsQtyByNode = Object.fromEntries(
@@ -1199,6 +1207,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
     const handleSaveHybridWBS = useCallback(async () => {
         if (hybridSaveTimeout.current) clearTimeout(hybridSaveTimeout.current);
         hybridSaveTimeout.current = setTimeout(async () => {
+            hybridSaveTimeout.current = null; // `planowanie-dodaj-ms` czeka, aż nic nie czeka na wysłanie
             if (hybridSaveRef.current) {
                 hybridSavePending.current = true; // kolejkuj — wyślij po zakończeniu bieżącego
                 return;
@@ -1237,6 +1246,19 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             }
         }, 400);
     }, [nodeId, versionId, authHeaders, onWbsUpdate, refreshWbsNodes]);
+
+    // @anchor planowanie-dodaj-ms — szybki milestone w Planowaniu: `POST /wbs-nodes/milestone` na WERSJI ROBOCZEJ,
+    // potem pełne przeładowanie drzewa (`fetchData`). Najpierw czekamy, aż Struktura skończy zapis: `saveTree`
+    // kasuje węzły, których nie ma w wysłanym drzewie, więc zapis starego drzewa PO dodaniu usunąłby milestone.
+    dodajMsRef.current = async ({ parentId, name, dzien, beforeId = null }) => {
+        const t0 = Date.now();
+        while ((hybridSaveTimeout.current || hybridSaveRef.current || hybridSavePending.current) && Date.now() - t0 < 10000) {
+            await new Promise(r => setTimeout(r, 150));
+        }
+        const r = await dodajMilestoneApi({ nodeId, versionId, parentId, name, dzien, beforeId });
+        await fetchData();
+        return r;
+    };
 
     // Po wklejeniu skopiowanej pozycji w WBS — natychmiast zapisz drzewo (omijamy debounce, żeby
     // nowe wbs_nodes powstały w bazie), a następnie sklonuj powiązane wymagania techniczne
@@ -6926,6 +6948,7 @@ ${ganttSectionHtml}
                         <HarmonogramPlanowanie
                             wbsTree={wbsTree}
                             widokIds={focusWidok?.poddrzewo || null}
+                            onDodajMilestone={isManagerOrAdmin ? dodajMsPlanowanie : null}
                             projectName={orderName || projectName || 'Projekt'}
                             onNodeDurationChange={handleGanttDurationChange}
                             onGanttDateChange={handleGanttDateChange}
@@ -6948,6 +6971,7 @@ ${ganttSectionHtml}
                             <WBSHybridTable
                                 wbsTree={wbsTree}
                                 widokGalezi={widokGalezi}
+                                onDodajMilestone={isManagerOrAdmin ? (parentId) => dodajMsPlanowanie({ parentId, name: 'Nowy milestone', dzien: domyslnaDataMs(parentId) }) : null}
                                 setWbsTree={setWbsTreeAndRef}
                                 nodeName={orderName || projectName || 'Projekt'}
                                 processNodeId={nodeId}

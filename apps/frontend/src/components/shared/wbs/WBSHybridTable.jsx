@@ -1588,7 +1588,7 @@ function TagChips({ tags = [], tagColor, onRemove, onTagClick }) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 // @anchor wbs-hybrid-table
-export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null, leafDefaults = null, offerLocked = false, realization = null, widokGalezi = null }) {
+export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projekt', processNodeId, versionId, onSave, onTagClick, onTopLevelAdded, onNodesDeleted, onMaterialNodeCreated, users = [], projectContacts = [], onRequirementDrop = null, isManager = false, requirementsQtyByNode = {}, onRequirementsQtyChange, onNodeStatusChange, unassignedRequirements = [], onRequirementAssign, onNodeFieldSave = null, materialRefreshKey = 0, searchQuery = '', onMaterialReqUpdated = null, onPasteCloned = null, onNodeExpand = null, onRequirementMerge = null, onApplyLeafDefaults = null, leafDefaults = null, offerLocked = false, realization = null, widokGalezi = null, onDodajMilestone = null }) {
     // @anchor wbs-hybrid-offer-lock — po akceptacji baseline kolumny Ilość / Koszt jedn. / Narzut %
     // przestają przyjmować wpis (każdy typ liścia); kliknięcie otwiera modal `OfferLockGuard`.
     const offerLockProps = offerLockInputProps(offerLocked);
@@ -1896,6 +1896,21 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
         });
     };
     const open = id => setExpanded(prev => new Set([...prev, id]));
+    // @anchor wbs-hybrid-dodaj-ms — „+◆” w wierszu gałęzi: `onDodajMilestone(parentId)` (Planowanie:
+    // `planowanie-dodaj-ms`) dodaje milestone z datą końca robót gałęzi; nazwę i datę poprawia się w wierszu.
+    const [msStan, setMsStan] = useState(null); // { tekst, blad }
+    const dodajMilestoneW = async (node, e) => {
+        e?.stopPropagation();
+        open(`node_${node.id}`);
+        setMsStan({ tekst: `Dodaję milestone w „${node.name || 'gałęzi'}”…`, blad: false });
+        try {
+            const r = await onDodajMilestone(node.id);
+            setMsStan({ tekst: `Dodano ◆ „Nowy milestone” w „${node.name || 'gałęzi'}” · zależnych pozycji: ${r?.zaleznych ?? 0} — popraw nazwę i datę w wierszu`, blad: false });
+        } catch (err) {
+            setMsStan({ tekst: err?.message || 'Nie udało się dodać milestone\'a', blad: true });
+        }
+        setTimeout(() => setMsStan(st => (st?.blad ? st : null)), 7000);
+    };
     const isOpen = id => expanded.has(id);
 
     const save = newTree => { setWbsTree(newTree); setTimeout(() => onSave?.(), 0); };
@@ -2866,6 +2881,15 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
                                 <Plus size={20} />
                             </button>
                         )}
+                        {onDodajMilestone && depth < MAX_DEPTH && (!node.type || node.type === 'group') && (
+                            <button
+                                onClick={e => dodajMilestoneW(node, e)}
+                                className="px-1 py-0.5 rounded text-[12px] font-bold leading-none text-violet-400/70 hover:text-violet-300 hover:bg-violet-500/10 transition-all"
+                                title="Dodaj milestone w tej gałęzi (data: koniec robót gałęzi)"
+                            >
+                                +◆
+                            </button>
+                        )}
                         {isMaterialLeaf && (
                             <button
                                 onClick={e => { e.stopPropagation(); toggleMaterialCard(node.id); }}
@@ -3583,6 +3607,12 @@ export default function WBSHybridTable({ wbsTree, setWbsTree, nodeName = 'Projek
     return (
         <div className="flex flex-col flex-1 min-h-0">
             <style>{WBS_BRANCH_CSS}</style>
+            {msStan && (
+                <div onClick={() => setMsStan(null)} title="Kliknij, aby zamknąć"
+                    className={`mx-3 my-1 cursor-pointer rounded-lg border px-3 py-1.5 text-[12px] ${msStan.blad ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-violet-500/30 bg-violet-500/10 text-violet-200'}`}>
+                    {msStan.tekst}
+                </div>
+            )}
             {copyBuffer && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-900/30 border-b border-blue-500/20 text-[15px] text-blue-300">
                     <Clipboard size={12} className="flex-shrink-0" />

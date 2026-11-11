@@ -241,6 +241,36 @@ export const zalezniMilestone = (zaleznosc, msId) => {
     return out;
 };
 
+// @anchor miejsce-milestona — gdzie wstawić nowy milestone wśród dzieci `parentId` (`beforeId` dla
+// `POST /wbs-nodes/milestone`): przed pierwsze dziecko (kolejność `sortOrder`), którego poddrzewo startuje
+// PO dniu milestone'a. Kolejność wyznacza zależnych (`zalezny-od-milestone`), więc liczymy ją z dat, które
+// widać na Harmonogramie (także domyślnych). `flat` = [{ id, parentId, sortOrder }], `startOf(id)` = data
+// startu węzła albo null. Zwraca id albo null (= na koniec).
+export const miejsceMilestona = (flat, parentId, dzien, startOf) => {
+    const dzieci = new Map();
+    for (const n of flat || []) {
+        const k = n.parentId || '';
+        if (!dzieci.has(k)) dzieci.set(k, []);
+        dzieci.get(k).push(n);
+    }
+    const startPoddrzewa = (id) => {
+        const s = startOf(id);
+        let min = s && isValidGanttDate(s) ? dzien0(s) : null;
+        for (const c of dzieci.get(id) || []) {
+            const t = startPoddrzewa(c.id);
+            if (t && (!min || t < min)) min = t;
+        }
+        return min;
+    };
+    const granica = plusDni(dzien, 1);
+    const lista = [...(dzieci.get(parentId || '') || [])].sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
+    for (const n of lista) {
+        const s = startPoddrzewa(n.id);
+        if (s && s >= granica) return n.id;
+    }
+    return null;
+};
+
 // @anchor pierwszy-dozwolony-dzien — najwcześniejszy start zależnego: pierwszy dzień roboczy po
 // ostatnim dniu milestone'a (`msOst` włącznie); `pw` = praca gałęzi w soboty / niedziele i święta.
 export const pierwszyDozwolonyDzien = (msOst, pw = null) => advanceToWorkingDay(plusDni(msOst, 1), pw);
