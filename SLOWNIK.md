@@ -623,11 +623,17 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-stan | trybZadan — „Harmonogram zadań”: wiersze = zadania (UserTask) zamówienia zamiast pozycji WBS, zapamiętany w sesji | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-tryb-zadan |
 | ui-funkcja | lewaZadania / prawaZadania — wiersz zadania: tytuł, Od–Do, status, odpowiedzialny; pasek albo znacznik terminu | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-wiersz-zadania |
 | ui-funkcja | noweZadanie — nowe zadanie z Harmonogramu: klik w dzień wiersza gałęzi albo „+ Zadanie” (węzeł podpowiedziany, Od = dzień) | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-nowe-zadanie |
+| ui-funkcja | zapiszZadanie — puszczenie przeciąganego paska zadania: podgląd od razu, PATCH dat, błąd/brak prawa cofa | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-zapisz-zadanie |
+| ui-funkcja | prawaZadania (drag) — przeciąganie paska zadania i krawędzi Od / Do, znacznik terminu tylko przesuwa | apps/frontend/src/components/shared/harmonogram/Harmonogram.jsx | @anchor harmonogram-drag-zadania |
 | ui-funkcja | zadanieZHarmonogramu — formularz zadania z Harmonogramu w Realizacji (edycja albo nowe z datą, węzeł niezablokowany) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-zadanie-z-harmonogramu |
 | ui-stala | harmonogram-zadania-css (kolory pasków wg statusu zadania, znacznik terminu, po terminie) | apps/frontend/src/components/shared/harmonogram/harmonogram.css | @anchor harmonogram-zadania-css |
 | ui-hook | useZadaniaHarmonogramu — zadania zamówienia (GET /my-tasks/project/:id?status=ALL), odświeżane po user-tasks-changed | apps/frontend/src/components/shared/harmonogram/harmonogramZadania.js | @anchor use-zadania-harmonogramu |
 | ui-funkcja | zadanieNaOs — zadanie → wiersz osi (Od..Do po dniach, jedna data = `_termin`) | apps/frontend/src/components/shared/harmonogram/harmonogramZadania.js | @anchor zadanie-na-os |
 | ui-funkcja | grupujZadania — zadania w gałęziach Harmonogramu wg `wbsPath`, zawężenie do zakresu, licznik bez dat | apps/frontend/src/components/shared/harmonogram/harmonogramZadania.js | @anchor grupuj-zadania |
+| ui-funkcja | mojeId — id zalogowanego z tokenu | apps/frontend/src/components/shared/harmonogram/harmonogramZadania.js | @anchor moje-id-zadan |
+| ui-funkcja | mozePrzesunac — daty zadania zmienia odpowiedzialny albo zlecający | apps/frontend/src/components/shared/harmonogram/harmonogramZadania.js | @anchor moze-przesunac-zadanie |
+| ui-funkcja | przesunZadanie — nowe plannedStart/plannedEnd po przeciągnięciu o N dni (godziny zostają) | apps/frontend/src/components/shared/harmonogram/harmonogramZadania.js | @anchor przesun-zadanie |
+| ui-funkcja | zapiszDatyZadania — PATCH /my-tasks/:id z datami; count 0 = brak prawa edycji | apps/frontend/src/components/shared/harmonogram/harmonogramZadania.js | @anchor zapisz-daty-zadania |
 | ui-propsy | nodeId — zamówienie dla przycisku „Harmonogram zadań” w Planowaniu | apps/frontend/src/components/shared/harmonogram/HarmonogramPlanowanie.jsx | @anchor harmonogram-planowanie-node-id |
 | ui-funkcja | dodajMs — milestone w Realizacji (wersja baseline, beforeId z planu, fetchAll) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-dodaj-ms |
 | ui-przycisk | „+◆” w wierszu gałęzi Struktury (Nowy milestone z datą końca robót) | apps/frontend/src/components/shared/wbs/WBSHybridTable.jsx | @anchor wbs-hybrid-dodaj-ms |
@@ -910,6 +916,7 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-sekcja | MilestonyChipy (milestone'y w wierszu gałęzi Macierzy) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-milestony-chipy |
 | ui-sekcja | SzczegolyMilestone (wątek · termin, status, Q&A · blokery) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-szczegoly-milestone |
 | ui-stala | grupyHarmonogramu (milestone'y jako własne wiersze Harmonogramu w Realizacji) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-grupy-harmonogramu |
+| ui-stala | grupyHarmonogramu — grupa pozycji wprost pod zoomem dostaje gałąź zoomu (nagłówek z bez sob. / bez nd.) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-harmonogram-galaz-zoomu |
 | ui-stan | duzyEkran (≥1600 px — Kokpit dokleja harmonogram pod spodem) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-duzy-ekran |
 | ui-sekcja | harmonogram pod Kokpitem (duże ekrany, węzeł z fokusa) | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit-harmonogram |
 | ui-input | pole czatu gałęzi w wątku Kokpitu | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-kokpit-czat |
