@@ -24,15 +24,16 @@ export interface OrderFolderDef {
   documentCategory: string | null;
   // Czy treść trafia do indeksu wektorowego (Qdrant) dla AI.
   index: boolean;
+  // Katalog zakładany dopiero przy pierwszym zapisie z aplikacji, nie razem ze strukturą.
+  lazy?: boolean;
   description: string;
 }
 
 // @anchor order-folders
 export const ORDER_FOLDERS: OrderFolderDef[] = [
-  { key: 'supplierOffers', root: 'finance', name: 'Oferty dostawców', documentCategory: 'financial', index: true, description: 'Oferty, które dostajemy od dostawców (parser → ceny zakupu)' },
+  { key: 'supplierOffers', root: 'finance', name: 'Oferty dostawców', documentCategory: 'financial', index: true, lazy: true, description: 'Oferty, które dostajemy od dostawców (parser → ceny zakupu)' },
   { key: 'clientOffer', root: 'finance', name: 'Oferta finansowa', documentCategory: 'clientOffer', index: true, description: 'Nasza oferta dla klienta' },
-  { key: 'budget', root: 'finance', name: 'Analiza budżetu', documentCategory: 'budget', index: false, description: 'Eksporty budżetu, same koszty, inne koszty' },
-  { key: 'invoices', root: 'finance', name: 'Zamówienia i faktury', documentCategory: null, index: false, description: 'Tylko archiwum na OneDrive — brak obsługi w aplikacji' },
+  { key: 'invoices', root: 'finance', name: 'Zamówienia i faktury', documentCategory: 'invoice', index: false, description: 'Zamówienia i faktury — widoczne w zakładce Pliki finansowe' },
   { key: 'protocols', root: 'finance', name: 'Protokoły odbioru', documentCategory: 'protocol', index: false, description: 'Protokoły odbioru, podkatalog per gałąź' },
   { key: 'clientDocs', root: 'project', name: 'Dokumentacja klienta', documentCategory: 'standard', index: true, description: 'Zapytanie, OPZ, SIWZ, rysunki od klienta' },
   { key: 'datasheets', root: 'project', name: 'Karty katalogowe', documentCategory: 'datasheet', index: true, description: 'Karty katalogowe i deklaracje zgodności' },
@@ -45,6 +46,27 @@ export const ORDER_FOLDERS: OrderFolderDef[] = [
 // Katalogi „Harmonogram” i „Analizy AI” usunięte ze struktury (2026-10-05): harmonogram idzie do
 // „Raporty projektu”, raporty AI zostają tylko w aplikacji. W starszych zamówieniach katalogi
 // zostały na OneDrive — pliki w nich traktowane są jak luzem w katalogu głównym (02/01).
+// Katalog „Analiza budżetu” usunięty (2026-10-31): eksporty finansowe (oferta, budżet) idą luzem do „01”,
+// żeby nie rozdrabniać struktury. W starszych zamówieniach został — pliki z niego liczą się jak luzem w 01.
+
+// @anchor order-root-targets
+// Katalogi główne jako cel zapisu i źródło kategorii plików leżących w nich luzem.
+// Klucz `root:<…>` jest tym samym kluczem, pod którym id katalogu głównego siedzi w `oneDriveFolderIds`.
+export const ORDER_ROOT_TARGETS: Record<string, { root: OrderRootKey; documentCategory: string; index: boolean }> = {
+  'root:finance': { root: 'finance', documentCategory: 'finance', index: true },
+  'root:project': { root: 'project', documentCategory: 'standard', index: true },
+  'root:realization': { root: 'realization', documentCategory: 'standard', index: true },
+};
+
+// @anchor order-folder-target
+// Katalog zapisu / synchronizacji po kluczu: podkatalog z ORDER_FOLDERS albo katalog główny (`root:<…>`).
+export function orderFolderTarget(key: string | null): { key: string; documentCategory: string | null; index: boolean; path: string } | null {
+  if (!key) return null;
+  const root = ORDER_ROOT_TARGETS[key];
+  if (root) return { key, documentCategory: root.documentCategory, index: root.index, path: ORDER_ROOT_FOLDERS[root.root] };
+  const def = ORDER_FOLDERS.find((f) => f.key === key);
+  return def ? { key, documentCategory: def.documentCategory, index: def.index, path: `${ORDER_ROOT_FOLDERS[def.root]}/${def.name}` } : null;
+}
 
 // @anchor no-onedrive-folder — klucz „nie wysyłaj na OneDrive” dla dokumentów tworzonych przez
 // aplikację (raport analizy AI). Pusty klucz nie wystarcza: wtedy działa katalog domyślny kategorii.
@@ -53,13 +75,14 @@ export const NO_ONEDRIVE_FOLDER = 'none';
 // @anchor order-folder-path
 // Ścieżka katalogu względem folderu zamówienia — do komunikatów w UI i katalogu na serwerze.
 export function orderFolderPath(key: string | null): string | null {
-  const def = ORDER_FOLDERS.find((f) => f.key === key);
-  return def ? `${ORDER_ROOT_FOLDERS[def.root]}/${def.name}` : null;
+  return orderFolderTarget(key)?.path ?? null;
 }
 
 // @anchor financial-tab-categories
 // Kategorie dokumentów pokazywane w zakładce „Pliki finansowe” (`GET /documents/node/:id?category=financial`).
-export const FINANCIAL_TAB_CATEGORIES = ['financial', 'clientOffer', 'budget', 'protocol', 'aiReport'];
+// `finance` — pliki luzem w „01 Dokumenty finansowe” (eksporty oferty i budżetu), `invoice` — „Zamówienia i faktury”,
+// `budget` — dokumenty z dawnego katalogu „Analiza budżetu”.
+export const FINANCIAL_TAB_CATEGORIES = ['financial', 'finance', 'clientOffer', 'budget', 'invoice', 'protocol', 'aiReport'];
 
 // @anchor standard-tab-categories
 // Kategorie dokumentów zakładki „Dokumentacja” (obok `null` — dokumenty wgrane przed kategoriami).
@@ -73,7 +96,9 @@ export const UPLOAD_CATEGORY_FOLDER: Record<string, string> = {
   '': 'clientDocs',
   financial: 'supplierOffers',
   clientOffer: 'clientOffer',
-  budget: 'budget',
+  finance: 'root:finance',
+  budget: 'root:finance',
+  invoice: 'invoices',
   protocol: 'protocols',
   datasheet: 'datasheets',
   schematic: 'schematics',

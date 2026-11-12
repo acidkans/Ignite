@@ -8,7 +8,7 @@ import { useOneDriveFolders, resolveOneDriveFolder } from '../../utils/oneDriveF
 // Wspólny modal eksportu: „Pobierz na urządzenie", „Wyślij mailem" albo „Zapisz na OneDrive".
 // makeArtifact: async () => ({ blob, filename }) | ({ html, filename }) — generuje plik dopiero po wyborze.
 // oneDriveFolderName: string|null — gdy podany, folder jest powiązany i przycisk OneDrive jest aktywny.
-// oneDriveFolderKey: katalog struktury zamówienia (ORDER_FOLDERS: 'budget', 'reports', 'protocols'…).
+// oneDriveFolderKey: katalog struktury zamówienia (ORDER_FOLDERS: 'reports', 'protocols'… albo katalog główny 'root:finance').
 // oneDriveDocumentCategory: zamiast klucza — kategoria istniejącego dokumentu; katalog wynika z niej
 //   (eksport dokumentu z podglądu trafia tam, skąd dokument pochodzi).
 // oneDriveSubfolder: string|null — podkatalog W ŚRODKU katalogu struktury, zakładany przy

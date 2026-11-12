@@ -3319,6 +3319,8 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-typ | OrderFolderDef | apps/backend/src/onedrive/order-folders.ts | @anchor order-folder-def |
 | back-stala | ORDER_FOLDERS | apps/backend/src/onedrive/order-folders.ts | @anchor order-folders |
 | back-funkcja | orderFolderPath | apps/backend/src/onedrive/order-folders.ts | @anchor order-folder-path |
+| back-stala | ORDER_ROOT_TARGETS | apps/backend/src/onedrive/order-folders.ts | @anchor order-root-targets |
+| back-funkcja | orderFolderTarget | apps/backend/src/onedrive/order-folders.ts | @anchor order-folder-target |
 | back-stala | NO_ONEDRIVE_FOLDER | apps/backend/src/onedrive/order-folders.ts | @anchor no-onedrive-folder |
 | back-funkcja | processFile (próba zapisana przed przetwarzaniem) | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-attempt-before-processing |
 | back-stala | LOCAL_PDF_FALLBACK_MAX_BYTES (limit lokalnego pdf2json) | apps/backend/src/documents/documents.service.ts | @anchor local-pdf-fallback-limit |
@@ -3350,6 +3352,7 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-funkcja | syncBlockedReason | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-sync-blocked-reason |
 | back-stala | ARCHIVE_AREA_NAME | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-sync-archive-area |
 | back-stala | MAX_DOWNLOAD_BYTES | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-max-download-bytes |
+| back-funkcja | adoptLazyFolders | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-adopt-lazy-folders |
 | back-funkcja | resolveFolderKeys | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-resolve-folder-keys |
 | back-funkcja | markDeleted | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-mark-deleted |
 | back-funkcja | processQueue | apps/backend/src/onedrive/onedrive-sync.service.ts | @anchor onedrive-process-queue |

@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
-import { ORDER_FOLDERS, ORDER_ROOT_FOLDERS, OrderRootKey, orderFolderPath } from './order-folders';
+import { ORDER_FOLDERS, ORDER_ROOT_FOLDERS, OrderRootKey, orderFolderPath, orderFolderTarget } from './order-folders';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
 // Tasks.ReadWrite wymagany dla sync z MS To Do / Samsung Reminder.
@@ -255,7 +255,9 @@ export class OneDriveService {
   // w `ProcessNode.oneDriveFolderIds` (klucze: `root:<finance|project|realization>` i `key` podkatalogu).
   // Można wołać wielokrotnie: istniejący katalog jest rozpoznawany najpierw po zapisanym id
   // (przetrwa zmianę nazwy na OneDrive), potem po nazwie; zakładany jest tylko brakujący.
-  async ensureOrderFolders(nodeId: string): Promise<OrderFoldersResult> {
+  // Katalogi `lazy` (np. „Oferty dostawców”) są tylko odnajdywane — zakładane wyłącznie, gdy są w `create`
+  // (pierwszy zapis do nich z aplikacji).
+  async ensureOrderFolders(nodeId: string, create: string[] = []): Promise<OrderFoldersResult> {
     const node = await this.prisma.processNode.findUnique({ where: { id: nodeId } });
     if (!node?.oneDriveFolderId) throw new NotFoundException('Folder OneDrive nie jest powiązany z tą gałęzią');
 
@@ -267,7 +269,7 @@ export class OneDriveService {
     const errors: string[] = [];
 
     // Jeden odczyt listy dzieci na rodzica, potem dopasowanie wszystkich wpisów tego poziomu.
-    const ensureLevel = async (parentId: string, entries: { idKey: string; name: string; label: string }[]) => {
+    const ensureLevel = async (parentId: string, entries: { idKey: string; name: string; label: string; lazy?: boolean }[]) => {
       let children: { id: string; name: string }[];
       try {
         children = await this.listChildFolders(token, driveId, parentId);
@@ -280,6 +282,7 @@ export class OneDriveService {
         const byName = children.find((c) => c.name === en.name);
         const hit = byId || byName;
         if (hit) { folderIds[en.idKey] = hit.id; continue; }
+        if (en.lazy && !create.includes(en.idKey)) continue;
         try {
           folderIds[en.idKey] = await this.createChildFolder(token, driveId, parentId, en.name);
           created.push(en.label);
@@ -295,7 +298,7 @@ export class OneDriveService {
       const rootId = folderIds[`root:${r}`];
       if (!rootId) continue;
       const defs = ORDER_FOLDERS.filter((f) => f.root === r);
-      await ensureLevel(rootId, defs.map((f) => ({ idKey: f.key, name: f.name, label: `${ORDER_ROOT_FOLDERS[r]}/${f.name}` })));
+      await ensureLevel(rootId, defs.map((f) => ({ idKey: f.key, name: f.name, label: `${ORDER_ROOT_FOLDERS[r]}/${f.name}`, lazy: f.lazy })));
     }
 
     await this.prisma.processNode.update({ where: { id: nodeId }, data: { oneDriveFolderIds: folderIds } });
@@ -350,8 +353,7 @@ export class OneDriveService {
     mimeType = 'application/octet-stream',
     opts: { subfolder?: string; replaceItemId?: string; documentId?: string; status?: string } = {},
   ): Promise<{ webUrl: string; itemId: string; path: string }> {
-    const def = ORDER_FOLDERS.find((f) => f.key === folderKey);
-    if (!def) throw new NotFoundException(`Nieznany katalog OneDrive: ${folderKey}`);
+    if (!orderFolderTarget(folderKey)) throw new NotFoundException(`Nieznany katalog OneDrive: ${folderKey}`);
     const node = await this.prisma.processNode.findUnique({ where: { id: nodeId } });
     if (!node?.oneDriveFolderId) throw new NotFoundException('Folder OneDrive nie jest powiązany z tą gałęzią');
 
@@ -435,7 +437,7 @@ export class OneDriveService {
         this.logger.warn(`Katalog „${folderKey}" zamówienia ${node.id} nie istnieje pod zapisanym id — uzupełniam strukturę`);
       }
     }
-    const res = await this.ensureOrderFolders(node.id);
+    const res = await this.ensureOrderFolders(node.id, [folderKey]);
     const id = res.folderIds[folderKey];
     if (!id) throw new NotFoundException(`Nie udało się założyć katalogu ${orderFolderPath(folderKey)}: ${res.errors.join('; ')}`);
     return id;
