@@ -219,28 +219,44 @@ export function useRealizationData({ nodeId, versionId, acceptedAt = null, isMan
         }
     }, []);
 
-    // @anchor realization-zapisz-kolejnosc — przestawienie węzła `id` przed/po `celId` (to samo rodzeństwo
-    // w WBS): nowe `sortOrder` 0..n dla całego rodzeństwa, `PATCH /wbs-nodes/:id { sortOrder }` tylko dla
-    // zmienionych, potem ciche przeładowanie drzewa (kolejność i domyślne daty Gantta zależą od sortOrder).
+    // @anchor realization-zapisz-kolejnosc — przestawienie węzła `id` przed/po `celId`: nowe `sortOrder`
+    // 0..n dla rodzeństwa `celId`, `PATCH /wbs-nodes/:id { sortOrder }` tylko dla zmienionych, potem ciche
+    // przeładowanie drzewa (kolejność i domyślne daty Gantta zależą od sortOrder). Gdy `celId` ma innego
+    // rodzica, węzeł przechodzi do jego gałęzi (`parentId`) — Harmonogram pokazuje w jednej grupie pozycje
+    // z kilku podgałęzi, więc „przestaw obok” bywa w praktyce przeniesieniem do innej gałęzi.
     const wbsRef = useRef(wbsNodes);
     wbsRef.current = wbsNodes;
     const zapiszKolejnosc = useCallback(async (id, celId, gdzie = 'po') => {
         const lista = wbsRef.current;
         const a = lista.find(n => n.id === id), b = lista.find(n => n.id === celId);
         if (!a || !b) return;
-        if ((a.parentId || null) !== (b.parentId || null)) {
-            throw new Error('Kolejność zmienisz tylko w obrębie tej samej gałęzi WBS — przenieś pozycję do innej gałęzi w strukturze WBS.');
+        const rodzic = b.parentId || null;
+        const przenies = (a.parentId || null) !== rodzic;
+        if (przenies) {
+            if (!rodzic) throw new Error('Pozycję przeniesiesz tylko do gałęzi WBS — nie na najwyższy poziom.');
+            const poId = new Map(lista.map(n => [n.id, n]));
+            for (let p = rodzic; p; p = poId.get(p)?.parentId || null) {
+                if (p === id) throw new Error('Gałęzi nie przeniesiesz do jej własnego wnętrza.');
+            }
         }
         const pozycja = new Map(lista.map((n, i) => [n.id, i]));
-        const rodzenstwo = lista.filter(n => (n.parentId || null) === (a.parentId || null) && n.id !== id)
+        const rodzenstwo = lista.filter(n => (n.parentId || null) === rodzic && n.id !== id)
             .sort((x, y) => ((Number(x.sortOrder) || 0) - (Number(y.sortOrder) || 0)) || (pozycja.get(x.id) - pozycja.get(y.id)));
         const k = rodzenstwo.findIndex(n => n.id === celId);
         rodzenstwo.splice(gdzie === 'przed' ? k : k + 1, 0, a);
-        const zmiany = rodzenstwo.map((n, i) => ({ id: n.id, sortOrder: i })).filter(z => Number(lista.find(n => n.id === z.id)?.sortOrder) !== z.sortOrder);
+        const zmiany = rodzenstwo.map((n, i) => ({ id: n.id, sortOrder: i }))
+            .filter(z => (przenies && z.id === id) || Number(lista.find(n => n.id === z.id)?.sortOrder) !== z.sortOrder);
         if (!zmiany.length) return;
-        const wyniki = await Promise.all(zmiany.map(z => fetch(`${API_URL}/wbs-nodes/${z.id}`, {
-            method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ sortOrder: z.sortOrder }),
-        }).then(r => r.ok).catch(() => false)));
+        const zapisz = (z) => fetch(`${API_URL}/wbs-nodes/${z.id}`, {
+            method: 'PATCH', headers: authHeaders(),
+            body: JSON.stringify(przenies && z.id === id ? { parentId: rodzic, sortOrder: z.sortOrder } : { sortOrder: z.sortOrder }),
+        }).then(r => r.ok).catch(() => false);
+        // Przeniesienie najpierw: gdy backend je odrzuci (np. milestone pod milestone), rodzeństwo zostaje nietknięte.
+        if (przenies) {
+            const ok = await zapisz(zmiany.find(z => z.id === id));
+            if (!ok) { await fetchAll(true); throw new Error('Nie udało się przenieść pozycji do tej gałęzi WBS.'); }
+        }
+        const wyniki = await Promise.all(zmiany.filter(z => !(przenies && z.id === id)).map(zapisz));
         await fetchAll(true);
         if (wyniki.some(ok => !ok)) throw new Error('Nie wszystkie pozycje zapisały nową kolejność — sprawdź WBS.');
     }, [fetchAll]);

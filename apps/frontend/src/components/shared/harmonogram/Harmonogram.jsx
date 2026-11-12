@@ -666,7 +666,7 @@ export default function Harmonogram({
                                             <div key={l.id} className={`hg-lbl${onPrzestaw ? ' przest' : ''}${cel?.id === l.id ? ` drop-${cel.gdzie}` : ''}`}
                                                 style={{ height: jestMs(l) ? ROW_H_MS : ROW_H, paddingLeft: 8 + (pokazWciecia ? Math.max(0, (l.depth || 0) - 1) * 10 : 0) }}
                                                 draggable={!!onPrzestaw && !ed}
-                                                title={onPrzestaw ? 'Przeciągnij, by zmienić kolejność (zmienia też WBS)' : undefined}
+                                                title={onPrzestaw ? 'Przeciągnij, by zmienić kolejność albo przenieść do gałęzi upuszczonego wiersza (zmienia też WBS)' : undefined}
                                                 onDragStart={onPrzestaw ? (e) => { przeciagany.current = l.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', l.id); } : undefined}
                                                 onDragEnd={onPrzestaw ? () => { przeciagany.current = null; setCel(null); } : undefined}
                                                 onDragOver={onPrzestaw ? (e) => {
