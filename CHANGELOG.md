@@ -1,3 +1,20 @@
+## 2026-11-12 — feat(szkolenia): przypomnienia o wygasających zaświadczeniach do każdego pracownika (mail + dzwonek) niezależnie od zamówień, braki szkoleń liczone też dla zespołu zamówienia (v2026.11.12.2208)
+
+### architektura / API
+- `back-funkcja` `computeAlerts()` — pozycje EXPIRED/EXPIRING liczone dla KAŻDEGO aktywnego pracownika i każdego jego zaświadczenia z datą ważności, bez względu na zamówienia i etapy; `order` = null, nowe pole `orders` (kontekst: aktywne zamówienia osoby wymagające szkolenia). MISSING bez zmian co do zamówień, ale osoby = przypisani (`UserOrder`) ∪ zespół zamówienia (`Team.orderNodeId`)
+- `back-funkcja` `run()` — oprócz zbiorczego maila do ADMIN-ów każdy pracownik z NOWĄ pozycją o swoim zaświadczeniu dostaje osobisty mail i powiadomienie w dzwonku (`Notification.type = TRAINING_EXPIRY`); `TrainingAlertRun.recipients` = liczba faktycznie doręczonych maili, `error` zbiera uwagi (np. pracownik bez e-maila) także przy statusie SENT
+- `back-endpoint` `GET /trainings/alerts/preview` — nowe pole `userMails[]` (`{ user, items, newCount, mail }`); `items[].user.email`, `items[].orders`
+- `back-funkcja` `buildMail()` — zbiorczy mail: sekcja „Wygasające i wygasłe zaświadczenia” (z kolumną „Wymagane w”) + braki pogrupowane po zamówieniach
+- `TrainingAlertLog.key` dla zaświadczeń zmienia format na `userId|trainingTypeId|validUntil|próg` (bez zamówienia) — po wdrożeniu bieżące wygasające pozycje zgłoszą się jednorazowo jeszcze raz
+- `ui-zakladka` `TrainingAlertsTab` — nowy opis reguły, lista „Przypomnienia do pracowników”, wybór podglądu maila (zbiorczy / konkretny pracownik); `ui-ikona` dzwonka dla `TRAINING_EXPIRY`
+
+### słownik
+- dodano `training-user-mail`, `training-notification-type`, `training-user-mails`, `training-order-people`, `training-alerts-preview-target`
+
+### wytyczne
+- `back-funkcja` `computeAlerts()` — przypomnienie o wygasaniu zaświadczenia NIE może zależeć od przypisania do zamówienia ani od zespołu; zamówienia są tylko kontekstem (kolumna „Wymagane w”)
+- `schema-model` `UserOrder` — kolumna „Zamówienia” w Szkoleniach nie jest warunkiem alertów; dla braków szkoleń zespół zamówienia wystarcza
+
 ## 2026-11-12 — feat(szkolenia): edycja inline szkoleń w macierzy, szufladzie i Tabeli, link „Szkolenia” w Informacjach o zamówieniu, filtr zamówień obejmuje zespół zamówienia (v2026.11.12.1825)
 
 ### architektura / API
