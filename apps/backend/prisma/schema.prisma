@@ -2613,7 +2613,8 @@ model UserWorkwear {
 }
 
 /// @anchor user-order
-/// Pracownik przypisany do zamówienia (kolumna „Zamówienia" w Szkoleniach) — podstawa alertów.
+/// Pracownik przypisany do zamówienia (kolumna „Zamówienia" w Szkoleniach). Alerty o brakach
+/// szkoleń liczą przypisanych ORAZ zespół zamówienia; przypomnienia o wygasaniu nie zależą od zamówień.
 model UserOrder {
   userId  String
   orderId String
@@ -2647,7 +2648,8 @@ model TrainingAlertRun {
 
 /// @anchor training-alert-log
 /// Wysłana pozycja alertu — pilnuje, żeby ten sam próg nie poszedł drugi raz.
-/// `key` = userId|trainingTypeId|orderId|validUntil(albo „brak")|próg.
+/// `key`: zaświadczenie = userId|trainingTypeId|validUntil|próg (bez zamówienia);
+/// brak szkolenia w zamówieniu = userId|trainingTypeId|orderId|brak|próg.
 model TrainingAlertLog {
   id     String   @id @default(uuid())
   /// @anchor training-alert-log-key

@@ -3651,6 +3651,11 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-serwis | TrainingAlertsCronService | apps/backend/src/trainings/training-alerts-cron.service.ts | @anchor training-alerts-cron-service |
 | back-serwis | TrainingAlertsService | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alerts-service |
 | ui-zakladka | TrainingAlertsTab | apps/frontend/src/components/shared/trainings/TrainingAlertsTab.jsx | @anchor training-alerts-tab |
+| ui-stan | podglad — czyj mail w podglądzie: 'admin' albo id pracownika | apps/frontend/src/components/shared/trainings/TrainingAlertsTab.jsx | @anchor training-alerts-preview-target |
+| back-typ | TrainingUserMail — osobisty mail pracownika o jego zaświadczeniach | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-user-mail |
+| back-funkcja | buildUserMails() — jeden mail na pracownika z wygasającymi/wygasłymi zaświadczeniami | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-user-mails |
+| back-stala | TRAINING_NOTIFICATION_TYPE — `TRAINING_EXPIRY`, typ powiadomienia w dzwonku | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-notification-type |
+| back-funkcja | peopleOf() — osoby zamówienia: przypisani ∪ zespół zamówienia | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-order-people |
 | ui-funkcja | trainingStatus() | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor training-status |
 | ui-stala | STATUS_STYLE | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor training-status-style |
 | schema-model | TrainingType | apps/backend/prisma/schema.prisma | @anchor training-type |

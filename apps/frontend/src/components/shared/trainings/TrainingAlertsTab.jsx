@@ -9,15 +9,17 @@ const TRYBY = [
 ];
 const STATUS_RUN = { SENT: 'wysłano', SKIPPED: 'pominięto — nic nowego', ERROR: 'błąd', TEST: 'test (do mnie)' };
 
-// @anchor training-alerts-tab — ustawienia codziennego maila do ADMIN-ów, podgląd dzisiejszej
-// wysyłki (ten sam HTML, który pójdzie) i historia przebiegów. Zmiana ustawienia zapisuje się
-// od razu i odświeża podgląd.
+// @anchor training-alerts-tab — ustawienia codziennych przypomnień (pracownik: własne zaświadczenia,
+// ADMIN-i: zbiorczy mail), podgląd dzisiejszej wysyłki (ten sam HTML, który pójdzie) i historia
+// przebiegów. Zmiana ustawienia zapisuje się od razu i odświeża podgląd.
 export default function TrainingAlertsTab({ toast, reloadSignal }) {
     const [settings, setSettings] = useState(null);
     const [preview, setPreview] = useState(null);
     const [runs, setRuns] = useState([]);
     const [busy, setBusy] = useState('');
     const [error, setError] = useState('');
+    // @anchor training-alerts-preview-target — czyj mail w podglądzie: 'admin' albo id pracownika
+    const [podglad, setPodglad] = useState('admin');
 
     const load = useCallback(async () => {
         try {
@@ -43,7 +45,7 @@ export default function TrainingAlertsTab({ toast, reloadSignal }) {
                 toast(`Wysłano test na ${r.to}`);
             } else {
                 const r = await trainingsApi('/alerts/run', { method: 'POST' });
-                toast(r.status === 'SENT' ? `Wysłano do ${r.recipients} adminów` : r.status === 'SKIPPED' ? 'Nic nowego do wysłania — progi z dzisiejszych pozycji już poszły' : `Błąd wysyłki: ${r.error}`, r.status === 'ERROR');
+                toast(r.status === 'SENT' ? `Wysłano do ${r.recipients} odbiorców${r.error ? ` (uwagi: ${r.error})` : ''}` : r.status === 'SKIPPED' ? 'Nic nowego do wysłania — progi z dzisiejszych pozycji już poszły' : `Błąd wysyłki: ${r.error}`, r.status === 'ERROR');
             }
         } catch (e) { toast(e.message, true); }
         setBusy('');
@@ -55,33 +57,25 @@ export default function TrainingAlertsTab({ toast, reloadSignal }) {
 
     const ile = (k) => preview.items.filter(i => i.kind === k).length;
     const nowe = preview.items.filter(i => i.isNew).length;
+    const userMails = preview.userMails || [];
+    const wybrany = podglad === 'admin' ? null : userMails.find(m => m.user.id === podglad) || null;
+    const mailPodgladu = wybrany ? wybrany.mail : preview.mail;
+    const doKogo = wybrany ? (wybrany.user.email || 'brak adresu e-mail — tylko dzwonek w aplikacji') : (preview.recipients.map(r => r.email).join(', ') || '—');
 
     return (
         <div className="grid items-start gap-4 xl:grid-cols-[380px_1fr]">
             <section className="rounded-lg border border-white/[.07] bg-[#0a1120] p-4">
                 <h3 className="text-sm font-bold text-gray-100">Reguła wysyłki</h3>
                 <p className="mb-3 mt-1.5 text-xs text-gray-400">
-                    Codziennie o <b className="text-gray-200">{String(settings.hour).padStart(2, '0')}:00</b> system sprawdza pracowników
-                    przypisanych do <b className="text-gray-200">aktywnych zamówień</b>. Jeśli szkolenie wymagane przez zamówienie kończy się
-                    w ciągu progu albo już wygasło, ADMIN-i dostają jeden zbiorczy mail. Zamówienia zamknięte — wszystkie pozycje
-                    odebrane protokołem lub zafakturowane — są pomijane.
+                    Codziennie o <b className="text-gray-200">{String(settings.hour).padStart(2, '0')}:00</b> system sprawdza zaświadczenia
+                    <b className="text-gray-200"> wszystkich aktywnych pracowników</b>, niezależnie od zamówień. Gdy zaświadczenie kończy się
+                    w ciągu progu albo już wygasło, <b className="text-gray-200">pracownik dostaje przypomnienie</b> (mail + dzwonek w aplikacji),
+                    a ADMIN-i jeden zbiorczy mail.
                 </p>
                 <label className="flex min-h-[36px] items-center gap-2 text-sm text-gray-200">
                     <input type="checkbox" checked={settings.enabled} onChange={e => zapisz({ enabled: e.target.checked })} className="h-4 w-4 accent-teal-500" />
                     Wysyłka włączona
                 </label>
-                <div className="mb-1.5 mt-3 text-[10px] font-bold uppercase tracking-widest text-gray-500">Aktywne zamówienia = etap</div>
-                <div className="flex flex-wrap gap-1.5">
-                    {settings.allStages.map(st => {
-                        const on = settings.stages.includes(st);
-                        return (
-                            <button key={st} onClick={() => zapisz({ stages: on ? settings.stages.filter(x => x !== st) : [...settings.stages, st] })}
-                                className={`min-h-[34px] rounded-full border px-3 text-[11px] ${on ? 'border-teal-500 bg-teal-500/10 text-teal-300' : 'border-white/15 text-gray-400'}`}>
-                                {ORDER_STAGE_LABEL[st] || st}
-                            </button>
-                        );
-                    })}
-                </div>
                 <div className="mt-3 grid grid-cols-2 gap-3">
                     <label className={LABEL}>Ostrzegaj na (dni przed)
                         <input type="number" min="1" max="365" defaultValue={settings.warnDays} key={`w${settings.warnDays}`}
@@ -98,17 +92,43 @@ export default function TrainingAlertsTab({ toast, reloadSignal }) {
                         {TRYBY.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                     </select>
                 </label>
-                <label className="mt-2 flex min-h-[36px] items-center gap-2 text-sm text-gray-200">
+                <label className="mt-3 flex min-h-[36px] items-center gap-2 text-sm text-gray-200">
                     <input type="checkbox" checked={settings.includeMissing} onChange={e => zapisz({ includeMissing: e.target.checked })} className="h-4 w-4 accent-teal-500" />
-                    Uwzględniaj też <b>brak</b> wymaganego szkolenia
+                    <span>Zgłaszaj adminom też <b>brak</b> szkolenia wymaganego przez zamówienie</span>
                 </label>
-                <div className="mb-1.5 mt-3 text-[10px] font-bold uppercase tracking-widest text-gray-500">Odbiorcy — aktywni ADMIN-i</div>
+                <p className="mt-1 text-[11px] text-gray-500">
+                    Braki liczone są dla osób przypisanych do zamówienia w kolumnie „Zamówienia” <b className="text-gray-400">lub</b> będących
+                    w zespole zamówienia. Zamówienia zamknięte (wszystkie pozycje odebrane protokołem lub zafakturowane) są pomijane.
+                </p>
+                <div className="mb-1.5 mt-3 text-[10px] font-bold uppercase tracking-widest text-gray-500">Braki — aktywne zamówienia = etap</div>
+                <div className="flex flex-wrap gap-1.5">
+                    {settings.allStages.map(st => {
+                        const on = settings.stages.includes(st);
+                        return (
+                            <button key={st} onClick={() => zapisz({ stages: on ? settings.stages.filter(x => x !== st) : [...settings.stages, st] })}
+                                className={`min-h-[34px] rounded-full border px-3 text-[11px] ${on ? 'border-teal-500 bg-teal-500/10 text-teal-300' : 'border-white/15 text-gray-400'}`}>
+                                {ORDER_STAGE_LABEL[st] || st}
+                            </button>
+                        );
+                    })}
+                </div>
+                <div className="mb-1.5 mt-3 text-[10px] font-bold uppercase tracking-widest text-gray-500">Odbiorcy zbiorczego maila — aktywni ADMIN-i</div>
                 {preview.recipients.length
                     ? preview.recipients.map(r => <div key={r.email} className="py-0.5 text-xs text-gray-300">{r.name} <span className="text-gray-500">{r.email}</span></div>)
                     : <div className="text-xs text-red-400">Żaden aktywny ADMIN nie ma adresu e-mail.</div>}
+                <div className="mb-1.5 mt-3 text-[10px] font-bold uppercase tracking-widest text-gray-500">Przypomnienia do pracowników — dziś {userMails.length}</div>
+                {!userMails.length && <div className="text-xs text-gray-500">Nikomu nie kończy się zaświadczenie w ciągu {settings.warnDays} dni.</div>}
+                {userMails.map(m => (
+                    <button key={m.user.id} onClick={() => setPodglad(m.user.id)}
+                        className={`flex w-full items-baseline gap-1.5 rounded px-1 py-0.5 text-left text-xs hover:bg-white/5 ${podglad === m.user.id ? 'bg-teal-500/10 text-teal-200' : 'text-gray-300'}`}>
+                        <span className="truncate">{m.user.name}</span>
+                        <span className={`shrink-0 ${m.user.email ? 'text-gray-500' : 'text-amber-400'}`}>{m.user.email || 'brak e-maila'}</span>
+                        <span className="ml-auto shrink-0 text-gray-500">{m.items.length}{m.newCount ? <span className="text-teal-300"> · {m.newCount} nowe</span> : ''}</span>
+                    </button>
+                ))}
                 <div className="mt-4 flex flex-wrap gap-2 border-t border-white/[.07] pt-3">
-                    <button onClick={() => akcja('test')} disabled={!!busy} className={BTN}>{busy === 'test' ? 'Wysyłam…' : 'Wyślij testowo do mnie'}</button>
-                    <button onClick={() => akcja('run')} disabled={!!busy || !nowe} title={nowe ? 'Wysyła do wszystkich ADMIN-ów i zapisuje progi' : 'Brak nowych pozycji — wszystkie progi z dzisiejszej listy już poszły'} className={BTN_PRIMARY}>
+                    <button onClick={() => akcja('test')} disabled={!!busy} title="Zbiorczy mail adminów, tylko na Twój adres" className={BTN}>{busy === 'test' ? 'Wysyłam…' : 'Wyślij testowo do mnie'}</button>
+                    <button onClick={() => akcja('run')} disabled={!!busy || !nowe} title={nowe ? 'Wysyła do ADMIN-ów i do pracowników z nowymi pozycjami, zapisuje progi' : 'Brak nowych pozycji — wszystkie progi z dzisiejszej listy już poszły'} className={BTN_PRIMARY}>
                         {busy === 'run' ? 'Wysyłam…' : 'Wyślij teraz'}
                     </button>
                 </div>
@@ -128,18 +148,24 @@ export default function TrainingAlertsTab({ toast, reloadSignal }) {
                         <span className="rounded bg-teal-500/10 px-1.5 py-0.5 text-teal-300">{nowe} nowych (przekroczony nowy próg)</span>
                         {preview.closedSkipped > 0 && <span className="rounded bg-white/5 px-1.5 py-0.5 text-gray-400">pominięto {preview.closedSkipped} zamkniętych zamówień</span>}
                     </div>
-                    {preview.mail ? (
+                    <label className={`${LABEL} mb-3 max-w-sm`}>Pokaż mail
+                        <select value={wybrany ? podglad : 'admin'} onChange={e => setPodglad(e.target.value)} className={INPUT}>
+                            <option value="admin">Zbiorczy — do ADMIN-ów</option>
+                            {userMails.map(m => <option key={m.user.id} value={m.user.id}>Pracownik — {m.user.name}{m.newCount ? '' : ' (nic nowego, nie pójdzie)'}</option>)}
+                        </select>
+                    </label>
+                    {mailPodgladu ? (
                         <div className="overflow-hidden rounded-md bg-white text-[#1f2937]">
                             <div className="border-b border-gray-200 bg-gray-100 px-3.5 py-2.5 text-xs">
-                                <div><span className="inline-block w-14 text-gray-500">Do:</span>{preview.recipients.map(r => r.email).join(', ') || '—'}</div>
-                                <div><span className="inline-block w-14 text-gray-500">Temat:</span><b>{preview.mail.subject}</b></div>
+                                <div><span className="inline-block w-14 text-gray-500">Do:</span>{doKogo}</div>
+                                <div><span className="inline-block w-14 text-gray-500">Temat:</span><b>{mailPodgladu.subject}</b></div>
                             </div>
                             {/* HTML maila z backendu — ten sam, który wyśle cron; w iframe, żeby style maila nie mieszały się z aplikacją */}
-                            <iframe title="Podgląd maila" sandbox="" srcDoc={preview.mail.html} className="h-[460px] w-full border-0 bg-white" />
+                            <iframe title="Podgląd maila" sandbox="" srcDoc={mailPodgladu.html} className="h-[460px] w-full border-0 bg-white" />
                         </div>
                     ) : (
                         <div className="rounded-md border border-white/[.07] px-4 py-6 text-center text-sm text-gray-500">
-                            Żadne wymagane szkolenie w aktywnych zamówieniach nie kończy się w ciągu {settings.warnDays} dni — mail nie zostanie wysłany.
+                            Żadne zaświadczenie nie kończy się w ciągu {settings.warnDays} dni i nie ma braków w aktywnych zamówieniach — mail nie zostanie wysłany.
                         </div>
                     )}
                 </div>

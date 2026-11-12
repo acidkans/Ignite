@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Bell, MessageCircle, AlertCircle, Check, X, BellOff, BellRing, Lock, ExternalLink } from 'lucide-react';
+import { Bell, MessageCircle, AlertCircle, Check, X, BellOff, BellRing, Lock, ExternalLink, GraduationCap } from 'lucide-react';
 import { API_URL } from '../../config';
 
 const TYPE_ICON = {
     NEW_COMMENT:  <MessageCircle size={11} className="text-teal-400" />,
     NEW_QUESTION: <AlertCircle size={11} className="text-yellow-400" />,
     NEW_MENTION:  <MessageCircle size={11} className="text-purple-400" />,
+    // przypomnienie o wygasającym zaświadczeniu (backend: TRAINING_NOTIFICATION_TYPE)
+    TRAINING_EXPIRY: <GraduationCap size={11} className="text-amber-400" />,
 };
 
 function urlBase64ToUint8Array(base64String) {
