@@ -143,3 +143,26 @@
 .rz .hg-lbl.przest { cursor: grab; }
 .rz .hg-lbl.drop-przed { box-shadow: inset 0 2px 0 var(--accent); }
 .rz .hg-lbl.drop-po { box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* @anchor harmonogram-zadania-css — tryb „Harmonogram zadań”: pasek / znacznik terminu w kolorze statusu
+   zadania (jak `TASK_TILE_STYLE` w kalendarzu), otwarte po terminie = czerwona obwódka, zamknięte wyblakłe */
+.rz .hg .bar.z-bar { cursor: pointer; }
+.rz .hg .bar.z-bar:hover, .rz .hg .z-termin:hover { filter: brightness(1.15); }
+.rz .hg .z-TO_DO { background: #64748B; }
+.rz .hg .z-IN_PROGRESS { background: var(--info); }
+.rz .hg .z-ON_HOLD { background: var(--warn); color: #241B05; }
+.rz .hg .z-DONE { background: var(--ok); opacity: .55; }
+.rz .hg .z-CANCELLED { background: var(--bad); opacity: .4; text-decoration: line-through; }
+.rz .hg .z-termin { position: absolute; top: 16px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--surface); z-index: 2; cursor: pointer; }
+.rz .hg .bar.z-bar.po, .rz .hg .z-termin.po { box-shadow: 0 0 0 2px var(--bad); }
+.rz .hg .legend .z-termin { position: static; display: inline-block; vertical-align: middle; cursor: default; margin: 0 2px; }
+.rz .hg-lbl.hg-zad { padding-left: 8px; }
+.rz .hg-lbl .t.zamk { text-decoration: line-through; color: var(--muted); }
+.rz .hg-lbl .daty.po { color: var(--bad); }
+.rz .hg-lbl .z-st { font: 600 10px var(--f-mono); }
+.rz .hg-lbl .z-st.s-TO_DO { color: var(--muted); }
+.rz .hg-lbl .z-st.s-IN_PROGRESS { color: var(--info); }
+.rz .hg-lbl .z-st.s-ON_HOLD { color: var(--warn); }
+.rz .hg-lbl .z-st.s-DONE { color: var(--ok); }
+.rz .hg-lbl .z-st.s-CANCELLED { color: var(--bad); }
+.rz .hg-lbl .z-kto { font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }

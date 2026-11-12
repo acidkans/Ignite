@@ -14,6 +14,9 @@ import {
     pierwszyDozwolonyDzien, zalezniMilestone, przesunZaleznych, roznicaDniRoboczych,
     czyWolnyDla, liczDniPracy, normPw, rodzajDnia, prognozaZaleznego,
 } from './harmonogramCzas';
+import { useZadaniaHarmonogramu, grupujZadania } from './harmonogramZadania';
+import TaskModal from '../wbs/TaskModal';
+import { EXEC_STATUS_META, TASK_STATUS_CODES, isTaskClosed } from '../wbs/wbsConstants';
 import './harmonogram.css';
 
 const DNI_TYG = ['nd', 'pn', 'wt', 'śr', 'cz', 'pt', 'sb'];
@@ -126,6 +129,11 @@ export default function Harmonogram({
     // `onDodajMs(galazId, dzien, nazwa)` → { zaleznych } (miejsce w kolejności liczy wołający, `miejsce-milestona`).
     // `galazWprostId` = gałąź dla wiersza „Ta gałąź” (pozycje wprost pod zoomem w Realizacji).
     onDodajMs = null, galazWprostId = null,
+    // @anchor harmonogram-zadania-propsy — „Harmonogram zadań”: `processNodeId` (zamówienie) włącza przycisk,
+    // `zakresIds` (Set|null) = węzły WBS widoku (zoom / gałąź z drzewa), `onOtworzZadanie(task, nowe)` = własny
+    // formularz wołającego (np. Realizacja odświeża wątek): edycja `(task)`, nowe `(null, { wbsNodeId, date })`;
+    // bez niego Harmonogram otwiera `TaskModal` sam.
+    processNodeId = null, zakresIds = null, onOtworzZadanie = null,
 }) {
     const przeciagany = useRef(null);
     const [cel, setCel] = useState(null); // { id, gdzie } — linia wstawienia pod kursorem
@@ -153,7 +161,19 @@ export default function Harmonogram({
     const pwOf = useCallback((galazId) => normPw(pracaWolne[galazId]), [pracaWolne]);
     const dzis = useMemo(() => dzien0(new Date()), []);
 
-    // Wszystkie pozycje z datami — do zakresu „Całość" i eksportów.
+    // @anchor harmonogram-tryb-zadan — przycisk „Harmonogram zadań” podmienia wiersze pozycji WBS na zadania
+    // (UserTask) zamówienia: pasek Od–Do w kolorze statusu, samo Do = znacznik terminu, klik = formularz zadania.
+    // Tylko podgląd. Tryb zapamiętany w sesji obok zakresu osi; eksporty Excel/PDF zostają przy pozycjach WBS.
+    const trybKey = zakresKey ? `${zakresKey}-tryb` : null;
+    const [trybZadanState, setTrybZadanState] = useState(() => czytaj(trybKey, 'wbs') === 'zadania');
+    const trybZadan = !!processNodeId && trybZadanState;
+    const setTrybZadan = (v) => { setTrybZadanState(v); zapiszSS(trybKey, v ? 'zadania' : 'wbs'); };
+    const { zadania, blad: bladZadan } = useZadaniaHarmonogramu(processNodeId, trybZadan);
+    const [zadanieOtwarte, setZadanieOtwarte] = useState(null);
+    const zad = useMemo(() => (trybZadan ? grupujZadania(zadania, grupy, zakresIds) : null), [trybZadan, zadania, grupy, zakresIds]);
+    const grupyOsi = zad ? zad.grupy : grupy;
+
+    // Wszystkie pozycje z datami — do eksportów (zawsze pozycje WBS).
     const wszystkiePozycje = useMemo(() => grupy.flatMap(g => g.liscie.map(l => ({ l, galazId: g.galaz?.id || null }))), [grupy]);
 
     // @anchor harmonogram-szerokosc — dostępna szerokość osi; dzień rozciąga się do pełnej szerokości jak w Lookahead.
@@ -177,10 +197,10 @@ export default function Harmonogram({
         if (zakres === 'calosc') {
             let lo = null, hi = null;
             const wez = (d) => { if (!d) return; const x = dzien0(d); if (isNaN(x)) return; if (!lo || x < lo) lo = x; if (!hi || x > hi) hi = x; };
-            for (const { l } of wszystkiePozycje) {
-                if (maPasek(l)) { wez(l.planOd); wez(l.planDo); }
+            for (const g of grupyOsi) {
+                for (const l of g.liscie) if (zad || maPasek(l)) { wez(l.planOd); wez(l.planDo); }
+                for (const m of g.milestony || []) { wez(m.planOd); wez(m.planDo); }
             }
-            for (const g of grupy) for (const m of g.milestony || []) { wez(m.planOd); wez(m.planDo); }
             wez(projectStart); wez(projectEnd);
             if (!lo) { lo = dzis; hi = dodajDni(dzis, 30); }
             const s = dodajDni(lo, -2);
@@ -188,7 +208,7 @@ export default function Harmonogram({
             return { start: s, ileDni: n, dzienPx: Math.max(1.2, Math.min(28, szerOsi / n)) };
         }
         return { start: dodajDni(dzis, przesun), ileDni: 14, dzienPx: Math.max(44, szerOsi / 14) };
-    }, [zakres, przesun, dzis, wszystkiePozycje, grupy, maPasek, projectStart, projectEnd, szerOsi]);
+    }, [zakres, przesun, dzis, grupyOsi, zad, maPasek, projectStart, projectEnd, szerOsi]);
 
     const dni = useMemo(() => Array.from({ length: ileDni }, (_, i) => dodajDni(start, i)), [start, ileDni]);
     const szer = ileDni * dzienPx;
@@ -435,9 +455,9 @@ export default function Harmonogram({
 
     // ─── wiersze ────────────────────────────────────────────────────────────
     const wiersze = useMemo(() => {
-        return grupy.map(({ galaz, liscie, milestony: ms = [] }) => {
+        return grupyOsi.map(({ galaz, liscie, milestony: ms = [] }) => {
             const pozycje = liscie.map(l => {
-                const pasek = maPasek(l) && !!l.planOd && !!l.planDo;
+                const pasek = (zad || maPasek(l)) && !!l.planOd && !!l.planDo;
                 const d0 = pasek ? idx(l.planOd) : null;
                 const d1 = pasek ? idx(l.planDo) : null;
                 return { l, pasek, d0, d1 };
@@ -446,7 +466,7 @@ export default function Harmonogram({
             const milestony = ms.filter(m => m.planOd && m.planDo);
             return { galaz, pozycje, milestony };
         }).filter(g => g.pozycje.length || g.milestony.length);
-    }, [grupy, maPasek, idx, ileDni, wszystkie]);
+    }, [grupyOsi, zad, maPasek, idx, ileDni, wszystkie]);
 
     // @anchor harmonogram-wolne-galezi — ile różnych sobót i niedziel/świąt pracuje gałąź: suma zakresów jej
     // pozycji (bez milestone'ów), dzień wspólny dla kilku pozycji liczony raz. { [galazId]: { sob, nd } }
@@ -605,6 +625,68 @@ export default function Harmonogram({
         </div>
     );
 
+    // ─── tryb zadań ─────────────────────────────────────────────────────────
+    // @anchor harmonogram-wiersz-zadania — etykieta: tytuł (klik = formularz), Od–Do albo „do X”, status,
+    // odpowiedzialny; na osi pasek w kolorze statusu albo znacznik terminu. Otwarte po terminie — czerwona obwódka.
+    const otworzZadanie = (t) => (onOtworzZadanie ? onOtworzZadanie(t) : setZadanieOtwarte(t));
+    // @anchor harmonogram-nowe-zadanie — nowe zadanie z Harmonogramu: klik w dzień wiersza gałęzi (węzeł = gałąź,
+    // Od = ten dzień) albo „+ Zadanie” (węzeł = gałąź zoomu, Od = dziś). Węzeł w formularzu można zmienić.
+    const noweZadanie = (wbsNodeId, date) => (onOtworzZadanie
+        ? onOtworzZadanie(null, { wbsNodeId: wbsNodeId || null, date })
+        : setZadanieOtwarte({ _nowe: true, wbsNodeId: wbsNodeId || null, date }));
+    const kto = (u) => (u ? [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || '' : '');
+    const poTerminie = (l) => !isTaskClosed(l._zadanie.status) && l.planDo < dzis;
+    const datyZadania = (l) => (l._termin
+        ? `${l._zadanie.plannedEnd ? 'do' : 'od'} ${dzienMies(l.planOd)}`
+        : +l.planOd === +l.planDo ? dzienMies(l.planOd) : `${dzienMies(l.planOd)}–${dzienMies(l.planDo)}`);
+    const opisZadania = (l) => {
+        const t = l._zadanie;
+        return [t.title, `${datyZadania(l)}${poTerminie(l) ? ' · po terminie' : ''}`,
+            `Status: ${EXEC_STATUS_META[t.status]?.label || t.status}`, t.user && `Odpowiedzialny: ${kto(t.user)}`,
+            t.wbsNode?.name && `Pozycja WBS: ${t.wbsNode.name}`, 'Klik otwiera zadanie'].filter(Boolean).join('\n');
+    };
+    const lewaZadania = (l) => {
+        const t = l._zadanie;
+        return (
+            <div key={l.id} className="hg-lbl hg-zad" style={{ height: ROW_H }} title={opisZadania(l)}>
+                <span className={`t klik${isTaskClosed(t.status) ? ' zamk' : ''}`} onClick={() => otworzZadanie(t)}>{t.title}</span>
+                <span className="m">
+                    <span className={`daty${poTerminie(l) ? ' po' : ''}`}>{datyZadania(l)}</span>
+                    <span className={`z-st s-${t.status}`}>{EXEC_STATUS_META[t.status]?.label || t.status}</span>
+                    {t.user && <span className="z-kto">{kto(t.user)}</span>}
+                </span>
+            </div>
+        );
+    };
+    const prawaZadania = (l, d0, d1) => {
+        const t = l._zadanie;
+        const widoczny = d1 >= 0 && d0 < ileDni;
+        const od = widoczny ? Math.max(d0, 0) : -1;
+        const dl = widoczny ? Math.min(d1, ileDni - 1) - od + 1 : 0;
+        const poza = widoczny ? null : (d1 < 0 ? 'l' : 'r');
+        const klasa = `z-${t.status}${poTerminie(l) ? ' po' : ''}`;
+        const klik = (e) => { e.stopPropagation(); otworzZadanie(t); };
+        return (
+            <div key={l.id} className="hg-tor" style={{ height: ROW_H }}>
+                {widoczny && l._termin && (
+                    <span className={`z-termin ${klasa}`} style={{ left: d0 * dzienPx + dzienPx / 2 - 6 }} title={opisZadania(l)} onClick={klik} />
+                )}
+                {widoczny && !l._termin && (
+                    <div className={`bar z-bar ${klasa}${d0 < 0 ? ' cut-l' : ''}${d1 >= ileDni ? ' cut-r' : ''}`}
+                        style={{ left: od * dzienPx + 2, width: Math.max(6, dl * dzienPx - 4) }} title={opisZadania(l)} onClick={klik}>
+                        {dl * dzienPx > 50 && <span className="tx">{kto(t.user) || EXEC_STATUS_META[t.status]?.label || ''}</span>}
+                    </div>
+                )}
+                {poza && (
+                    <span className={`poza ${poza}`} title={opisZadania(l)}>
+                        {poza === 'l' ? `‹ ${dzienMies(l.planDo)}` : `${dzienMies(l.planOd)} ›`}
+                    </span>
+                )}
+            </div>
+        );
+    };
+    const nazwaBezGalezi = zakresIds ? 'Ta gałąź' : 'Bez pozycji WBS';
+
     return (
         <div className="hg" ref={hgRef}>
             <div className="lahead">
@@ -615,19 +697,38 @@ export default function Harmonogram({
                         <button onClick={() => setPrzesun(p => p + navKrok)} title={zakres === 'miesiac' ? 'Miesiąc później' : 'Tydzień później'}>{zakres === 'miesiac' ? 'mies.' : 'tydz.'} ›</button>
                     </>}
                     {ZAKRESY.map(([k, t]) => <button key={k} className={zakres === k ? 'on' : ''} onClick={() => setZakres(k)} title="Zakres osi czasu">{t}</button>)}
-                    {zakres !== 'calosc' && <label><input type="checkbox" checked={wszystkie} onChange={e => setWszystkie(e.target.checked)} /> wszystkie roboty</label>}
+                    {processNodeId && (
+                        <button className={`hg-tryb${trybZadan ? ' on' : ''}`} onClick={() => setTrybZadan(!trybZadan)}
+                            title={trybZadan ? 'Klik — wróć do harmonogramu pozycji WBS' : 'Pokaż zadania zamówienia (Od–Do, status, odpowiedzialny) zamiast pozycji WBS'}>
+                            Harmonogram zadań
+                        </button>
+                    )}
+                    {zad && (
+                        <button onClick={() => noweZadanie(galazWprostId, dzis)} title="Nowe zadanie od dziś — węzeł WBS wybierasz w formularzu">+ Zadanie</button>
+                    )}
+                    {zakres !== 'calosc' && <label><input type="checkbox" checked={wszystkie} onChange={e => setWszystkie(e.target.checked)} /> {zad ? 'wszystkie zadania' : 'wszystkie roboty'}</label>}
                 </div>
-                <span>{zakres === 'calosc' ? 'Cały harmonogram' : `Okno ${opisOkna}`}. Jedno źródło dat dla Planowania i Realizacji{canEdit && savePlanDates ? ' — przeciągnij pasek, rozciągnij za krawędź, kliknij dzień, by przenieść start, albo kliknij daty przy nazwie' : ''}{onOtworz ? '. Klik w nazwę otwiera pozycję' : ''}.</span>
+                {zad
+                    ? <span>{zakres === 'calosc' ? 'Wszystkie zadania' : `Okno ${opisOkna}`}. Zadania zamówienia wg dat Od–Do, kolor = status{zad.bezDat ? ` · ${zad.bezDat} bez dat (poza osią)` : ''}. Klik w zadanie otwiera formularz, klik w dzień w wierszu gałęzi dodaje zadanie.</span>
+                    : <span>{zakres === 'calosc' ? 'Cały harmonogram' : `Okno ${opisOkna}`}. Jedno źródło dat dla Planowania i Realizacji{canEdit && savePlanDates ? ' — przeciągnij pasek, rozciągnij za krawędź, kliknij dzień, by przenieść start, albo kliknij daty przy nazwie' : ''}{onOtworz ? '. Klik w nazwę otwiera pozycję' : ''}.</span>}
             </div>
 
-            {!wiersze.length ? <div className="empty">Brak robót w tym zakresie.</div> : (
+            {!wiersze.length ? (
+                <div className="empty">{zad ? (zadania === null ? 'Wczytywanie zadań…' : bladZadan || 'Brak zadań z datami w tym zakresie.') : 'Brak robót w tym zakresie.'}</div>
+            ) : (
                 <div className={`hg-scroll${drag ? ' ciagnie' : ''}`}>
                     <div className="hg-grid" style={{ gridTemplateColumns: `${LABEL_W}px ${szer}px` }}>
                         {/* lewa kolumna: nazwy */}
                         <div className="hg-lewa">
-                            <div className="hg-head-l" style={{ height: HEAD_H }}>Pozycja{gotowosc ? ' · gotowość' : ''}</div>
+                            <div className="hg-head-l" style={{ height: HEAD_H }}>{zad ? 'Zadanie · status · odpowiedzialny' : `Pozycja${gotowosc ? ' · gotowość' : ''}`}</div>
                             {wiersze.map(({ galaz, pozycje, milestony }) => (
                                 <React.Fragment key={galaz?.id || '_wprost'}>
+                                    {!galaz && zad && (
+                                        <div className="hg-grp" style={{ height: GRP_H }}>
+                                            <span className="n">{nazwaBezGalezi}</span>
+                                            <span className="mono"> · {pozycje.length}</span>
+                                        </div>
+                                    )}
                                     {!galaz && milestony.length > 0 && (
                                         <div className="hg-grp" style={{ height: GRP_H }}>
                                             <span className="n">Ta gałąź</span>
@@ -639,7 +740,7 @@ export default function Harmonogram({
                                             {onZoom ? <button className="n" onClick={() => onZoom(galaz.id)}>{nazwa(galaz)}</button> : <span className="n">{nazwa(galaz)}</span>}
                                             <span className="mono"> · {pozycje.length}</span>
                                             {milestony.length > 0 && <span className="mono ms-l" title={milestony.map(m => `◆ ${m.name} ${dzienMies(m.planOd)}`).join('\n')}> · ◆ {milestony.length}</span>}
-                                            {canEdit && savePlanDates && (
+                                            {canEdit && savePlanDates && !zad && (
                                                 <span className="pw">
                                                     {RODZAJE_WOLNYCH.map(([k, kr, dl]) => {
                                                         const on = !!pracaWolne[galaz.id]?.[k];
@@ -658,6 +759,7 @@ export default function Harmonogram({
                                         </div>
                                     )}
                                     {pozycje.map(({ l, pasek }) => {
+                                        if (zad) return lewaZadania(l);
                                         const w = pwOf(galaz?.id);
                                         const ileDniL = pasek && !jestMs(l) ? liczDniPracy(l.planOd, l.planDo, w) : null;
                                         const edyt = canEdit && !!savePlanDates && pasek && !opisPaska(l).zablokowany;
@@ -735,8 +837,18 @@ export default function Harmonogram({
                                 </div>
                                 {wiersze.map(({ galaz, pozycje, milestony }) => (
                                     <React.Fragment key={galaz?.id || '_wprost'}>
-                                        {(galaz || milestony.length > 0) && (() => {
+                                        {(galaz || milestony.length > 0 || zad) && (() => {
                                             const gId = galaz?.id || galazWprostId;
+                                            if (zad) {
+                                                return (
+                                                    <div className="hg-grp-t ms-dodaj" style={{ height: GRP_H }} title="Klik w dzień — nowe zadanie w tej gałęzi od tego dnia"
+                                                        onClick={(e) => {
+                                                            const r = e.currentTarget.getBoundingClientRect();
+                                                            const i = Math.floor((e.clientX - r.left) / dzienPx);
+                                                            if (i >= 0 && i < ileDni) noweZadanie(gId, dni[i]);
+                                                        }} />
+                                                );
+                                            }
                                             const mozna = !!onDodajMs && !!gId;
                                             const otwarty = mozna && nowyMs?.galazId === gId;
                                             return (
@@ -756,6 +868,7 @@ export default function Harmonogram({
                                             );
                                         })()}
                                         {pozycje.map(({ l, pasek, d0: r0, d1: r1 }) => {
+                                            if (zad) return prawaZadania(l, r0, r1);
                                             const galazId = galaz?.id || null;
                                             const w = pwOf(galazId);
                                             const opis = opisPaska(l);
@@ -822,6 +935,15 @@ export default function Harmonogram({
                 </div>
             )}
 
+            {zad ? (
+                <div className="legend">
+                    {TASK_STATUS_CODES.map(s => <span key={s}><i className={`bar z-bar z-${s}`} />{EXEC_STATUS_META[s]?.label?.toLowerCase() || s}</span>)}
+                    <span><i className="z-termin z-TO_DO" />sam termin (Do)</span>
+                    <span><i className="bar z-bar z-TO_DO po" />po terminie</span>
+                    <span><i className="sw-wolny" />dzień wolny</span>
+                    {(projectStart || projectEnd) && <><span><i className="sw-mark ps" />start projektu</span><span><i className="sw-mark pe" />koniec</span></>}
+                </div>
+            ) : (
             <div className="legend">
                 <span><i className="bar b-work" />roboty</span>
                 {opisPaska !== domyslnyOpis && <><span><i className="bar b-done" />wykonane</span><span><i className="bar b-hold" />wstrzymane</span></>}
@@ -836,6 +958,16 @@ export default function Harmonogram({
                 {(projectStart || projectEnd) && <><span><i className="sw-mark ps" />start projektu</span><span><i className="sw-mark pe" />koniec</span></>}
                 {gotowosc && <span className="ready"><span className="r-ok">MAT</span><span className="r-q">PYT</span><span className="r-no">BLK</span> gotowość: materiał, pytania, blokery</span>}
             </div>
+            )}
+
+            {zadanieOtwarte && (
+                <TaskModal
+                    task={zadanieOtwarte._nowe ? null : zadanieOtwarte} processNodeId={processNodeId}
+                    defaults={zadanieOtwarte._nowe ? { wbsNodeId: zadanieOtwarte.wbsNodeId, date: zadanieOtwarte.date } : {}}
+                    onClose={() => setZadanieOtwarte(null)}
+                    onSaved={() => { setZadanieOtwarte(null); window.dispatchEvent(new CustomEvent('user-tasks-changed')); }}
+                />
+            )}
 
             {info && (
                 <div className="hg-info" onClick={() => setInfo(null)}>

@@ -6962,6 +6962,7 @@ ${ganttSectionHtml}
                 if (key === 'gantt') {
                     return renderSection('gantt', 'Harmonogram', BarChart3, 'cyan', (
                         <HarmonogramPlanowanie
+                            nodeId={nodeId}
                             wbsTree={wbsTree}
                             widokIds={focusWidok?.poddrzewo || null}
                             onDodajMilestone={isManagerOrAdmin ? dodajMsPlanowanie : null}
