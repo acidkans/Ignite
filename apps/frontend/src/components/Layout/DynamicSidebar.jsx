@@ -3,16 +3,40 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { API_URL } from '../../config';
 import SidebarBranchTree, { SidebarBranchToggles } from './SidebarBranchTree';
 
-// Rekurencyjne filtrowanie drzewa — zwraca węzeł jeśli on lub potomek pasuje do frazy
-function filterNode(node, query) {
-    const match = node.name.toLowerCase().includes(query);
+// Rekurencyjne filtrowanie drzewa — zwraca węzeł jeśli on lub potomek pasuje do frazy.
+// `keepId` — węzeł zostaje mimo braku trafienia w nazwie (zamówienie z trafieniem w liściach WBS).
+function filterNode(node, query, keepId = null) {
+    const match = node.name.toLowerCase().includes(query) || (keepId != null && String(node.id) === String(keepId));
     const filteredChildren = (node.children || [])
-        .map(child => filterNode(child, query))
+        .map(child => filterNode(child, query, keepId))
         .filter(Boolean);
     if (match || filteredChildren.length > 0) {
         return { ...node, children: filteredChildren.length > 0 ? filteredChildren : node.children };
     }
     return null;
+}
+
+// Droga od korzenia do węzła `id` (lista węzłów) albo null.
+function sciezkaDo(nodes, id) {
+    for (const n of nodes || []) {
+        if (String(n.id) === String(id)) return [n];
+        const pod = sciezkaDo(n.children, id);
+        if (pod) return [n, ...pod];
+    }
+    return null;
+}
+
+// @anchor sidebar-filtr-liscie — filtr panelu szuka też w gałęziach i pozycjach (liściach) WBS aktywnego
+// zamówienia (`branchNav`: nazwa, krótka nazwa, właściciel). Zamówienie z trafieniem w WBS zostaje na liście,
+// a jego drzewo gałęzi dostaje frazę filtra (`sidebar-branch-tree-szukaj`). Gdy zamówienie albo jego folder
+// pasuje nazwą — drzewo WBS pokazuje się w całości. Liście innych zamówień nie są przeszukiwane (nie są wczytane).
+function filtrWbs(menuTree, branchNav, query) {
+    if (!query || !branchNav?.orderId) return { keepId: null, nav: branchNav };
+    const pasuje = (x) => [x.name, x.shortName, x.owner].some(t => String(t || '').toLowerCase().includes(query));
+    const trafienieWbs = (branchNav.galezie || []).some(pasuje) || (branchNav.pozycje || []).some(pasuje);
+    const sciezka = sciezkaDo(menuTree, branchNav.orderId) || [];
+    if (sciezka.some(n => String(n.name || '').toLowerCase().includes(query))) return { keepId: null, nav: branchNav };
+    return { keepId: trafienieWbs ? branchNav.orderId : null, nav: { ...branchNav, fraza: query } };
 }
 
 export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId, onAddNode, onDeleteNode, onPermissions, loading, userRoles = [], leavesEnabled = false, onReloadTree, onOpenMyAccount, branchNav = null }) {
@@ -92,8 +116,9 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
     const query = filter.trim().toLowerCase();
     // Na najwyższym poziomie mogą też leżeć zamówienia przeciągnięte z folderów
     const rootAreas = menuTree.filter(node => node.type !== 'document');
+    const wbs = filtrWbs(rootAreas, branchNav, query); // `sidebar-filtr-liscie`
     const filteredAreas = query
-        ? rootAreas.map(a => filterNode(a, query)).filter(Boolean)
+        ? rootAreas.map(a => filterNode(a, query, wbs.keepId)).filter(Boolean)
         : rootAreas;
     const visibleAreas = [...filteredAreas].sort((a, b) => a.name === 'Logistyka' ? 1 : b.name === 'Logistyka' ? -1 : 0);
 
@@ -102,13 +127,20 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
             {/* Dynamic Areas */}
             {rootAreas.length > 0 && (
                 <div>
-                    <div className="px-2 py-1.5 bg-white/[0.03] border-y border-white/[0.05] mb-1">
+                    {/* @anchor sidebar-filtr — pole filtra przypięte do góry panelu (sticky), drzewo przewija się pod nim */}
+                    {/* -top-3: kontener przewijania ma p-3, bez tego nad polem zostaje 12px szczeliny z przewijanym drzewem */}
+                    <div className="sticky -top-3 z-10 flex items-center gap-1 px-2 py-1.5 bg-[#0b0f18] border-y border-white/[0.05] mb-1 shadow-[0_4px_8px_-4px_rgba(0,0,0,0.6)]">
                         <input
                             value={filter}
                             onChange={e => setFilter(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Escape') setFilter(''); }}
                             placeholder="Szukaj..."
-                            className="w-full bg-transparent border-none text-[10px] font-bold text-gray-400 uppercase tracking-widest placeholder:text-gray-500 placeholder:font-bold placeholder:uppercase placeholder:tracking-widest focus:outline-none"
+                            title="Szuka w folderach i zamówieniach oraz w gałęziach i pozycjach WBS otwartego zamówienia (Esc czyści)"
+                            className="min-w-0 flex-1 bg-transparent border-none text-[10px] font-bold text-gray-400 uppercase tracking-widest placeholder:text-gray-500 placeholder:font-bold placeholder:uppercase placeholder:tracking-widest focus:outline-none"
                         />
+                        {filter && (
+                            <button onClick={() => setFilter('')} title="Wyczyść filtr" className="shrink-0 rounded px-1 text-[11px] text-gray-500 hover:bg-white/10 hover:text-white">✕</button>
+                        )}
                     </div>
                     <div className="space-y-0.5">
                         {visibleAreas.length === 0
@@ -133,7 +165,7 @@ export default function DynamicSidebar({ menuTree, activeAreaId, setActiveAreaId
                                     dragOverPos={dragOverPos}
                                     setDragOverPos={setDragOverPos}
                                     onSidebarMove={handleSidebarMove}
-                                    branchNav={branchNav}
+                                    branchNav={wbs.nav}
                                 />
                             ))
                         }
