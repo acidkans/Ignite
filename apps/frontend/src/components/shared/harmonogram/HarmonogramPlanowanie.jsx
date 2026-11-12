@@ -26,6 +26,8 @@ export default function HarmonogramPlanowanie({
     // @anchor harmonogram-planowanie-dodaj-ms — `onDodajMilestone({ parentId, name, dzien, beforeId })` → { zaleznych };
     // miejsce w kolejności z dat widocznych na Harmonogramie (także domyślnych), `miejsce-milestona`.
     onDodajMilestone = null,
+    // @anchor harmonogram-planowanie-node-id — zamówienie (ProcessNode) dla przycisku „Harmonogram zadań”.
+    nodeId = null,
 }) {
     const items = useMemo(() => wbsTree?.items || [], [wbsTree]);
 
@@ -179,6 +181,7 @@ export default function HarmonogramPlanowanie({
                 projectStart={projectStart} projectEnd={projectEnd || null}
                 nazwaProjektu={projectName} onApi={onApi} onPrzestaw={canEdit ? onPrzestaw : null}
                 onDodajMs={canEdit ? dodajMs : null}
+                processNodeId={nodeId} zakresIds={widokIds}
             />
         </div>
     );

@@ -200,9 +200,14 @@ export default function RealizacjaPanel({
     // zamiast widoku gałęzi. Klik w gałąź albo w przełącznik widoku czyści podgląd.
     const [podglad, setPodglad] = useState(null);
     const [filtr, setFiltr] = useState('all');
-    // @anchor realizacja-zadanie-modal — { task, wbsNodeId } otwartego formularza zadania albo null.
+    // @anchor realizacja-zadanie-modal — { task, wbsNodeId, date?, wolnyWezel? } otwartego formularza zadania albo null.
+    // `wolnyWezel` = nowe zadanie z Harmonogramu: węzeł (gałąź) tylko podpowiedziany, `date` = kliknięty dzień.
     const [zadanieModal, setZadanieModal] = useState(null);
     const zadanieCtx = useMemo(() => ({ otworz: (task, wbsNodeId) => setZadanieModal({ task: task || null, wbsNodeId: wbsNodeId || task?.wbsNodeId || null }) }), []);
+    // @anchor realizacja-zadanie-z-harmonogramu — `onOtworzZadanie` Harmonogramu: edycja albo nowe `(null, { wbsNodeId, date })`.
+    const zadanieZHarmonogramu = useCallback((task, nowe) => setZadanieModal(task
+        ? { task, wbsNodeId: task.wbsNodeId || null }
+        : { task: null, wbsNodeId: nowe?.wbsNodeId || null, date: nowe?.date || null, wolnyWezel: true }), []);
 
     const wpisy = useMemo(() => zbudujWatek({ wbsNodes: nodes, comments, tasks, actuals, protocols, constraints, maile }),
         [nodes, comments, tasks, actuals, protocols, constraints, maile]);
@@ -695,6 +700,7 @@ export default function RealizacjaPanel({
                             msZaleznosc={msZaleznosc} msWezly={msWezlyHarm} savePlanDatesBatch={savePlanDatesBatch}
                             onZoom={setFocus} onOtworz={otworzPozycje} onPrzestaw={canEdit ? zapiszKolejnosc : null} onDodajMs={dodajMsHarm} galazWprostId={zakresId !== SYNTHETIC_ROOT ? zakresId : null}
                             domyslnyZakres="14" zakresKey="realizacja-kokpit-harmonogram-zakres"
+                            processNodeId={nodeId} zakresIds={zakresId !== SYNTHETIC_ROOT ? idsZakresu : null} onOtworzZadanie={zadanieZHarmonogramu}
                         />
                     </div>
                 )}
@@ -719,13 +725,14 @@ export default function RealizacjaPanel({
                         msZaleznosc={msZaleznosc} msWezly={msWezlyHarm} savePlanDatesBatch={savePlanDatesBatch}
                         onZoom={setFocus} onOtworz={otworzPozycje} onPrzestaw={canEdit ? zapiszKolejnosc : null} onDodajMs={dodajMsHarm} galazWprostId={zakresId !== SYNTHETIC_ROOT ? zakresId : null}
                         domyslnyZakres="14" zakresKey="realizacja-harmonogram-zakres"
+                        processNodeId={nodeId} zakresIds={zakresId !== SYNTHETIC_ROOT ? idsZakresu : null} onOtworzZadanie={zadanieZHarmonogramu}
                     />
                 )}
             </div>
             {zadanieModal && (
                 <TaskModal
                     task={zadanieModal.task} processNodeId={nodeId}
-                    defaults={{ wbsNodeId: zadanieModal.wbsNodeId }} lockNode={!zadanieModal.task}
+                    defaults={{ wbsNodeId: zadanieModal.wbsNodeId, date: zadanieModal.date || undefined }} lockNode={!zadanieModal.task && !zadanieModal.wolnyWezel}
                     onClose={() => setZadanieModal(null)}
                     onSaved={() => { setZadanieModal(null); odswiezWatek(); window.dispatchEvent(new CustomEvent('user-tasks-changed')); }}
                 />
