@@ -1930,7 +1930,9 @@ function Tablica({ grupy, actualsOf, sygnaly, pelne, canEdit, saveAxis, onZoom, 
             <div className="kb-wrap">
                 <div className="kbh" style={siatka}>
                     {kolumny.map(k => (
-                        <div key={k}><span>{etykieta(null, k)}</span><span>{wszystkie.filter(c => c.status === k).length}</span></div>
+                        <div key={k} className={(os === 'exec' ? EXEC_STATUS_META : PURCHASE_STATUS_META)[k]?.color || ''}>
+                            <span>{etykieta(null, k)}</span><span>{wszystkie.filter(c => c.status === k).length}</span>
+                        </div>
                     ))}
                 </div>
                 <div className="kb" style={siatka}>
