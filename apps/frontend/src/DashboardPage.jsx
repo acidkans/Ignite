@@ -14,11 +14,13 @@ import OffersTab from './components/shared/OffersTab';
 import UnifiedWbsPanel from './components/shared/wbs/UnifiedWbsPanel';
 import CommentsSlideOver from './components/shared/CommentsSlideOver';
 import MyTasksModal from './components/shared/MyTasksModal';
+import TasksCalendarSection from './components/shared/wbs/TasksCalendarSection';
 import DueTasksBell from './components/shared/DueTasksBell';
 import TaskReminderToast from './components/shared/TaskReminderToast';
 import SnapshotEditGuard from './components/shared/SnapshotEditGuard';
 import { Layers, ChevronDown, Calendar, Search, Plus, X, Database, RotateCcw, MessageCircle, Pencil, Check, Cloud, FolderOpen, Unlink, Coins, ThumbsUp, Undo2, Play, Pin, PinOff } from 'lucide-react';
 import { API_URL } from './config';
+import { useFindInTab } from './hooks/useFindInTab';
 import { APP_VERSION } from './version';
 import { loadOrderCurrency, useOrderCurrency, currencySymbol } from './utils/currency';
 import OneDriveBrowserModal from './components/shared/OneDriveBrowserModal';
@@ -180,6 +182,15 @@ export default function DashboardPage() {
         try { return sessionStorage.getItem('openMyTasksOnLoad') === '1'; } catch { return false; }
     });
     useEffect(() => { try { sessionStorage.removeItem('openMyTasksOnLoad'); } catch { /* brak storage */ } }, []);
+    // @anchor dashboard-tasks-calendar-open — kalendarz zadań z Planowania otwierany kliknięciem w datę w nagłówku
+    const [tasksCalendarOpen, setTasksCalendarOpen] = useState(false);
+    useEffect(() => {
+        if (!tasksCalendarOpen) return undefined;
+        // Esc zamyka kalendarz, chyba że nad nim jest TaskModal (z-[10060]) albo Pełna lista (z-[10050])
+        const onKey = (e) => { if (e.key === 'Escape' && !document.querySelector('[class*="z-[10060]"], [class*="z-[10050]"]')) setTasksCalendarOpen(false); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [tasksCalendarOpen]);
 
     // @anchor dashboard-due-reminders
     const [dueReminders, setDueReminders] = useState([]);
@@ -678,8 +689,12 @@ export default function DashboardPage() {
     const contentRef = useRef(null);
 
     // „Realizacja_new" filtruje pozycje i wpisy szuflady (`realization-new-search-filter`).
-    const showSearch = activeTab !== 'requirements';
-    const searchPlaceholder = activeTab === 'unified'
+    // @anchor find-in-tab-mode — zakładki bez własnego filtra: ta sama wyszukiwarka działa jak „znajdź na stronie"
+    const findInTab = activeTab === 'requirements' || activeTab === 'siteInfo';
+    const tabFind = useFindInTab(contentRef, findInTab ? searchQuery : '', activeAreaId);
+    const searchPlaceholder = findInTab
+        ? 'Szukaj na tej stronie…'
+        : activeTab === 'unified'
         ? 'Szukaj w strukturze, budżecie, materiałach…'
         : activeTab === 'materialDatabase'
         ? 'Szukaj w materiałach i kartach katalogowych…'
@@ -710,11 +725,11 @@ export default function DashboardPage() {
             {/* TOP BAR */}
             <header className="h-16 px-6 flex items-center gap-3 border-b border-white/5 bg-white/[0.02] backdrop-blur-sm flex-shrink-0 z-20">
 
-                {/* Data i tydzień — kliknij aby otworzyć Moje zadania */}
+                {/* Data i tydzień — kliknij aby otworzyć kalendarz zadań (ten sam co w Planowaniu) */}
                 <div
                     className="flex items-center gap-2 flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity select-none"
-                    onClick={() => setMyTasksOpen(true)}
-                    title="Moje zadania"
+                    onClick={() => setTasksCalendarOpen(true)}
+                    title="Kalendarz zadań"
                 >
                     <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/20">
                         <Calendar size={13} className="text-blue-400" />
@@ -772,18 +787,27 @@ export default function DashboardPage() {
                 )}
 
                 {/* Wyszukiwarka — zaraz obok węzła */}
-                {showSearch && (
-                    <div className="w-[260px] relative flex-shrink-0">
-                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-                        <input
-                            type="text"
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            placeholder={searchPlaceholder}
-                            className="w-full h-8 pl-9 pr-2 bg-white/[0.04] border border-white/10 rounded-lg text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50 focus:bg-white/[0.06] transition-all"
-                        />
-                    </div>
-                )}
+                <div className="w-[260px] relative flex-shrink-0">
+                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        onKeyDown={e => {
+                            if (e.key === 'Escape') setSearchQuery('');
+                            else if (findInTab && e.key === 'Enter') { e.preventDefault(); if (e.shiftKey) tabFind.prev(); else tabFind.next(); }
+                        }}
+                        placeholder={searchPlaceholder}
+                        title={findInTab ? 'Enter — następne trafienie, Shift+Enter — poprzednie, Esc — wyczyść' : undefined}
+                        className={`w-full h-8 pl-9 ${findInTab && searchQuery.trim() ? 'pr-14' : 'pr-2'} bg-white/[0.04] border border-white/10 rounded-lg text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/50 focus:bg-white/[0.06] transition-all`}
+                    />
+                    {/* licznik „bieżące/wszystkie” trafienia w trybie „znajdź na stronie” */}
+                    {findInTab && searchQuery.trim() && (
+                        <span className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] tabular-nums pointer-events-none ${tabFind.count ? 'text-gray-400' : 'text-red-400'}`}>
+                            {tabFind.count ? `${tabFind.index + 1}/${tabFind.count}` : '0'}
+                        </span>
+                    )}
+                </div>
 
                 {!isOrder && <div className="flex-1" />}
 
@@ -1541,6 +1565,31 @@ export default function DashboardPage() {
 
         {/* Modal zadań osobistych — otwarty kliknięciem kalendarza w headerze */}
         <MyTasksModal open={myTasksOpen} onClose={() => setMyTasksOpen(false)} />
+        {/* @anchor dashboard-tasks-calendar-modal — TasksCalendarSection z Planowania w oknie. Przy otwartym zamówieniu
+            zaczyna od „Wszystkie moje”, a zakres „Ten projekt” jest pod ręką; bez zamówienia — tylko moje zadania.
+            Bez backdrop-filter: tworzyłby blok zawierający dla `fixed` i przycinał AllTasksModal do okna. */}
+        {tasksCalendarOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75" onClick={() => setTasksCalendarOpen(false)}>
+                <div className="relative w-full max-w-6xl h-[88vh] flex flex-col rounded-2xl border border-white/10 shadow-2xl overflow-hidden bg-[#0f0f14]" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07] flex-shrink-0">
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-lg bg-blue-500/15 border border-blue-500/25 flex items-center justify-center">
+                                <Calendar size={13} className="text-blue-400" />
+                            </div>
+                            <span className="text-sm font-semibold text-white">Kalendarz zadań</span>
+                            {isOrder && activeNode?.name && <span className="text-xs text-gray-500">· {activeNode.name}</span>}
+                        </div>
+                        <button onClick={() => setTasksCalendarOpen(false)} title="Zamknij (Esc)"
+                            className="w-6 h-6 rounded-lg bg-white/[0.04] hover:bg-white/[0.10] border border-white/[0.07] flex items-center justify-center transition-all">
+                            <X size={12} className="text-gray-400" />
+                        </button>
+                    </div>
+                    <div className="flex-1 min-h-0 flex flex-col pt-4">
+                        <TasksCalendarSection key={isOrder ? activeAreaId : 'mine'} nodeId={isOrder ? activeAreaId : null} versionId={selectedVersionId} defaultScope="all" />
+                    </div>
+                </div>
+            </div>
+        )}
 
         {/* Toast alarmu — prawy dolny róg, nad przyciskiem czatu */}
         <TaskReminderToast

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useOutletContext } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { orderIdsFromUrl, trainingsApi } from './components/shared/trainings/trainingsShared';
 import { BTN, BTN_PRIMARY, Confirm } from './components/shared/trainings/TrainingsUi';
 import TrainingsMatrixTab from './components/shared/trainings/TrainingsMatrixTab';
@@ -27,6 +29,15 @@ export default function TrainingsPage() {
     const [toastMsg, setToastMsg] = useState(null);
     const [alertsSignal, setAlertsSignal] = useState(0);
     const toastTimer = useRef(null);
+    const navigate = useNavigate();
+    const layoutCtx = useOutletContext();
+    // @anchor trainings-back-order-id — zamówienie, z którego przyszedł link `?zamowienie=`; zapamiętane
+    // przy wejściu, bo filtr macierzy może się potem zmienić.
+    const [backOrderId] = useState(() => orderIdsFromUrl()[0] || null);
+    const backOrderName = backOrderId ? data?.orders.find(o => o.id === backOrderId)?.name : null;
+    // @anchor trainings-back-to-tree — powrót do drzewa z otwartym zamówieniem (zakładka Informacje o zamówieniu).
+    // `setActiveAreaId` z MainLayout zaznacza węzeł i przechodzi na „/”; na mobile (bez Outletu) — sam „/”.
+    const backToTree = () => (layoutCtx?.setActiveAreaId ? layoutCtx.setActiveAreaId(backOrderId) : navigate('/'));
 
     const toast = useCallback((text, isError = false) => {
         setToastMsg({ text, isError });
@@ -70,6 +81,12 @@ export default function TrainingsPage() {
         <div className="flex h-full min-h-0 w-full flex-col animate-fade-in">
             <div className="flex flex-wrap items-end gap-3 px-4 pb-3 pt-6 md:px-8">
                 <div>
+                    {backOrderId && (
+                        <button onClick={backToTree} title="Wróć do drzewa — zamówienie, z którego otwarto Szkolenia"
+                            className="mb-2 flex items-center gap-1.5 rounded-md border border-teal-500/30 px-2.5 py-1 text-xs font-semibold text-teal-300 transition-colors hover:bg-teal-500/10">
+                            <ArrowLeft size={13} /> Wróć do zamówienia{backOrderName ? `: ${backOrderName}` : ''}
+                        </button>
+                    )}
                     <div className="text-[11px] text-gray-500">System › Użytkownicy › Szkolenia</div>
                     <h2 className="bg-gradient-to-r from-teal-400 to-blue-400 bg-clip-text text-2xl font-bold text-transparent">Szkolenia</h2>
                     <p className="mt-1 text-xs text-gray-500">Daty ważności szkoleń pracowników, zamówienia, które ich wymagają, i alerty e-mail o wygasających szkoleniach.</p>
