@@ -97,8 +97,8 @@ export default function TrainingAlertsTab({ toast, reloadSignal }) {
                     <span>Zgłaszaj adminom też <b>brak</b> szkolenia wymaganego przez zamówienie</span>
                 </label>
                 <p className="mt-1 text-[11px] text-gray-500">
-                    Braki liczone są dla osób przypisanych do zamówienia w kolumnie „Zamówienia” <b className="text-gray-400">lub</b> będących
-                    w zespole zamówienia. Zamówienia zamknięte (wszystkie pozycje odebrane protokołem lub zafakturowane) są pomijane.
+                    Braki liczone są dla członków <b className="text-gray-400">zespołu zamówienia</b> — szkolenia wymagane przez zamówienie
+                    ustawia się w Typach szkoleń. Zamówienia zamknięte (wszystkie pozycje odebrane protokołem lub zafakturowane) są pomijane.
                 </p>
                 <div className="mb-1.5 mt-3 text-[10px] font-bold uppercase tracking-widest text-gray-500">Braki — aktywne zamówienia = etap</div>
                 <div className="flex flex-wrap gap-1.5">

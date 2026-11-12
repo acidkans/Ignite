@@ -26,7 +26,7 @@ export async function exportTrainingsExcel({ wiersze, types, ordersById, opisFil
     const ws = wb.addWorksheet('Szkolenia', { views: [{ state: 'frozen', xSplit: 1, ySplit: 3 }] });
     ws.addRow([`Szkolenia pracowników — stan na ${fmtDay(today)} (${opisFiltra})`]).font = { bold: true, size: 13 };
     ws.addRow([`Wierszy: ${wiersze.length}.${wiersze.every(w => w.u.trainings.length) ? ' Pracownicy bez szkoleń są pominięci.' : ''}`]).font = { italic: true, color: { argb: 'FF6B7280' } };
-    const hdr = ws.addRow(['Pracownik', 'Zespół', 'Zamówienia',
+    const hdr = ws.addRow(['Pracownik', 'Zespół',
         ...types.map(t => `${t.name}\n(${t.validityMonths ? `${t.validityMonths} mies.` : 'bezterm.'})`),
         'Najbliższy termin', 'Szkolenie', 'Dni do terminu']);
     naglowek(hdr);
@@ -36,7 +36,7 @@ export async function exportTrainingsExcel({ wiersze, types, ordersById, opisFil
     hdr.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
     for (const { u, najblizszy } of wiersze) {
         const r = ws.addRow([
-            fullName(u), u.team || '', u.orderIds.map(id => ordersById[id]?.name).filter(Boolean).join('\n'),
+            fullName(u), u.team || '',
             ...types.map(t => {
                 const ut = u.trainings.find(x => x.trainingTypeId === t.id);
                 return !ut ? '' : ut.validUntil ? xlData(ut.validUntil) : 'bezterminowe';
@@ -49,23 +49,23 @@ export async function exportTrainingsExcel({ wiersze, types, ordersById, opisFil
         types.forEach((t, i) => {
             const ut = u.trainings.find(x => x.trainingTypeId === t.id);
             if (!ut) return;
-            const c = r.getCell(4 + i);
+            const c = r.getCell(3 + i);
             c.fill = fill(XL_KOLOR[trainingStatus(ut, today)]);
             c.alignment = { horizontal: 'center', vertical: 'top' };
         });
-        if (najblizszy) r.getCell(4 + nT).fill = fill(XL_KOLOR[trainingStatus(najblizszy, today)]);
+        if (najblizszy) r.getCell(3 + nT).fill = fill(XL_KOLOR[trainingStatus(najblizszy, today)]);
     }
-    const szer = [24, 16, 40, ...Array(nT).fill(18), 14, 30, 12];
+    const szer = [24, 16, ...Array(nT).fill(18), 14, 30, 12];
     szer.forEach((w, i) => {
         const c = ws.getColumn(i + 1);
         c.width = w;
-        if (i >= 3 && i <= 3 + nT) c.numFmt = 'dd.mm.yyyy';
+        if (i >= 2 && i <= 2 + nT) c.numFmt = 'dd.mm.yyyy';
     });
     ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: szer.length } };
 
     const ws2 = wb.addWorksheet('Szczegóły', { views: [{ state: 'frozen', ySplit: 1 }] });
     naglowek(ws2.addRow(['Pracownik', 'Zespół', 'Szkolenie', 'Kod', 'Ukończone', 'Ważne do', 'Dni do terminu', 'Status',
-        'Nr zaświadczenia', 'Wymagane w zamówieniach', 'Pracownik przypisany do tych zamówień']));
+        'Nr zaświadczenia', 'Wymagane w zamówieniach', 'Pracownik w zespole tych zamówień']));
     for (const { u } of wiersze) {
         for (const ut of u.trainings) {
             const t = types.find(x => x.id === ut.trainingTypeId);
@@ -76,7 +76,7 @@ export async function exportTrainingsExcel({ wiersze, types, ordersById, opisFil
                 fullName(u), u.team || '', t.name, t.code || '', xlData(ut.completedAt),
                 ut.validUntil ? xlData(ut.validUntil) : 'bezterminowe', ut.validUntil ? daysTo(ut.validUntil, today) : '',
                 XL_STATUS[st], ut.certificateNo || '', wymagane.map(o => o.name).join('\n'),
-                wymagane.filter(o => u.orderIds.includes(o.id)).map(o => o.name).join('\n'),
+                wymagane.filter(o => (u.teamOrderIds || []).includes(o.id)).map(o => o.name).join('\n'),
             ]);
             r.alignment = { vertical: 'top', wrapText: true };
             r.getCell(8).fill = fill(XL_KOLOR[st]);

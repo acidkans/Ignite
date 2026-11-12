@@ -81,8 +81,6 @@ model User {
   acceptanceProtocols    AcceptanceProtocolRecord[] @relation("AcceptanceProtocolAuthor")
   /// @anchor user-trainings
   trainings              UserTraining[]
-  /// @anchor user-assigned-orders
-  assignedOrders         UserOrder[]
 
   @@map("users")
 }
@@ -338,8 +336,6 @@ model ProcessNode {
   scopeDocument             ScopeDocument?
   /// @anchor process-node-required-trainings
   requiredTrainings         TrainingTypeOrder[]
-  /// @anchor process-node-assigned-users
-  assignedUsers             UserOrder[]
 
   @@map("process_nodes")
 }
@@ -2610,20 +2606,6 @@ model UserWorkwear {
 
   @@unique([userId, item])
   @@map("user_workwear")
-}
-
-/// @anchor user-order
-/// Pracownik przypisany do zamówienia (kolumna „Zamówienia" w Szkoleniach). Alerty o brakach
-/// szkoleń liczą przypisanych ORAZ zespół zamówienia; przypomnienia o wygasaniu nie zależą od zamówień.
-model UserOrder {
-  userId  String
-  orderId String
-  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  order   ProcessNode @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  @@id([userId, orderId])
-  @@index([orderId])
-  @@map("user_orders")
 }
 
 /// @anchor training-alert-run

@@ -1,3 +1,21 @@
+## 2026-11-12 — feat(szkolenia): usunięta kolumna „Zamówienia” (ręczne przypisanie pracownika do zamówień) — powiązanie pracownik ↔ zamówienie wyłącznie przez zespół zamówienia (v2026.11.12.2234)
+
+### schema.prisma
+- usunięto model `UserOrder` (tabela `user_orders`) oraz relacje `User.assignedOrders` i `ProcessNode.assignedUsers` — migracja `20261112220000_drop_user_orders` (na produkcji 2 wiersze, obie osoby były też w zespole zamówienia)
+
+### architektura / API
+- usunięto `back-endpoint` `PUT /trainings/users/:userId/orders` i `back-funkcja` `setUserOrders()`
+- `back-endpoint` `GET /trainings/overview` — usunięto pole `users[].orderIds`; zamówienia osoby = `users[].teamOrderIds`
+- `back-funkcja` `computeAlerts()` — braki szkoleń liczone tylko dla członków zespołu zamówienia
+- `ui-tabela` macierz Szkoleń bez kolumny „Zamówienia”; filtr i wyszukiwarka po zamówieniu używają zespołu zamówienia; `ui-funkcja` `exportTrainingsExcel()` — arkusz „Szkolenia” bez kolumny „Zamówienia”, w „Szczegółach” kolumna „Pracownik w zespole tych zamówień”
+
+### słownik
+- usunięto `user-order`, `user-assigned-orders`, `process-node-assigned-users`, `trainings-set-user-orders`, `trainings-user-orders-endpoint`
+- zmieniono `training-order-people` — tylko zespół zamówienia
+
+### wytyczne
+- `schema-relacja` `Team.orderNodeId` — jedyne źródło „pracownik jest w projekcie” dla Szkoleń: wymagania projektu (`TrainingTypeOrder`) porównywane są ze szkoleniami członków zespołu zamówienia; nie wprowadzać drugiej, ręcznej listy przypisań
+
 ## 2026-11-12 — feat(szkolenia): przypomnienia o wygasających zaświadczeniach do każdego pracownika (mail + dzwonek) niezależnie od zamówień, braki szkoleń liczone też dla zespołu zamówienia (v2026.11.12.2208)
 
 ### architektura / API

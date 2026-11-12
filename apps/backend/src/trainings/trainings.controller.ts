@@ -54,12 +54,6 @@ export class TrainingsController {
         return this.trainings.deleteUserTraining(id);
     }
 
-    // @anchor trainings-user-orders-endpoint — PUT /trainings/users/:userId/orders {orderIds}
-    @Put('users/:userId/orders')
-    setUserOrders(@Param('userId') userId: string, @Body() body: { orderIds: string[] }) {
-        return this.trainings.setUserOrders(userId, body?.orderIds);
-    }
-
     // @anchor trainings-alerts-endpoints — ustawienia, podgląd, historia, test i wysyłka ręczna
     @Get('alerts/settings')
     alertSettings() {

@@ -75,7 +75,7 @@ export class TrainingsService {
     }
 
     // @anchor trainings-overview — wszystko, czego potrzebuje widok Szkoleń, jednym zapytaniem:
-    // pracownicy (z szkoleniami i przypisanymi zamówieniami), typy (z wymaganymi zamówieniami)
+    // pracownicy (z szkoleniami i zamówieniami z zespołu zamówienia), typy (z wymaganymi zamówieniami)
     // i zamówienia (z obszarem, etapem i stanem zamknięcia). Filtr „bez szkoleń nie pokazuj"
     // robi front — lista przypisania szkolenia potrzebuje wszystkich aktywnych osób.
     async overview() {
@@ -87,7 +87,6 @@ export class TrainingsService {
                     // zespoły działowe (nazwa) i zespoły zamówień (kto widzi zamówienie) — rozdzielane niżej
                     teams: { select: { name: true, orderNodeId: true } },
                     trainings: { select: { id: true, trainingTypeId: true, completedAt: true, validUntil: true, certificateNo: true } },
-                    assignedOrders: { select: { orderId: true } },
                 },
                 orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
             }),
@@ -107,9 +106,8 @@ export class TrainingsService {
                 id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email,
                 team: u.teams.filter(t => !t.orderNodeId).map(t => t.name).join(', '),
                 trainings: u.trainings.map(t => ({ ...t, completedAt: isoDay(t.completedAt), validUntil: isoDay(t.validUntil) })),
-                orderIds: u.assignedOrders.map(a => a.orderId),
                 // @anchor trainings-team-order-ids — zamówienia, w których zespole jest osoba (widzi je);
-                // filtr zamówień w Szkoleniach pokazuje przypisanych ORAZ zespół zamówienia
+                // jedyne powiązanie pracownik ↔ zamówienie w Szkoleniach (filtr, ⚠ braków)
                 teamOrderIds: u.teams.filter(t => t.orderNodeId).map(t => t.orderNodeId),
             })),
             types: types.map(t => ({
@@ -251,17 +249,5 @@ export class TrainingsService {
         if (!(await this.prisma.userTraining.findUnique({ where: { id } }))) throw new NotFoundException('Nie ma takiego szkolenia');
         await this.prisma.userTraining.delete({ where: { id } });
         return { ok: true };
-    }
-
-    // @anchor trainings-set-user-orders — wielowybór w kolumnie „Zamówienia": pełna lista zastępuje poprzednią.
-    async setUserOrders(userId: string, orderIds: string[]) {
-        if (!Array.isArray(orderIds)) throw new BadRequestException('orderIds musi być listą');
-        if (!(await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } }))) throw new NotFoundException('Nie ma takiego pracownika');
-        const ids = (await this.checkOrders(orderIds)) || [];
-        await this.prisma.$transaction([
-            this.prisma.userOrder.deleteMany({ where: { userId } }),
-            ...(ids.length ? [this.prisma.userOrder.createMany({ data: ids.map(orderId => ({ userId, orderId })) })] : []),
-        ]);
-        return { userId, orderIds: ids };
     }
 }
