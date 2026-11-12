@@ -5434,41 +5434,57 @@ ${ganttSectionHtml}
     }, [authHeaders]);
 
     // @anchor handle-harmonogram-przestaw — przeciągnięcie wiersza w Harmonogramie Planowania: węzeł `id`
-    // przed/po `celId` w tym samym rodzeństwie drzewa WBS. Drzewo zmienia się od razu (WBS i Harmonogram),
-    // a zmienione `sortOrder` idą pojedynczymi `PATCH /wbs-nodes/:id` (bez zapisu całego drzewa).
+    // przed/po `celId`. Drzewo zmienia się od razu (WBS i Harmonogram), a zmienione `sortOrder` idą
+    // pojedynczymi `PATCH /wbs-nodes/:id` (bez zapisu całego drzewa). Gdy `celId` siedzi w innej gałęzi,
+    // węzeł przechodzi do niej (`parentId`) — grupa Harmonogramu zbiera pozycje z kilku podgałęzi.
     const handleHarmonogramPrzestaw = useCallback(async (id, celId, gdzie = 'po') => {
         if (!(await guardSnapshotEdit())) throw new Error('Edycja wersji zablokowana');
-        const znajdz = (lista, rodzic) => {
+        const znajdz = (szukany, lista, rodzic) => {
             for (const n of lista || []) {
-                if (n.id === id) return { lista, rodzic };
-                const r = n.children?.length ? znajdz(n.children, n) : null;
+                if (n.id === szukany) return { lista, rodzic, wezel: n };
+                const r = n.children?.length ? znajdz(szukany, n.children, n) : null;
                 if (r) return r;
             }
             return null;
         };
-        const miejsce = znajdz(wbsTreeRef.current?.items, null);
-        if (!miejsce || !miejsce.lista.some(n => n.id === celId)) {
-            throw new Error('Kolejność zmienisz tylko w obrębie tej samej gałęzi WBS — przenieś pozycję do innej gałęzi w strukturze WBS.');
+        const items = wbsTreeRef.current?.items;
+        const zrodlo = znajdz(id, items, null);
+        const cel = znajdz(celId, items, null);
+        if (!zrodlo || !cel) return;
+        const rodzicId = cel.rodzic?.id ?? null;
+        const przenies = (zrodlo.rodzic?.id ?? null) !== rodzicId;
+        if (przenies) {
+            if (!rodzicId) throw new Error('Pozycję przeniesiesz tylko do gałęzi WBS — nie na najwyższy poziom.');
+            if (znajdz(rodzicId, [zrodlo.wezel], null)) throw new Error('Gałęzi nie przeniesiesz do jej własnego wnętrza.');
         }
-        const stare = new Map(miejsce.lista.map(n => [n.id, Number(n.sortOrder)]));
-        const bez = miejsce.lista.filter(n => n.id !== id);
+        const stare = new Map(cel.lista.map(n => [n.id, Number(n.sortOrder)]));
+        const bez = cel.lista.filter(n => n.id !== id);
         const k = bez.findIndex(n => n.id === celId);
-        bez.splice(gdzie === 'przed' ? k : k + 1, 0, miejsce.lista.find(n => n.id === id));
+        bez.splice(gdzie === 'przed' ? k : k + 1, 0, przenies ? { ...zrodlo.wezel, parentId: rodzicId } : zrodlo.wezel);
         const nowa = bez.map((n, i) => ({ ...n, sortOrder: i }));
-        const zmiany = nowa.filter(n => stare.get(n.id) !== n.sortOrder);
+        const zmiany = nowa.filter(n => (przenies && n.id === id) || stare.get(n.id) !== n.sortOrder);
         if (!zmiany.length) return;
-        const rodzicId = miejsce.rodzic?.id ?? null;
-        const podmien = (lista) => (lista || []).map(n => (n.id === rodzicId
-            ? { ...n, children: nowa }
-            : (n.children?.length ? { ...n, children: podmien(n.children) } : n)));
+        const stareRodzicId = zrodlo.rodzic?.id ?? null;
+        const podmien = (lista) => (lista || []).map(n => {
+            if (n.id === rodzicId) return { ...n, children: nowa };
+            if (przenies && n.id === stareRodzicId) return { ...n, children: (n.children || []).filter(c => c.id !== id) };
+            return n.children?.length ? { ...n, children: podmien(n.children) } : n;
+        });
         setWbsTreeAndRef(prev => ({ ...prev, items: rodzicId ? podmien(prev.items) : nowa }));
-        const wyniki = await Promise.all(zmiany.map(n => fetch(`${API_URL}/wbs-nodes/${n.id}`, {
-            method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ sortOrder: n.sortOrder }),
-        }).then(r => r.ok).catch(() => false)));
+        const zapisz = (n) => fetch(`${API_URL}/wbs-nodes/${n.id}`, {
+            method: 'PATCH', headers: authHeaders(),
+            body: JSON.stringify(przenies && n.id === id ? { parentId: rodzicId, sortOrder: n.sortOrder } : { sortOrder: n.sortOrder }),
+        }).then(r => r.ok).catch(() => false);
+        // Przeniesienie najpierw: gdy backend je odrzuci (np. milestone pod milestone), rodzeństwo zostaje nietknięte.
+        if (przenies && !(await zapisz(nowa.find(n => n.id === id)))) {
+            await fetchData();
+            throw new Error('Nie udało się przenieść pozycji do tej gałęzi WBS.');
+        }
+        const wyniki = await Promise.all(zmiany.filter(n => !(przenies && n.id === id)).map(zapisz));
         onWbsUpdate?.();
         await refreshWbsNodes();
         if (wyniki.some(ok => !ok)) throw new Error('Nie wszystkie pozycje zapisały nową kolejność — odśwież WBS.');
-    }, [authHeaders, setWbsTreeAndRef, refreshWbsNodes, onWbsUpdate]);
+    }, [authHeaders, setWbsTreeAndRef, refreshWbsNodes, onWbsUpdate, fetchData]);
 
     // Drag krawędzi belki w Gantcie → quantity (dni) przez wbs-nodes/{id} (PATCH).
     // Unit zmienia się na 'dni' tylko gdy node ma już dniową jednostkę lub pustą — pakiet/komplet itp. zostają bez zmian.

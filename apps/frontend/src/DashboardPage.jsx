@@ -1542,7 +1542,7 @@ export default function DashboardPage() {
         {/* Modal zadań osobistych — otwarty kliknięciem kalendarza w headerze */}
         <MyTasksModal open={myTasksOpen} onClose={() => setMyTasksOpen(false)} />
 
-        {/* Toast alarmu — po lewej pod ikoną kalendarza */}
+        {/* Toast alarmu — prawy dolny róg, nad przyciskiem czatu */}
         <TaskReminderToast
             reminders={dueReminders}
             onDismissed={id => setDueReminders(prev => prev.filter(r => r.id !== id))}

@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { Bell, X, Clock } from 'lucide-react';
 import { API_URL } from '../../config';
 
@@ -7,7 +8,8 @@ const SNOOZE_OPTIONS = [
     { label: '1 godz', minutes: 60 },
 ];
 
-// @anchor task-reminder-toast
+// @anchor task-reminder-toast — prawy dolny róg jak pozostałe powiadomienia, nad przyciskiem czatu
+// (dev-tracker). Portal do <body>: wewnątrz <main> (z-10) sidebar (z-20) zakrywał go mimo z-50.
 export default function TaskReminderToast({ reminders, onDismissed }) {
     if (!reminders || reminders.length === 0) return null;
 
@@ -24,10 +26,10 @@ export default function TaskReminderToast({ reminders, onDismissed }) {
         onDismissed(first.id);
     };
 
-    return (
+    return createPortal(
         <div
-            className="fixed z-50 flex flex-col gap-2 animate-fade-in"
-            style={{ top: '4.5rem', left: '1rem', maxWidth: '280px' }}
+            className="fixed z-[10050] flex flex-col gap-2 animate-fade-in"
+            style={{ bottom: '5.5rem', right: '1rem', width: 'min(280px, calc(100vw - 2rem))' }}
         >
             <div
                 className="rounded-xl border border-amber-500/25 shadow-xl overflow-hidden"
@@ -74,6 +76,7 @@ export default function TaskReminderToast({ reminders, onDismissed }) {
                     ))}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }
