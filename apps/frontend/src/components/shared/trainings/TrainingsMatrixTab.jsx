@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
 import { ChevronDown, FileSpreadsheet, X } from 'lucide-react';
-import { STATUS_STYLE, fmtDay, fullName, initials, normTxt, opisDni, orderIdsFromUrl, todayIso, trainingStatus, trainingsApi } from './trainingsShared';
+import { STATUS_STYLE, fmtDay, fullName, initials, normTxt, opisDni, orderIdsFromUrl, todayIso, trainingStatus } from './trainingsShared';
 import { OrderChip, BTN, INPUT } from './TrainingsUi';
 import OrdersMultiSelect from './OrdersMultiSelect';
 import TrainingsTableView from './TrainingsTableView';
@@ -15,14 +15,14 @@ const FILTRY = [
 
 // @anchor trainings-visible-rows — jedno źródło dla tabeli i eksportu Excel (ten sam filtr i kolejność).
 // Pracownik bez żadnego szkolenia NIE trafia na listę — chyba że filtrujemy po zamówieniach
-// (`zamIds`): wtedy pokazujemy wszystkich przypisanych i cały zespół zamówienia (`teamOrderIds`),
-// żeby było widać, komu brakuje szkoleń. Najpilniejsi na górze.
+// (`zamIds`): wtedy pokazujemy cały zespół zamówienia (`teamOrderIds`), żeby było widać, komu
+// brakuje szkoleń. Najpilniejsi na górze.
 export function visibleRows(users, types, { query, filtr, zamIds = [], ordersById = {} }, today = todayIso()) {
     const q = normTxt(query).trim();
     const typeById = Object.fromEntries(types.map(t => [t.id, t]));
     return users
         .filter(u => (zamIds.length
-            ? [...u.orderIds, ...(u.teamOrderIds || [])].some(id => zamIds.includes(id))
+            ? (u.teamOrderIds || []).some(id => zamIds.includes(id))
             : u.trainings.length > 0))
         .map(u => ({
             u,
@@ -31,21 +31,20 @@ export function visibleRows(users, types, { query, filtr, zamIds = [], ordersByI
         .filter(({ u }) => {
             if (filtr !== 'wszystkie' && !u.trainings.some(ut => trainingStatus(ut, today) === filtr)) return false;
             if (!q) return true;
-            const tekst = normTxt(`${fullName(u)} ${u.team} ${u.trainings.map(ut => `${typeById[ut.trainingTypeId]?.name} ${typeById[ut.trainingTypeId]?.code}`).join(' ')} ${u.orderIds.map(id => ordersById[id]?.name).join(' ')}`);
+            const tekst = normTxt(`${fullName(u)} ${u.team} ${u.trainings.map(ut => `${typeById[ut.trainingTypeId]?.name} ${typeById[ut.trainingTypeId]?.code}`).join(' ')} ${(u.teamOrderIds || []).map(id => ordersById[id]?.name).join(' ')}`);
             return q.split(/\s+/).every(t => tekst.includes(t));
         })
         .sort((a, b) => (a.najblizszy?.validUntil || '9999').localeCompare(b.najblizszy?.validUntil || '9999')
             || (a.u.lastName || '').localeCompare(b.u.lastName || '', 'pl'));
 }
 
-// @anchor trainings-matrix-tab — macierz pracownik × typ szkolenia z datami ważności, kolumna
-// „Zamówienia" (wielowybór) i szuflada ze szczegółami pracownika (najwyżej jedna otwarta).
+// @anchor trainings-matrix-tab — macierz pracownik × typ szkolenia z datami ważności i szuflada
+// ze szczegółami pracownika (najwyżej jedna otwarta). Zamówienia osoby = zespół zamówienia.
 export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, onDelete }) {
     const { users, types, orders } = data;
     const [query, setQuery] = useState('');
     const [filtr, setFiltr] = useState('wszystkie');
     const [otwarty, setOtwarty] = useState(null);
-    const [wybor, setWybor] = useState(null); // { userId, anchor }
     const [exporting, setExporting] = useState(false);
     // @anchor trainings-view-mode — 'macierz' (pracownik × typ) albo 'tabela' (wiersz = pracownik × szkolenie)
     const [widok, setWidok] = useState('macierz');
@@ -70,20 +69,6 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
         .filter(t => t.orderIds.includes(orderId))
         .filter(t => { const ut = u.trainings.find(x => x.trainingTypeId === t.id); return !ut || trainingStatus(ut, today) === 'zle'; })
         .map(t => t.code || t.name).join(', '), [types, today]);
-
-    const zamknijWybor = useCallback(async (ids) => {
-        const w = wybor;
-        setWybor(null);
-        if (!w) return;
-        ostatnioZamkniety.current = { userId: w.userId, t: Date.now() };
-        const u = users.find(x => x.id === w.userId);
-        if ([...ids].sort().join() === [...u.orderIds].sort().join()) return;
-        try {
-            await trainingsApi(`/users/${w.userId}/orders`, { method: 'PUT', body: { orderIds: ids } });
-            toast(`${fullName(u)}: zamówień ${ids.length}`);
-            onReload();
-        } catch (e) { toast(`Nie zapisano zamówień: ${e.message}`, true); }
-    }, [wybor, users, toast, onReload]);
 
     // @anchor open-training-cell-edit — klik w komórkę szkolenia (macierz, szuflada, Tabela) otwiera
     // edytor pod nią; nie rozwija przy tym szuflady wiersza.
@@ -111,7 +96,7 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
         setExporting(false);
     };
 
-    const kolumn = types.length + 3;
+    const kolumn = types.length + 2;
     // komórka przyklejona do lewej przy przewijaniu macierzy w bok (tablet)
     const sticky = 'sticky left-0 z-[1] bg-[#070c17] shadow-[1px_0_0_rgba(255,255,255,.08)]';
 
@@ -152,7 +137,7 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                 </button>
                 <span className="w-full text-[11px] text-gray-500">
                     {zamIds.length
-                        ? `pokazano ${wiersze.length} pracowników przypisanych do wybranych zamówień lub z ich zespołu`
+                        ? `pokazano ${wiersze.length} pracowników z zespołu wybranych zamówień`
                         : `pokazano ${wiersze.length} z ${zeSzkoleniami} · ukryto ${users.length - zeSzkoleniami} bez szkoleń`}
                 </span>
             </div>
@@ -172,7 +157,6 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                     <thead>
                         <tr className="bg-[#0b1220] text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">
                             <th className={`${sticky} z-[2] !bg-[#0b1220] min-w-[190px] px-3 py-2.5`}>Pracownik</th>
-                            <th className="w-[240px] px-3 py-2.5">Zamówienia</th>
                             {types.map(t => (
                                 <th key={t.id} title={t.name} className="min-w-[96px] px-2 py-2.5 text-center">
                                     {t.code || t.name}
@@ -190,8 +174,6 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                         )}
                         {wiersze.map(({ u, najblizszy }) => {
                             const otw = otwarty === u.id;
-                            const pokaz = u.orderIds.slice(0, 2);
-                            const reszta = u.orderIds.length - pokaz.length;
                             return (
                                 <Fragment key={u.id}>
                                     <tr onClick={() => setOtwarty(otw ? null : u.id)} className={`cursor-pointer border-t border-white/[.06] ${otw ? 'bg-[#0c1420]' : 'hover:bg-white/[.025]'}`}>
@@ -215,19 +197,6 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                                                         );
                                                     })()}
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-2 py-1.5" onClick={e => {
-                                            e.stopPropagation();
-                                            const z = ostatnioZamkniety.current;
-                                            if (z.userId === u.id && Date.now() - z.t < 400) return;
-                                            setWybor({ userId: u.id, anchor: e.currentTarget });
-                                        }}>
-                                            <div className={`relative flex min-h-[34px] w-[230px] cursor-pointer flex-wrap items-center gap-1 rounded-md border py-1 pl-1 pr-6 ${wybor?.userId === u.id ? 'border-teal-500 bg-teal-500/5' : 'border-transparent hover:border-white/15'}`}>
-                                                {!u.orderIds.length && <span className="pl-1 text-[11px] italic text-gray-600">wybierz zamówienia…</span>}
-                                                {pokaz.map(id => <OrderChip key={id} compact order={ordersById[id]} warn={ordersById[id]?.closed ? '' : brakujace(u, id)} />)}
-                                                {reszta > 0 && <span className="text-[10.5px] text-gray-500">+{reszta}</span>}
-                                                <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-500" />
                                             </div>
                                         </td>
                                         {types.map(t => {
@@ -329,16 +298,6 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                     onSaved={msg => { zamknijEdycje(edycja); toast(msg); onReload(); }}
                     onError={msg => toast(msg, true)}
                     onDelete={(u, ut, t) => { zamknijEdycje(edycja); onDelete(u, ut, t); }}
-                />
-            )}
-
-            {wybor && (
-                <OrdersMultiSelect
-                    orders={orders}
-                    selectedIds={users.find(x => x.id === wybor.userId)?.orderIds || []}
-                    anchor={wybor.anchor}
-                    onClose={zamknijWybor}
-                    warnOf={id => (ordersById[id]?.closed ? '' : brakujace(users.find(x => x.id === wybor.userId), id))}
                 />
             )}
         </div>

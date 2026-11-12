@@ -125,8 +125,8 @@ export class TrainingAlertsService {
     // @anchor training-alert-compute — dwa niezależne źródła pozycji:
     // 1) zaświadczenia: KAŻDY aktywny pracownik × jego szkolenie z datą ważności, które wygasło albo
     //    kończy się w ciągu progu — bez względu na zamówienia (etapy z ustawień tu nie grają);
-    // 2) braki (opcja): aktywne zamówienie (etap z ustawień i NIE zamknięte) × osoba przypisana w
-    //    kolumnie „Zamówienia" LUB z zespołu zamówienia × wymagane szkolenie, którego nie ma wcale.
+    // 2) braki (opcja): aktywne zamówienie (etap z ustawień i NIE zamknięte) × członek zespołu
+    //    zamówienia × wymagane szkolenie, którego nie ma wcale.
     async computeAlerts(today = warsawNow().day) {
         const s = await this.getSettings();
         const todayMs = Date.parse(`${today}T00:00:00Z`);
@@ -149,7 +149,6 @@ export class TrainingAlertsService {
                 select: {
                     id: true, name: true, orderStage: true, parent: { select: { name: true } },
                     requiredTrainings: { select: { trainingType: { select: { id: true, name: true, code: true } } } },
-                    assignedUsers: { where: { user: { isActive: true } }, select: { user: { select: personSel } } },
                     orderTeam: { select: { users: { where: { isActive: true }, select: personSel } } },
                 },
                 orderBy: { name: 'asc' },
@@ -158,12 +157,8 @@ export class TrainingAlertsService {
         const closure = await this.trainings.orderClosureMap(orders.map(o => o.id));
         const active = orders.filter(o => !closure.get(o.id)?.closed);
         const closedSkipped = orders.length - active.length;
-        // @anchor training-order-people — osoby zamówienia: przypisane w Szkoleniach ∪ zespół zamówienia
-        const peopleOf = (o: typeof orders[number]) => {
-            const byId = new Map<string, typeof o.assignedUsers[number]['user']>();
-            for (const p of [...o.assignedUsers.map(a => a.user), ...(o.orderTeam?.users || [])]) byId.set(p.id, p);
-            return [...byId.values()];
-        };
+        // @anchor training-order-people — osoby zamówienia = aktywni członkowie zespołu zamówienia
+        const peopleOf = (o: typeof orders[number]) => o.orderTeam?.users || [];
         // kontekst do zaświadczeń: które aktywne zamówienia danej osoby wymagają danego szkolenia
         const ctx = new Map<string, { id: string; name: string }[]>();
         for (const o of active) {
@@ -278,8 +273,8 @@ export class TrainingAlertsService {
               Każdy pracownik dostaje też osobne przypomnienie o swoich zaświadczeniach.</p>
             ${certSection}${missingSection}
             <p style="margin:24px 0 4px"><a href="${esc(this.appUrl('/szkolenia'))}" style="display:inline-block;background:#0d9488;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:bold">Otwórz Szkolenia w Ignite</a></p>
-            <p style="margin:16px 0 0;color:#999;font-size:11px">Wiadomość automatyczna. Braki szkoleń liczone są dla osób przypisanych do aktywnego zamówienia
-              lub będących w jego zespole; zamówienia zamknięte (wszystkie pozycje odebrane protokołem) są pomijane.
+            <p style="margin:16px 0 0;color:#999;font-size:11px">Wiadomość automatyczna. Braki szkoleń liczone są dla członków zespołu
+              aktywnego zamówienia; zamówienia zamknięte (wszystkie pozycje odebrane protokołem) są pomijane.
               Ustawienia: System › Użytkownicy › Szkolenia › Powiadomienia e-mail.</p>
           </div>`;
         return { subject, html };

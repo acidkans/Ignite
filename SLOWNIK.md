@@ -3620,7 +3620,6 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-stala | ORDER_STAGE_LABEL | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor order-stage-labels |
 | ui-dropdown | OrdersMultiSelect | apps/frontend/src/components/shared/trainings/OrdersMultiSelect.jsx | @anchor orders-multi-select |
 | back-funkcja | parseIsoDay() | apps/backend/src/trainings/trainings.service.ts | @anchor parse-iso-day |
-| schema-relacja | ProcessNode.assignedUsers | apps/backend/prisma/schema.prisma | @anchor process-node-assigned-users |
 | schema-relacja | ProcessNode.requiredTrainings | apps/backend/prisma/schema.prisma | @anchor process-node-required-trainings |
 | ui-widok | Route /szkolenia | apps/frontend/src/App.jsx | @anchor route-szkolenia |
 | ui-przycisk | Szkolenia (pozycja szuflady Użytkownicy) | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-szkolenia-button |
@@ -3658,7 +3657,7 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-typ | TrainingUserMail — osobisty mail pracownika o jego zaświadczeniach | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-user-mail |
 | back-funkcja | buildUserMails() — jeden mail na pracownika z wygasającymi/wygasłymi zaświadczeniami | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-user-mails |
 | back-stala | TRAINING_NOTIFICATION_TYPE — `TRAINING_EXPIRY`, typ powiadomienia w dzwonku | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-notification-type |
-| back-funkcja | peopleOf() — osoby zamówienia: przypisani ∪ zespół zamówienia | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-order-people |
+| back-funkcja | peopleOf() — osoby zamówienia = aktywni członkowie zespołu zamówienia | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-order-people |
 | ui-funkcja | trainingStatus() | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor training-status |
 | ui-stala | STATUS_STYLE | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor training-status-style |
 | schema-model | TrainingType | apps/backend/prisma/schema.prisma | @anchor training-type |
@@ -3708,7 +3707,6 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-modal | Kalendarz zadań (TasksCalendarSection po kliknięciu w datę) | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-tasks-calendar-modal |
 | ui-funkcja | formatTaskDates (Od–Do zadania na liście Moje zadania) | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-date-range |
 | back-serwis | TrainingsService | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-service |
-| back-funkcja | setUserOrders() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-set-user-orders |
 | ui-stala | TRAINING_TABS | apps/frontend/src/TrainingsPage.jsx | @anchor trainings-tab-meta |
 | ui-sekcja | pasek zakładek Szkoleń | apps/frontend/src/TrainingsPage.jsx | @anchor trainings-tab-selector |
 | ui-funkcja | todayIso() | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor trainings-today |
@@ -3716,12 +3714,9 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-stala | BTN / BTN_PRIMARY / INPUT / LABEL | apps/frontend/src/components/shared/trainings/TrainingsUi.jsx | @anchor trainings-ui-classes |
 | back-funkcja | updateType() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-update-type |
 | back-funkcja | upsertUserTraining() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-upsert-user-training |
-| back-endpoint | PUT /trainings/users/:userId/orders | apps/backend/src/trainings/trainings.controller.ts | @anchor trainings-user-orders-endpoint |
 | back-endpoint | PUT /trainings/user-trainings, DELETE /trainings/user-trainings/:id | apps/backend/src/trainings/trainings.controller.ts | @anchor trainings-user-trainings-endpoints |
 | ui-funkcja | visibleRows() | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-visible-rows |
 | ui-stala | WARN_DAYS | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor trainings-warn-days |
-| schema-relacja | User.assignedOrders | apps/backend/prisma/schema.prisma | @anchor user-assigned-orders |
-| schema-model | UserOrder | apps/backend/prisma/schema.prisma | @anchor user-order |
 | schema-model | UserTraining | apps/backend/prisma/schema.prisma | @anchor user-training |
 | schema-pole | UserTraining.certificateNo | apps/backend/prisma/schema.prisma | @anchor user-training-certificate-no |
 | schema-pole | UserTraining.completedAt | apps/backend/prisma/schema.prisma | @anchor user-training-completed-at |
