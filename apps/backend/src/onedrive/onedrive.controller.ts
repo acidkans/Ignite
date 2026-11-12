@@ -12,7 +12,7 @@ import { OneDriveService } from './onedrive.service';
 import { OneDriveSyncService } from './onedrive-sync.service';
 import { OneDriveSharedOffersService } from './onedrive-shared-offers.service';
 import { ConfigService } from '@nestjs/config';
-import { ORDER_FOLDERS, ORDER_ROOT_FOLDERS, UPLOAD_CATEGORY_FOLDER, orderFolderPath } from './order-folders';
+import { ORDER_FOLDERS, ORDER_ROOT_FOLDERS, ORDER_ROOT_TARGETS, UPLOAD_CATEGORY_FOLDER, orderFolderPath } from './order-folders';
 
 // @anchor onedrive-controller
 @Controller('onedrive')
@@ -82,7 +82,11 @@ export class OneDriveController {
   folders() {
     return {
       roots: ORDER_ROOT_FOLDERS,
-      folders: ORDER_FOLDERS.map((f) => ({ ...f, path: orderFolderPath(f.key) })),
+      // Katalogi główne (`root:<…>`) też są celem zapisu — eksporty finansowe idą luzem do „01”.
+      folders: [
+        ...Object.keys(ORDER_ROOT_TARGETS).map((key) => ({ key, ...ORDER_ROOT_TARGETS[key], path: orderFolderPath(key) })),
+        ...ORDER_FOLDERS.map((f) => ({ ...f, path: orderFolderPath(f.key) })),
+      ],
       categoryFolders: UPLOAD_CATEGORY_FOLDER,
     };
   }
@@ -160,7 +164,7 @@ export class OneDriveController {
     // `subfolder` przychodzi z FormData, więc pusty wybór to pusty string, a nie undefined —
     // bez tego `ensureSubfolder` próbowałby założyć katalog o pustej nazwie.
     const subfolder = (body.subfolder || '').trim() || undefined;
-    const folderKey = body.folderKey || (body.category === 'dokumentacja' ? 'reports' : subfolder ? 'protocols' : 'budget');
+    const folderKey = body.folderKey || (body.category === 'dokumentacja' ? 'reports' : subfolder ? 'protocols' : 'root:finance');
     return this.oneDriveService.uploadFile(body.nodeId, folderKey, filename, file.buffer, file.mimetype, { subfolder });
   }
 

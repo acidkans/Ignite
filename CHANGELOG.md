@@ -1,3 +1,17 @@
+## 2026-11-13 — feat(onedrive): eksporty finansowe luzem w 01, bez katalogu „Analiza budżetu”, „Oferty dostawców” zakładane przy pierwszej ofercie, „Zamówienia i faktury” w Plikach finansowych (v2026.11.13.0023)
+
+### architektura / API
+- struktura zamówienia na OneDrive: usunięto katalog „01/Analiza budżetu”; „01/Oferty dostawców” (`lazy`) zakładany dopiero przy pierwszym zapisie z aplikacji (ręcznie założony na OneDrive jest odnajdywany przy synchronizacji); „01/Zamówienia i faktury” synchronizowany jako kategoria `invoice`
+- eksporty oferty i budżetu (Excel i PDF sekcji) zapisują się luzem w „01 Dokumenty finansowe” (`folderKey` = `root:finance`)
+- pliki luzem w „01” → kategoria `finance` (zakładka Pliki finansowe), luzem w „02”/„03” → `standard` jak dotąd; pliki z dawnej „Analizy budżetu” liczą się jak luzem w „01”. Pierwsza synchronizacja po wdrożeniu przepina kategorie istniejących dokumentów (bez duplikatów — dokument jest aktualizowany), a pominięte dotąd pliki z „Zamówień i faktur” trafiają do kolejki
+- `back-endpoint` `GET /onedrive/folders` — lista `folders` zawiera też katalogi główne (`root:finance`, `root:project`, `root:realization`); `POST /onedrive/upload` przyjmuje `folderKey` = `root:<…>`, domyślny katalog (bez `folderKey`) = `root:finance` zamiast `budget`
+
+### słownik
+- dodano `back-stala` `ORDER_ROOT_TARGETS` (`order-root-targets`), `back-funkcja` `orderFolderTarget` (`order-folder-target`), `back-funkcja` `adoptLazyFolders` (`onedrive-adopt-lazy-folders`)
+
+### wytyczne
+- `back-stala` `ORDER_FOLDERS` — nie rozdrabniamy struktury: nowe eksporty finansowe zapisuj do `root:finance`, nowy podkatalog tylko gdy naprawdę potrzebny, a rzadko używany oznacz `lazy`
+
 ## 2026-11-12 — feat(szkolenia): usunięta kolumna „Zamówienia” (ręczne przypisanie pracownika do zamówień) — powiązanie pracownik ↔ zamówienie wyłącznie przez zespół zamówienia (v2026.11.12.2234)
 
 ### schema.prisma

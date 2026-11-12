@@ -8,7 +8,7 @@ import { pipeline } from 'stream/promises';
 import { PrismaService } from '../prisma/prisma.service';
 import { DocumentsService, DocumentUploadedEvent } from '../documents/documents.service';
 import { OneDriveService } from './onedrive.service';
-import { ORDER_FOLDERS, UPLOAD_CATEGORY_FOLDER, orderFolderPath } from './order-folders';
+import { ORDER_FOLDERS, UPLOAD_CATEGORY_FOLDER, orderFolderPath, orderFolderTarget } from './order-folders';
 import { uploadPath } from '../common/uploads.util';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
@@ -77,7 +77,7 @@ export class OneDriveSyncService implements OnModuleInit {
   // Rekord `DriveFile` dostaje `documentId` i `processedTag = cTag` — synchronizacja nie zaimportuje go ponownie.
   async pushDocument(e: DocumentUploadedEvent): Promise<void> {
     const folderKey = e.folderKey || UPLOAD_CATEGORY_FOLDER[e.category ?? 'standard'];
-    const def = ORDER_FOLDERS.find((d) => d.key === folderKey);
+    const def = orderFolderTarget(folderKey);
     if (!def) return;
     const node = await this.prisma.processNode.findUnique({ where: { id: e.nodeId }, select: { oneDriveFolderId: true } });
     if (!node?.oneDriveFolderId) return;
@@ -156,7 +156,8 @@ export class OneDriveSyncService implements OnModuleInit {
       for (const f of missing) { await this.markDeleted(f); result.deleted++; }
     }
 
-    await this.resolveFolderKeys(nodeId, node.oneDriveFolderId, (node.oneDriveFolderIds as Record<string, string>) || {});
+    const folderIds = await this.adoptLazyFolders(nodeId, (node.oneDriveFolderIds as Record<string, string>) || {});
+    await this.resolveFolderKeys(nodeId, node.oneDriveFolderId, folderIds);
     // Do kolejki dopiero z ustalonym katalogiem — inaczej `processQueue` mógłby wziąć plik przed `resolveFolderKeys`.
     await this.prisma.driveFile.updateMany({ where: { nodeId, scope: 'order', status: 'discovered' }, data: { status: 'pending' } });
     // Ręczna synchronizacja ponawia też pliki, które wyczerpały próby.
@@ -264,6 +265,26 @@ export class OneDriveSyncService implements OnModuleInit {
     return { result, seen };
   }
 
+  // @anchor onedrive-adopt-lazy-folders
+  // Katalog `lazy` (np. „Oferty dostawców”) założony ręcznie na OneDrive, zanim aplikacja coś do niego zapisała —
+  // odnajdywany po nazwie w swoim katalogu głównym (z rejestru `DriveFile`) i dopisywany do `oneDriveFolderIds`.
+  private async adoptLazyFolders(nodeId: string, folderIds: Record<string, string>): Promise<Record<string, string>> {
+    const missing = ORDER_FOLDERS.filter((d) => d.lazy && !folderIds[d.key] && folderIds[`root:${d.root}`]);
+    if (!missing.length) return folderIds;
+    const next = { ...folderIds };
+    for (const d of missing) {
+      const hit = await this.prisma.driveFile.findFirst({
+        where: { nodeId, scope: 'order', isFolder: true, status: { not: 'deleted' }, parentItemId: folderIds[`root:${d.root}`], name: d.name },
+        select: { driveItemId: true },
+      });
+      if (hit) next[d.key] = hit.driveItemId;
+    }
+    if (Object.keys(next).length !== Object.keys(folderIds).length) {
+      await this.prisma.processNode.update({ where: { id: nodeId }, data: { oneDriveFolderIds: next } });
+    }
+    return next;
+  }
+
   // @anchor onedrive-resolve-folder-keys
   // Ustala katalog struktury każdego pliku, idąc w górę po `parentItemId` aż do katalogu z `oneDriveFolderIds`.
   // Liczone po każdej synchronizacji (tylko baza) — przeniesienie katalogu na OneDrive nie zgłasza w delcie
@@ -276,12 +297,13 @@ export class OneDriveSyncService implements OnModuleInit {
     const all = await this.prisma.driveFile.findMany({ where: { nodeId, scope: 'order', status: { not: 'deleted' } } });
     const folders = new Map(all.filter((f) => f.isFolder).map((f) => [f.driveItemId, f]));
 
-    // null = w strukturze, ale poza podkatalogiem (luzem w 01/02/03) → import jako dokumentacja.
+    // `root:<…>` = w strukturze, ale poza podkatalogiem (luzem w 01/02/03) → kategoria katalogu głównego
+    // (01 → Pliki finansowe, 02/03 → dokumentacja).
     const keyFor = (parentId: string | null): string | null => {
       let cur = parentId;
       for (let depth = 0; cur && depth < 30; depth++) {
         const key = byId.get(cur);
-        if (key) return key.startsWith('root:') ? null : key;
+        if (key) return key;
         if (cur === orderFolderId) return OUTSIDE_KEY;
         const f = folders.get(cur);
         if (!f) return OUTSIDE_KEY;
@@ -294,8 +316,15 @@ export class OneDriveSyncService implements OnModuleInit {
     for (const f of all) {
       if (f.isFolder) continue;
       const key = keyFor(f.parentItemId);
-      if (key === f.folderKey) continue;
-      const def = ORDER_FOLDERS.find((d) => d.key === key);
+      const def = orderFolderTarget(key);
+      if (key === f.folderKey) {
+        // Katalog dostał kategorię (np. „Zamówienia i faktury”) — pliki pominięte dotąd wracają do kolejki.
+        // Eksporty zapisane z aplikacji (`source = 'app'`) zostają tylko na OneDrive, jak dotąd.
+        if (def?.documentCategory && f.status === 'skipped' && f.source !== 'app' && !f.documentId && !f.error && !f.ignored) {
+          await this.prisma.driveFile.update({ where: { id: f.id }, data: { status: 'pending', attempts: 0 } });
+        }
+        continue;
+      }
       // Wyniesiony poza strukturę → znika z aplikacji (zostaje na OneDrive).
       if ((key === OUTSIDE_KEY || key === LEGACY_KEY) && f.documentId) {
         await this.documents.deleteDocument(f.documentId, true).catch(() => null);
@@ -402,7 +431,7 @@ export class OneDriveSyncService implements OnModuleInit {
 
   // @anchor onedrive-process-file
   private async processFile(f: any): Promise<void> {
-    const def = ORDER_FOLDERS.find((d) => d.key === f.folderKey);
+    const def = orderFolderTarget(f.folderKey);
     if (await this.syncBlockedReason(f.nodeId)) {
       await this.prisma.driveFile.update({ where: { id: f.id }, data: { status: 'skipped', error: 'Zamówienie archiwalne lub rozliczone' } });
       return;
@@ -466,7 +495,7 @@ export class OneDriveSyncService implements OnModuleInit {
       const ext = path.extname(meta.name || '').toLowerCase();
       const rel = shared
         ? path.posix.join('_shared', 'offers', f.supplierId || '_bez_dostawcy', `${f.driveItemId}${ext}`)
-        : path.posix.join(f.nodeId, def ? orderFolderPath(def.key) : '_luzem', `${f.driveItemId}${ext}`);
+        : path.posix.join(f.nodeId, def ? def.path : '_luzem', `${f.driveItemId}${ext}`);
       const full = uploadPath(rel);
       fs.mkdirSync(path.dirname(full), { recursive: true });
       const res = await axios.get(downloadUrl, { responseType: 'stream' });

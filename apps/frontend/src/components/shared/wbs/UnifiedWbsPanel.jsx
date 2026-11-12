@@ -1630,7 +1630,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 title: 'Analiza projektu (Excel) — SAME KOSZTY',
                 defaultFilename: costsOnlyFilename(`${safeFileBase()}_budzet.xlsx`),
                 makeArtifact: handleExportBudgetExcel,
-                oneDriveFolderKey: 'budget',
+                oneDriveFolderKey: 'root:finance',
             });
             return;
         }
@@ -1641,7 +1641,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
                 title: exportNoPricesRef.current ? 'Tabele oferty (Excel) — BEZ CEN' : 'Tabele oferty (Excel)',
                 defaultFilename: exportNoPricesRef.current ? noPricesFilename(fn) : fn,
                 makeArtifact: handleExportOfertaWbsExcel,
-                oneDriveFolderKey: 'clientOffer',
+                oneDriveFolderKey: 'root:finance',
             });
             return;
         }
@@ -1650,7 +1650,7 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
             title: exportNoPricesRef.current ? 'Analiza projektu (Excel) — BEZ CEN' : 'Analiza projektu (Excel)',
             defaultFilename: exportNoPricesRef.current ? noPricesFilename(fn) : fn,
             makeArtifact: handleExportBudgetExcel,
-            oneDriveFolderKey: 'budget',
+            oneDriveFolderKey: 'root:finance',
         });
     };
 
@@ -1689,8 +1689,8 @@ export default function UnifiedWbsPanel({ nodeId, versionId, onWbsUpdate, onWbsD
         // Modal otwieramy natychmiast; ciężki build HTML (fetch logo, schematów,
         // materiałów, wklejanie obrazów base64) dzieje się dopiero po wyborze akcji —
         // wcześniej klik blokował UI na kilka sekund zanim modal się pojawił.
-        // Katalog OneDrive wg sekcji: oferta → nasza oferta, budżet / harmonogram / materiały → swoje katalogi, reszta → raporty.
-        const sectionFolder = { oferta: 'clientOffer', budget: 'budget', gantt: 'reports', materials: 'materials' };
+        // Katalog OneDrive wg sekcji: oferta i budżet → luzem w „01 Dokumenty finansowe”, harmonogram / materiały → swoje katalogi, reszta → raporty.
+        const sectionFolder = { oferta: 'root:finance', budget: 'root:finance', gantt: 'reports', materials: 'materials' };
         openExport({
             title: `Eksport PDF: ${labels[sectionKey] || sectionKey}`,
             defaultFilename: filename,

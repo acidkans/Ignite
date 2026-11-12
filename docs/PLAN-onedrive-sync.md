@@ -24,10 +24,9 @@ Analiza AI czyta tylko z serwera (baza + Qdrant), nigdy z OD w trakcie analizy.
 
 ```
 <Nazwa zamówienia>/
-├── 01 Dokumenty finansowe/
-│   ├── Oferty dostawców/
+├── 01 Dokumenty finansowe/          ← eksporty oferty i budżetu luzem (`root:finance`)
+│   ├── Oferty dostawców/            ← zakładany przy pierwszej ofercie (`lazy`)
 │   ├── Oferta finansowa/
-│   ├── Analiza budżetu/
 │   ├── Zamówienia i faktury/
 │   └── Protokoły odbioru/<gałąź>/
 ├── 02 Dokumentacja projektowa/
@@ -45,10 +44,10 @@ Jedno źródło prawdy: stała `back-stala` `ORDER_FOLDERS` w `apps/backend/src/
 
 | Klucz | Ścieżka | `documentCategory` | Przetwarzanie | Zakładka w aplikacji |
 |---|---|---|---|---|
-| `supplierOffers` | 01/Oferty dostawców | `financial` | indeks AI + parser ofert (ręczne zatwierdzenie jak dziś) | Pliki finansowe |
+| `root:finance` | 01 (luzem) | `finance` | indeks AI; tu trafiają eksporty oferty i budżetu (od 2026-11-13, wcześniej `budget` → „01/Analiza budżetu”, katalog usunięty — pliki w starym liczą się jak luzem w 01) | Pliki finansowe |
+| `supplierOffers` | 01/Oferty dostawców | `financial` | indeks AI + parser ofert (ręczne zatwierdzenie jak dziś); `lazy` — zakładany przy pierwszym zapisie | Pliki finansowe |
 | `clientOffer` | 01/Oferta finansowa | `clientOffer` | indeks AI | Pliki finansowe |
-| `budget` | 01/Analiza budżetu | `budget` | bez indeksu (XLSX z aplikacji) | Pliki finansowe |
-| `invoices` | 01/Zamówienia i faktury | — | **pomijany przez sync** (tylko katalog na OD, brak obsługi w aplikacji) | — |
+| `invoices` | 01/Zamówienia i faktury | `invoice` | bez indeksu (od 2026-11-13; wcześniej pomijany przez sync) | Pliki finansowe |
 | `protocols` | 01/Protokoły odbioru | `protocol` | bez indeksu | Pliki finansowe |
 | `clientDocs` | 02/Dokumentacja klienta | `standard` | indeks AI (źródło wymagań) | Pliki |
 | `datasheets` | 02/Karty katalogowe | `datasheet` | indeks AI | Pliki |
