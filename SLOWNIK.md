@@ -3623,6 +3623,8 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-przycisk | Szkolenia (pozycja szuflady Użytkownicy) | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-szkolenia-button |
 | ui-panel | szuflada Użytkownicy (Lista użytkowników + Szkolenia) | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-users-drawer |
 | ui-stan | usersDrawerOpen | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-users-drawer-open |
+| ui-input | filter — pole „Szukaj...” w lewym panelu, przypięte do góry (sticky), Esc/✕ czyści | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-filtr |
+| ui-funkcja | filtrWbs — filtr panelu szuka też w gałęziach i pozycjach WBS aktywnego zamówienia | apps/frontend/src/components/Layout/DynamicSidebar.jsx | @anchor sidebar-filtr-liscie |
 | back-funkcja | bucketOf() | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-bucket |
 | back-funkcja | computeAlerts() | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-compute |
 | back-typ | TrainingAlertItem | apps/backend/src/trainings/training-alerts.service.ts | @anchor training-alert-item |
