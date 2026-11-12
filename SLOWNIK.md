@@ -3676,6 +3676,14 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | ui-stan | ostatnioZamkniety | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-last-closed-select |
 | ui-zakladka | TrainingsMatrixTab | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-matrix-tab |
 | ui-tabela | TrainingsTableView | apps/frontend/src/components/shared/trainings/TrainingsTableView.jsx | @anchor trainings-table-view |
+| ui-modal | TrainingCellEditor (popover edycji inline szkolenia pracownika) | apps/frontend/src/components/shared/trainings/TrainingCellEditor.jsx | @anchor training-cell-editor |
+| ui-stan | edycja | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-cell-edit |
+| ui-funkcja | otworzEdycje() | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor open-training-cell-edit |
+| ui-funkcja | trainingsOrderUrl() / orderIdsFromUrl() | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor trainings-order-url |
+| ui-funkcja | isAdminToken() | apps/frontend/src/components/shared/trainings/trainingsShared.js | @anchor trainings-is-admin |
+| ui-przycisk | Szkolenia (link z Informacji o zamówieniu) | apps/frontend/src/components/shared/RequirementsTab.jsx | @anchor order-trainings-link |
+| back-dto | users[].teamOrderIds (GET /trainings/overview) | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-team-order-ids |
+| ui-sekcja | plakietka „zespół zamówienia” w macierzy Szkoleń | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-team-badge |
 | ui-stan | widok | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-view-mode |
 | ui-stan | zamIds | apps/frontend/src/components/shared/trainings/TrainingsMatrixTab.jsx | @anchor trainings-order-filter |
 | ui-modal | Modal | apps/frontend/src/components/shared/trainings/TrainingsUi.jsx | @anchor trainings-modal |

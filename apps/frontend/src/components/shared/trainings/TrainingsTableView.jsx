@@ -5,7 +5,8 @@ import { OrderChip } from './TrainingsUi';
 // @anchor trainings-table-view — widok listy: jeden wiersz = pracownik × szkolenie, pełna nazwa
 // szkolenia. Bierze te same wiersze co macierz (`visibleRows`); przy filtrze statusu zostają tylko
 // szkolenia w tym statusie. Najpilniejsze terminy na górze.
-export default function TrainingsTableView({ wiersze, typeById, ordersById, filtr, onAssign, onDelete, today = todayIso() }) {
+// Ukończone / Ważne do / Nr zaświadczenia edytowalne inline (`onEdit` otwiera edytor pod komórką).
+export default function TrainingsTableView({ wiersze, typeById, ordersById, filtr, onAssign, onDelete, onEdit, edycja, today = todayIso() }) {
     const pozycje = useMemo(() => wiersze
         .flatMap(({ u }) => u.trainings.map(ut => ({ u, ut, t: typeById[ut.trainingTypeId], st: trainingStatus(ut, today) })))
         .filter(p => p.t && (filtr === 'wszystkie' || p.st === filtr))
@@ -30,7 +31,11 @@ export default function TrainingsTableView({ wiersze, typeById, ordersById, filt
                     {!pozycje.length && (
                         <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-500">Brak szkoleń spełniających kryteria</td></tr>
                     )}
-                    {pozycje.map(({ u, ut, t, st }) => (
+                    {pozycje.map(({ u, ut, t, st }) => {
+                        const akt = edycja?.userId === u.id && edycja?.typeId === ut.trainingTypeId;
+                        const edyt = `cursor-pointer hover:bg-white/[.04] ${akt ? 'bg-teal-500/5 outline outline-1 -outline-offset-1 outline-teal-500/60' : ''}`;
+                        const klik = e => onEdit?.(e, u.id, ut.trainingTypeId);
+                        return (
                         <tr key={ut.id} className="border-t border-white/[.06] align-top hover:bg-white/[.025]">
                             <td className="px-3 py-2">
                                 <div className="font-semibold text-gray-100">{fullName(u)}</div>
@@ -40,12 +45,12 @@ export default function TrainingsTableView({ wiersze, typeById, ordersById, filt
                                 <div className="text-gray-100">{t.name}</div>
                                 <div className="text-[10.5px] text-gray-500">{[t.code, t.validityMonths ? `${t.validityMonths} mies.` : 'bezterminowe'].filter(Boolean).join(' · ')}</div>
                             </td>
-                            <td className="whitespace-nowrap px-3 py-2 tabular-nums">{fmtDay(ut.completedAt)}</td>
-                            <td className="whitespace-nowrap px-3 py-2 tabular-nums">
+                            <td className={`whitespace-nowrap px-3 py-2 tabular-nums ${edyt}`} title="Kliknij, aby edytować" onClick={klik}>{fmtDay(ut.completedAt)}</td>
+                            <td className={`whitespace-nowrap px-3 py-2 tabular-nums ${edyt}`} title="Kliknij, aby edytować" onClick={klik}>
                                 <span className={`rounded px-1.5 py-0.5 text-[11px] ${STATUS_STYLE[st]}`}>{ut.validUntil ? fmtDay(ut.validUntil) : '∞'}</span>
                                 <div className="mt-0.5 text-[10px] text-gray-500">{opisDni(ut, today)}</div>
                             </td>
-                            <td className="px-3 py-2">{ut.certificateNo || <span className="text-gray-700">—</span>}</td>
+                            <td className={`px-3 py-2 ${edyt}`} title="Kliknij, aby edytować" onClick={klik}>{ut.certificateNo || <span className="text-gray-700">—</span>}</td>
                             <td className="px-3 py-2">
                                 {t.orderIds.length
                                     ? <div className="flex flex-wrap gap-1">{t.orderIds.map(id => <OrderChip key={id} compact order={ordersById[id]} />)}</div>
@@ -57,7 +62,8 @@ export default function TrainingsTableView({ wiersze, typeById, ordersById, filt
                                 <button onClick={() => onDelete(u, ut, t)} className="px-1.5 py-1.5 text-red-400 hover:underline">Usuń</button>
                             </td>
                         </tr>
-                    ))}
+                        );
+                    })}
                 </tbody>
             </table>
         </div>

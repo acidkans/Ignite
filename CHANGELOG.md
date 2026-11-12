@@ -1,3 +1,18 @@
+## 2026-11-12 — feat(szkolenia): edycja inline szkoleń w macierzy, szufladzie i Tabeli, link „Szkolenia” w Informacjach o zamówieniu, filtr zamówień obejmuje zespół zamówienia (v2026.11.12.1825)
+
+### architektura / API
+- `back-endpoint` `GET /trainings/overview` — nowe pole `users[].teamOrderIds` (zamówienia, w których zespole jest osoba — `Team.orderNodeId`); `users[].team` zawiera teraz tylko zespoły działowe (jak wcześniej, filtr przeniesiony do JS)
+- `ui-modal` `TrainingCellEditor` — popover edycji pary pracownik × typ (Ukończone / Ważne do / Nr zaświadczenia) pod klikniętą komórką macierzy, szuflady pracownika i widoku Tabela; zapis przez istniejący `PUT /trainings/user-trainings` (bez zmian w API); pusta komórka = nowe szkolenie z dzisiejszą datą
+- `ui-przycisk` `order-trainings-link` — w Informacjach o zamówieniu (pasek „Zespół zamówienia”) przycisk „Szkolenia” → `/szkolenia?zamowienie=<id>`, tylko ADMIN
+- `ui-funkcja` `visibleRows` — filtr zamówień pokazuje osoby przypisane (`orderIds`) ORAZ zespół zamówienia (`teamOrderIds`); `ui-sekcja` plakietka „zespół zamówienia” (⚠ czerwona, gdy brakuje szkoleń wymaganych przez zamówienie)
+
+### słownik
+- dodano `training-cell-editor`, `trainings-cell-edit`, `open-training-cell-edit`, `trainings-order-url`, `trainings-is-admin`, `order-trainings-link`, `trainings-team-order-ids`, `trainings-team-badge`
+
+### wytyczne
+- `ui-modal` `TrainingCellEditor` — Enter zapisuje, Esc anuluje; klik obok zapisuje tylko po zmianie pola (przypadkowe otwarcie pustej komórki niczego nie tworzy); „Ważne do” liczone z okresu typu, dopóki nie nadpisane ręcznie (wtedy wysyłane jawnie, '' = bezterminowe)
+- `ui-funkcja` `orderIdsFromUrl` — `?zamowienie=` czytany tylko przy montażu macierzy; linki do `/szkolenia` pokazywać wyłącznie adminowi (`isAdminToken`)
+
 ## 2026-11-11 — feat(wbs,realizacja): szybkie dodawanie milestone'a (POST /wbs-nodes/milestone), milestone dodany po akceptacji bez baselinu, mniejsze czcionki zrealizowanych zakupów w Realizacji (v2026.11.11.1729)
 
 ### architektura / API

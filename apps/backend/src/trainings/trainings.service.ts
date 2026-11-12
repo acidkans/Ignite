@@ -84,7 +84,8 @@ export class TrainingsService {
                 where: { isActive: true },
                 select: {
                     id: true, firstName: true, lastName: true, email: true,
-                    teams: { where: { orderNodeId: null }, select: { name: true } },
+                    // zespoły działowe (nazwa) i zespoły zamówień (kto widzi zamówienie) — rozdzielane niżej
+                    teams: { select: { name: true, orderNodeId: true } },
                     trainings: { select: { id: true, trainingTypeId: true, completedAt: true, validUntil: true, certificateNo: true } },
                     assignedOrders: { select: { orderId: true } },
                 },
@@ -104,9 +105,12 @@ export class TrainingsService {
         return {
             users: users.map(u => ({
                 id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email,
-                team: u.teams.map(t => t.name).join(', '),
+                team: u.teams.filter(t => !t.orderNodeId).map(t => t.name).join(', '),
                 trainings: u.trainings.map(t => ({ ...t, completedAt: isoDay(t.completedAt), validUntil: isoDay(t.validUntil) })),
                 orderIds: u.assignedOrders.map(a => a.orderId),
+                // @anchor trainings-team-order-ids — zamówienia, w których zespole jest osoba (widzi je);
+                // filtr zamówień w Szkoleniach pokazuje przypisanych ORAZ zespół zamówienia
+                teamOrderIds: u.teams.filter(t => t.orderNodeId).map(t => t.orderNodeId),
             })),
             types: types.map(t => ({
                 id: t.id, name: t.name, code: t.code, validityMonths: t.validityMonths, description: t.description,
