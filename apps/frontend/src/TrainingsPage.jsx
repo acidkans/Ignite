@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { trainingsApi } from './components/shared/trainings/trainingsShared';
+import { orderIdsFromUrl, trainingsApi } from './components/shared/trainings/trainingsShared';
 import { BTN, BTN_PRIMARY, Confirm } from './components/shared/trainings/TrainingsUi';
 import TrainingsMatrixTab from './components/shared/trainings/TrainingsMatrixTab';
 import TrainingTypesTab from './components/shared/trainings/TrainingTypesTab';
@@ -16,7 +16,8 @@ const TRAINING_TABS = [
 
 // @anchor trainings-page — System › Użytkownicy › Szkolenia (tylko ADMIN; backend pilnuje tego niezależnie).
 export default function TrainingsPage() {
-    const [tab, setTab] = useState(() => sessionStorage.getItem('erp_trainingsTab') || 'users');
+    // link z zamówienia (`?zamowienie=`) zawsze otwiera zakładkę Pracownicy
+    const [tab, setTab] = useState(() => (orderIdsFromUrl().length ? 'users' : sessionStorage.getItem('erp_trainingsTab') || 'users'));
     const [data, setData] = useState(null);
     const [error, setError] = useState('');
     const [typeModal, setTypeModal] = useState(null);     // { type } | { type: null }

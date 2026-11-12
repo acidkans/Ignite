@@ -16,6 +16,20 @@ export async function trainingsApi(path, { method = 'GET', body } = {}) {
     return data;
 }
 
+// @anchor trainings-order-url — link do Szkoleń zawężonych do osób przypisanych do zamówienia
+// (`?zamowienie=<id>[,<id>]`); macierz czyta go przy starcie jako filtr zamówień.
+export const trainingsOrderUrl = (orderId) => `/szkolenia?zamowienie=${encodeURIComponent(orderId)}`;
+export const orderIdsFromUrl = () => (new URLSearchParams(window.location.search).get('zamowienie') || '').split(',').filter(Boolean);
+
+// @anchor trainings-is-admin — moduł Szkoleń jest tylko dla ADMIN (trasa i backend); linki do
+// niego pokazujemy tylko adminowi, żeby nikt nie trafiał na „Brak dostępu".
+export function isAdminToken() {
+    try {
+        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+        return (JSON.parse(atob(token.split('.')[1])).roles || []).includes('ADMIN');
+    } catch { return false; }
+}
+
 // @anchor trainings-today — dzisiejsza data w Polsce jako RRRR-MM-DD (porównania dat bez stref).
 export const todayIso = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw' }).format(new Date());
 

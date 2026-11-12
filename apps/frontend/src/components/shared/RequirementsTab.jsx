@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Clock, Calendar, Target, Package, AlertTriangle, CheckCircle2, Plus, Trash2, GripVertical, Wrench, ClipboardList, ShieldCheck, User, Users, Mail, Phone, PhoneCall, FileDown, UserPlus, UserMinus, Eye, EyeOff, Settings2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Clock, Calendar, Target, Package, AlertTriangle, CheckCircle2, Plus, Trash2, GripVertical, Wrench, ClipboardList, ShieldCheck, User, Users, Mail, Phone, PhoneCall, FileDown, UserPlus, UserMinus, Eye, EyeOff, Settings2, GraduationCap } from 'lucide-react';
 import { API_URL } from '../../config';
 import { exportProjectPdf } from '../../utils/projectPdfExport';
 import { buildRequirementsArtifact } from '../../utils/requirementsPdfExport';
@@ -8,7 +9,7 @@ import MarkdownEditor from './MarkdownEditor';
 import OrderTeamModal from './OrderTeamModal';
 import NewContactModal from './NewContactModal';
 import { shortCompanyName } from './wbs/realizationShared';
-import { fuzzyMatch } from './trainings/trainingsShared';
+import { fuzzyMatch, isAdminToken, trainingsOrderUrl } from './trainings/trainingsShared';
 import { ORDER_CURRENCIES, useOrderCurrency, saveOrderCurrency, loadOrderCurrency } from '../../utils/currency';
 
 function countWorkingDays(startStr, endStr) {
@@ -440,6 +441,8 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
     // @anchor requirements-order-currency — znacznik waluty zamówienia (PLN | EUR). Kwot nie przelicza:
     // wszystkie wpisy zamówienia uznajemy za wpisane w wybranej walucie.
     const orderCurrency = useOrderCurrency();
+    const navigate = useNavigate();
+    const [isAdmin] = useState(isAdminToken);
     const [currencyError, setCurrencyError] = useState(null);
     useEffect(() => { if (nodeId) loadOrderCurrency(nodeId); }, [nodeId]);
     const changeCurrency = async (cur) => {
@@ -895,6 +898,12 @@ export default function RequirementsTab({ nodeId, versionId, orderName = '', one
                                     <button onClick={() => setTeamModalOpen(true)} className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border border-white/10 text-gray-300 hover:bg-white/10 transition-all" title="Dodaj lub usuń osoby z zespołu zamówienia">
                                         <Settings2 size={13} /> Zarządzaj
                                     </button>
+                                    {/* @anchor order-trainings-link — Szkolenia (macierz) zawężone do osób przypisanych do tego zamówienia; tylko ADMIN */}
+                                    {isAdmin && (
+                                        <button onClick={() => navigate(trainingsOrderUrl(nodeId))} className="shrink-0 flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border border-teal-500/30 text-teal-300 hover:bg-teal-500/10 transition-all" title="Szkolenia osób przypisanych do tego zamówienia — daty ważności i braki wymaganych szkoleń">
+                                            <GraduationCap size={13} /> Szkolenia
+                                        </button>
+                                    )}
                                 </div>
                                 {teamModalOpen && (
                                     <OrderTeamModal nodeId={nodeId} orderName={orderTeam?.name} onClose={() => setTeamModalOpen(false)} onSaved={(t) => { setOrderTeam(t); setTeamModalOpen(false); }} />

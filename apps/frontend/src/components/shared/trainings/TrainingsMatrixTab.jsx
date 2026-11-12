@@ -1,9 +1,10 @@
 import { Fragment, useCallback, useMemo, useRef, useState } from 'react';
 import { ChevronDown, FileSpreadsheet, X } from 'lucide-react';
-import { STATUS_STYLE, fmtDay, fullName, initials, normTxt, opisDni, todayIso, trainingStatus, trainingsApi } from './trainingsShared';
+import { STATUS_STYLE, fmtDay, fullName, initials, normTxt, opisDni, orderIdsFromUrl, todayIso, trainingStatus, trainingsApi } from './trainingsShared';
 import { OrderChip, BTN, INPUT } from './TrainingsUi';
 import OrdersMultiSelect from './OrdersMultiSelect';
 import TrainingsTableView from './TrainingsTableView';
+import TrainingCellEditor from './TrainingCellEditor';
 import { exportTrainingsExcel } from '../../../utils/trainingsExcel';
 
 const FILTRY = [
@@ -14,13 +15,15 @@ const FILTRY = [
 
 // @anchor trainings-visible-rows — jedno źródło dla tabeli i eksportu Excel (ten sam filtr i kolejność).
 // Pracownik bez żadnego szkolenia NIE trafia na listę — chyba że filtrujemy po zamówieniach
-// (`zamIds`): wtedy pokazujemy wszystkich przypisanych, żeby było widać, komu brakuje szkoleń.
-// Najpilniejsi na górze.
+// (`zamIds`): wtedy pokazujemy wszystkich przypisanych i cały zespół zamówienia (`teamOrderIds`),
+// żeby było widać, komu brakuje szkoleń. Najpilniejsi na górze.
 export function visibleRows(users, types, { query, filtr, zamIds = [], ordersById = {} }, today = todayIso()) {
     const q = normTxt(query).trim();
     const typeById = Object.fromEntries(types.map(t => [t.id, t]));
     return users
-        .filter(u => (zamIds.length ? u.orderIds.some(id => zamIds.includes(id)) : u.trainings.length > 0))
+        .filter(u => (zamIds.length
+            ? [...u.orderIds, ...(u.teamOrderIds || [])].some(id => zamIds.includes(id))
+            : u.trainings.length > 0))
         .map(u => ({
             u,
             najblizszy: u.trainings.filter(t => t.validUntil).sort((a, b) => a.validUntil.localeCompare(b.validUntil))[0] || null,
@@ -47,11 +50,13 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
     // @anchor trainings-view-mode — 'macierz' (pracownik × typ) albo 'tabela' (wiersz = pracownik × szkolenie)
     const [widok, setWidok] = useState('macierz');
     // @anchor trainings-order-filter — filtr po zamówieniach (pracownicy przypisani do któregokolwiek z wybranych)
-    const [zamIds, setZamIds] = useState([]);
+    const [zamIds, setZamIds] = useState(() => orderIdsFromUrl().filter(id => orders.some(o => o.id === id)));
     const [filtrZamAnchor, setFiltrZamAnchor] = useState(null);
     // @anchor trainings-last-closed-select — popover zamyka się na `mousedown`; `click` na tej
     // samej komórce, który przychodzi zaraz potem, nie może go od razu otworzyć ponownie.
     const ostatnioZamkniety = useRef({ userId: null, t: 0 });
+    // @anchor trainings-cell-edit — otwarty edytor inline szkolenia { userId, typeId, anchor }
+    const [edycja, setEdycja] = useState(null);
     const today = todayIso();
 
     const ordersById = useMemo(() => Object.fromEntries(orders.map(o => [o.id, o])), [orders]);
@@ -79,6 +84,21 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
             onReload();
         } catch (e) { toast(`Nie zapisano zamówień: ${e.message}`, true); }
     }, [wybor, users, toast, onReload]);
+
+    // @anchor open-training-cell-edit — klik w komórkę szkolenia (macierz, szuflada, Tabela) otwiera
+    // edytor pod nią; nie rozwija przy tym szuflady wiersza.
+    const otworzEdycje = useCallback((e, userId, typeId) => {
+        e.stopPropagation();
+        const z = ostatnioZamkniety.current;
+        if (z.userId === `szk:${userId}:${typeId}` && Date.now() - z.t < 400) return;
+        setEdycja({ userId, typeId, anchor: e.currentTarget });
+    }, []);
+    const zamknijEdycje = useCallback((w) => {
+        ostatnioZamkniety.current = { userId: `szk:${w.userId}:${w.typeId}`, t: Date.now() };
+        // zapis kończy się asynchronicznie — w tym czasie mógł się otworzyć edytor innej komórki
+        setEdycja(cur => (cur && cur.userId === w.userId && cur.typeId === w.typeId ? null : cur));
+    }, []);
+    const edytowany = edycja && { u: users.find(x => x.id === edycja.userId), t: typeById[edycja.typeId] };
 
     const eksport = async () => {
         setExporting(true);
@@ -132,7 +152,7 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                 </button>
                 <span className="w-full text-[11px] text-gray-500">
                     {zamIds.length
-                        ? `pokazano ${wiersze.length} pracowników przypisanych do wybranych zamówień`
+                        ? `pokazano ${wiersze.length} pracowników przypisanych do wybranych zamówień lub z ich zespołu`
                         : `pokazano ${wiersze.length} z ${zeSzkoleniami} · ukryto ${users.length - zeSzkoleniami} bez szkoleń`}
                 </span>
             </div>
@@ -144,7 +164,8 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
             </div>
 
             {widok === 'tabela' ? (
-                <TrainingsTableView wiersze={wiersze} typeById={typeById} ordersById={ordersById} filtr={filtr} onAssign={onAssign} onDelete={onDelete} today={today} />
+                <TrainingsTableView wiersze={wiersze} typeById={typeById} ordersById={ordersById} filtr={filtr} onAssign={onAssign} onDelete={onDelete} today={today}
+                    onEdit={otworzEdycje} edycja={edycja} />
             ) : (
             <div className="overflow-auto rounded-lg border border-white/[.07]">
                 <table className="w-full border-collapse text-[12px]">
@@ -180,6 +201,19 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                                                 <div className="min-w-0">
                                                     <div className="truncate font-semibold text-gray-100">{fullName(u)}</div>
                                                     <div className="truncate text-[10.5px] text-gray-500">{u.team || 'bez zespołu'} · {u.trainings.length} szkol.</div>
+                                                    {(() => {
+                                                        // @anchor trainings-team-badge — przy filtrze zamówień: osoba z zespołu zamówienia
+                                                        // (widzi je); ⚠ gdy brakuje jej szkoleń wymaganych przez to zamówienie
+                                                        const zesp = (u.teamOrderIds || []).filter(id => zamIds.includes(id));
+                                                        if (!zesp.length) return null;
+                                                        const braki = zesp.map(id => [ordersById[id], ordersById[id]?.closed ? '' : brakujace(u, id)]).filter(([o, b]) => o && b);
+                                                        return (
+                                                            <span title={`W zespole zamówienia (widzi je): ${zesp.map(id => ordersById[id]?.name).filter(Boolean).join(', ')}${braki.length ? `\nBrak ważnego szkolenia: ${braki.map(([o, b]) => `${o.name} — ${b}`).join('; ')}` : ''}`}
+                                                                className={`mt-0.5 inline-block rounded-full px-1.5 text-[10px] ${braki.length ? 'bg-red-500/15 text-red-300' : 'bg-green-500/10 text-green-300'}`}>
+                                                                {braki.length ? '⚠ ' : ''}zespół zamówienia
+                                                            </span>
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
                                         </td>
@@ -198,11 +232,15 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                                         </td>
                                         {types.map(t => {
                                             const ut = u.trainings.find(x => x.trainingTypeId === t.id);
+                                            const akt = edycja?.userId === u.id && edycja?.typeId === t.id;
                                             return (
-                                                <td key={t.id} className="px-2 py-2 text-center tabular-nums">
-                                                    {ut
-                                                        ? <span title={`${t.name} · ${opisDni(ut, today)}`} className={`inline-block rounded px-1.5 py-0.5 text-[11px] ${STATUS_STYLE[trainingStatus(ut, today)]}`}>{ut.validUntil ? fmtDay(ut.validUntil) : '∞'}</span>
-                                                        : <span className="text-gray-700">—</span>}
+                                                <td key={t.id} onClick={e => otworzEdycje(e, u.id, t.id)} className="group/cell px-1 py-1 text-center tabular-nums">
+                                                    <button type="button" title={ut ? `${t.name} · ${opisDni(ut, today)} — kliknij, aby edytować` : `Dodaj ${t.name}`}
+                                                        className={`min-h-[30px] w-full rounded-md border px-1 ${akt ? 'border-teal-500 bg-teal-500/5' : 'border-transparent group-hover/cell:border-white/15'}`}>
+                                                        {ut
+                                                            ? <span className={`inline-block rounded px-1.5 py-0.5 text-[11px] ${STATUS_STYLE[trainingStatus(ut, today)]}`}>{ut.validUntil ? fmtDay(ut.validUntil) : '∞'}</span>
+                                                            : <><span className="text-gray-700 group-hover/cell:hidden">—</span><span className="hidden text-[13px] text-teal-300 group-hover/cell:inline">+</span></>}
+                                                    </button>
                                                 </td>
                                             );
                                         })}
@@ -210,7 +248,7 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                                             {najblizszy ? (<>
                                                 <span className={`rounded px-1.5 py-0.5 text-[11px] ${STATUS_STYLE[trainingStatus(najblizszy, today)]}`}>{typeById[najblizszy.trainingTypeId]?.code || typeById[najblizszy.trainingTypeId]?.name} · {fmtDay(najblizszy.validUntil)}</span>
                                                 <div className="mt-0.5 text-[10px] text-gray-500">{opisDni(najblizszy, today)}</div>
-                                            </>) : <span className="text-[11px] text-gray-500">tylko bezterminowe</span>}
+                                            </>) : <span className="text-[11px] text-gray-500">{u.trainings.length ? 'tylko bezterminowe' : 'brak szkoleń'}</span>}
                                         </td>
                                     </tr>
                                     {otw && (
@@ -227,15 +265,17 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                                                         <tbody>
                                                             {[...u.trainings].sort((a, b) => (a.validUntil || '9999').localeCompare(b.validUntil || '9999')).map(ut => {
                                                                 const t = typeById[ut.trainingTypeId];
+                                                                const akt = edycja?.userId === u.id && edycja?.typeId === ut.trainingTypeId;
+                                                                const edyt = `cursor-pointer rounded hover:bg-white/[.04] ${akt ? 'bg-teal-500/5 outline outline-1 outline-teal-500/60' : ''}`;
                                                                 return (
                                                                     <tr key={ut.id} className="border-t border-white/[.04] align-top">
                                                                         <td className="py-1.5 pr-3"><b className="text-gray-100">{t?.name}</b> <span className="text-gray-500">{t?.code}</span></td>
-                                                                        <td className="pr-3 py-1.5">{fmtDay(ut.completedAt)}</td>
-                                                                        <td className="pr-3 py-1.5 whitespace-nowrap">
+                                                                        <td className={`px-1.5 py-1.5 ${edyt}`} title="Kliknij, aby edytować" onClick={e => otworzEdycje(e, u.id, ut.trainingTypeId)}>{fmtDay(ut.completedAt)}</td>
+                                                                        <td className={`whitespace-nowrap px-1.5 py-1.5 ${edyt}`} title="Kliknij, aby edytować" onClick={e => otworzEdycje(e, u.id, ut.trainingTypeId)}>
                                                                             <span className={`rounded px-1.5 py-0.5 ${STATUS_STYLE[trainingStatus(ut, today)]}`}>{ut.validUntil ? fmtDay(ut.validUntil) : '∞'}</span>
                                                                             <span className="ml-1.5 text-[10.5px] text-gray-500">{opisDni(ut, today)}</span>
                                                                         </td>
-                                                                        <td className="pr-3 py-1.5">{ut.certificateNo || <span className="text-gray-700">—</span>}</td>
+                                                                        <td className={`px-1.5 py-1.5 ${edyt}`} title="Kliknij, aby edytować" onClick={e => otworzEdycje(e, u.id, ut.trainingTypeId)}>{ut.certificateNo || <span className="text-gray-700">—</span>}</td>
                                                                         <td className="pr-3 py-1.5">
                                                                             {t?.orderIds.length
                                                                                 ? <div className="flex flex-wrap gap-1">{t.orderIds.map(id => <OrderChip key={id} order={ordersById[id]} />)}</div>
@@ -276,6 +316,19 @@ export default function TrainingsMatrixTab({ data, onReload, toast, onAssign, on
                         ostatnioZamkniety.current = { userId: 'filtr-zam', t: Date.now() };
                         setZamIds(ids);
                     }}
+                />
+            )}
+
+            {edytowany?.u && edytowany?.t && (
+                <TrainingCellEditor
+                    key={`${edycja.userId}:${edycja.typeId}`}
+                    user={edytowany.u}
+                    type={edytowany.t}
+                    anchor={edycja.anchor}
+                    onClose={() => zamknijEdycje(edycja)}
+                    onSaved={msg => { zamknijEdycje(edycja); toast(msg); onReload(); }}
+                    onError={msg => toast(msg, true)}
+                    onDelete={(u, ut, t) => { zamknijEdycje(edycja); onDelete(u, ut, t); }}
                 />
             )}
 
