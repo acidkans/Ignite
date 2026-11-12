@@ -34,7 +34,50 @@ export function useZadaniaHarmonogramu(processNodeId, aktywny) {
         window.addEventListener('user-tasks-changed', fn);
         return () => window.removeEventListener('user-tasks-changed', fn);
     }, [aktywny, wczytaj]);
-    return { zadania, blad };
+    // Podmiana pól jednego zadania na liście (optymistyczny podgląd przesunięcia i jego cofnięcie).
+    const podmien = useCallback((id, pola) => setZadania(z => (z ? z.map(t => (t.id === id ? { ...t, ...pola } : t)) : z)), []);
+    return { zadania, blad, podmien };
+}
+
+// @anchor moje-id-zadan — id zalogowanego z tokenu (jak `TaskModal`).
+export const mojeId = () => { try { return JSON.parse(atob(token().split('.')[1])).sub; } catch { return null; } };
+// @anchor moze-przesunac-zadanie — daty zadania zmienia odpowiedzialny albo zlecający (backend: `findEditable`).
+export const mozePrzesunac = (t, uid) => !!uid && (t.userId === uid || t.createdById === uid);
+
+// @anchor przesun-zadanie — nowe `plannedStart` / `plannedEnd` po przeciągnięciu o `delta` dni kalendarzowych.
+// move: Od i Do o tyle samo dni, godziny zostają (jak przełożenie w kalendarzu — wydarzenie Outlook nie skacze);
+// 'l' / 'r': sama krawędź, nie dalej niż druga data. Zadanie z jedną datą tylko się przesuwa. null = bez zmian.
+export function przesunZadanie(t, tryb, delta) {
+    if (!delta) return null;
+    const plus = (d) => { const x = new Date(d); x.setDate(x.getDate() + delta); return x; };
+    const s = t.plannedStart ? new Date(t.plannedStart) : null;
+    const e = t.plannedEnd ? new Date(t.plannedEnd) : null;
+    if (tryb === 'move' || !s || !e) {
+        const out = {};
+        if (s) out.plannedStart = plus(s).toISOString();
+        if (e) out.plannedEnd = plus(e).toISOString();
+        return out;
+    }
+    if (tryb === 'l') {
+        let ns = plus(s);
+        if (ns > e) { ns = new Date(e); ns.setHours(s.getHours(), s.getMinutes(), 0, 0); if (ns > e) ns = new Date(e); }
+        return +ns === +s ? null : { plannedStart: ns.toISOString() };
+    }
+    let ne = plus(e);
+    if (ne < s) { ne = new Date(s); ne.setHours(e.getHours(), e.getMinutes(), 0, 0); if (ne < s) ne = new Date(s); }
+    return +ne === +e ? null : { plannedEnd: ne.toISOString() };
+}
+
+// @anchor zapisz-daty-zadania — PATCH /my-tasks/:id z nowymi datami; `{ count: 0 }` = brak prawa edycji.
+export async function zapiszDatyZadania(id, pola) {
+    const res = await fetch(`${API_URL}/my-tasks/${id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(pola),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json().catch(() => null);
+    if (body && body.count === 0) throw new Error('Daty zadania zmienia tylko odpowiedzialny albo zlecający');
 }
 
 // @anchor zadanie-na-os — zadanie → wiersz osi: Od..Do po dniach (czas lokalny). Zadanie z jedną datą

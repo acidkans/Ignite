@@ -14,7 +14,7 @@ import {
     pierwszyDozwolonyDzien, zalezniMilestone, przesunZaleznych, roznicaDniRoboczych,
     czyWolnyDla, liczDniPracy, normPw, rodzajDnia, prognozaZaleznego,
 } from './harmonogramCzas';
-import { useZadaniaHarmonogramu, grupujZadania } from './harmonogramZadania';
+import { useZadaniaHarmonogramu, grupujZadania, mojeId, mozePrzesunac, przesunZadanie, zapiszDatyZadania } from './harmonogramZadania';
 import TaskModal from '../wbs/TaskModal';
 import { EXEC_STATUS_META, TASK_STATUS_CODES, isTaskClosed } from '../wbs/wbsConstants';
 import './harmonogram.css';
@@ -168,7 +168,8 @@ export default function Harmonogram({
     const [trybZadanState, setTrybZadanState] = useState(() => czytaj(trybKey, 'wbs') === 'zadania');
     const trybZadan = !!processNodeId && trybZadanState;
     const setTrybZadan = (v) => { setTrybZadanState(v); zapiszSS(trybKey, v ? 'zadania' : 'wbs'); };
-    const { zadania, blad: bladZadan } = useZadaniaHarmonogramu(processNodeId, trybZadan);
+    const { zadania, blad: bladZadan, podmien: podmienZadanie } = useZadaniaHarmonogramu(processNodeId, trybZadan);
+    const uid = useMemo(() => mojeId(), []);
     const [zadanieOtwarte, setZadanieOtwarte] = useState(null);
     const zad = useMemo(() => (trybZadan ? grupujZadania(zadania, grupy, zakresIds) : null), [trybZadan, zadania, grupy, zakresIds]);
     const grupyOsi = zad ? zad.grupy : grupy;
@@ -294,6 +295,28 @@ export default function Harmonogram({
         if (komunikaty.length) setInfo(komunikaty);
     }, [savePlanDates, savePlanDatesBatch, onDurationChange, pwOf, nazwa, minOdOf, msZaleznosc, msWezly]);
 
+    // @anchor harmonogram-zapisz-zadanie — puszczenie przeciąganego paska zadania: nowe daty od razu na osi,
+    // zapis PATCH (synchronizacja Outlook / MS To Do po stronie backendu), błąd albo brak prawa cofa podgląd.
+    const zapiszZadanie = useCallback(async (t, tryb, delta) => {
+        const pola = przesunZadanie(t, tryb, delta);
+        if (!pola) return;
+        const stare = { plannedStart: t.plannedStart, plannedEnd: t.plannedEnd };
+        const opis = (z) => {
+            const a = z.plannedStart ? dzien0(z.plannedStart) : null, b = z.plannedEnd ? dzien0(z.plannedEnd) : null;
+            if (!a || !b) return `${b ? 'do' : 'od'} ${dzienMies(a || b)}`;
+            return +a === +b ? dzienMies(a) : `${dzienMies(a)}–${dzienMies(b)}`;
+        };
+        podmienZadanie(t.id, pola);
+        try {
+            await zapiszDatyZadania(t.id, pola);
+            setInfo([<>Zadanie <b>{t.title}</b>: {opis(stare)} → <b>{opis({ ...stare, ...pola })}</b></>]);
+            window.dispatchEvent(new CustomEvent('user-tasks-changed'));
+        } catch (e) {
+            podmienZadanie(t.id, stare);
+            setInfo([<span className="hg-info-bad">Nie udało się zmienić dat zadania „{t.title}”: {e?.message || 'błąd zapisu'}</span>]);
+        }
+    }, [podmienZadanie]);
+
     // @anchor harmonogram-podglad-zaleznych — podgląd na żywo: przesunięci zależni przeciąganego milestone'a.
     const podgladZal = useMemo(() => {
         if (!drag?.delta || !jestMs(drag.l) || drag.tryb === 'l' || !msZaleznosc || !msWezly) return null;
@@ -315,13 +338,14 @@ export default function Harmonogram({
             setDrag(null);
             if (!d?.delta) return;
             poDragu.current = true; setTimeout(() => { poDragu.current = false; }, 0);
+            if (d.l._zadanie) { zapiszZadanie(d.l._zadanie, d.tryb, d.delta); return; }
             const { od, ost } = przesunWg(d.l, d.tryb, d.delta, pwOf(d.galazId));
             zapisz(d.l, d.galazId, od, ost, d.tryb);
         };
         window.addEventListener('pointermove', ruch);
         window.addEventListener('pointerup', pusc);
         return () => { window.removeEventListener('pointermove', ruch); window.removeEventListener('pointerup', pusc); };
-    }, [ciagnie, zapisz, dzienPx, pwOf]);
+    }, [ciagnie, zapisz, zapiszZadanie, dzienPx, pwOf]);
 
     const zacznij = (e, l, galazId, tryb) => {
         if (e.button !== 0) return;
@@ -658,23 +682,38 @@ export default function Harmonogram({
             </div>
         );
     };
-    const prawaZadania = (l, d0, d1) => {
+    // @anchor harmonogram-drag-zadania — przeciąganie paska zadania (move) i jego krawędzi (Od / Do), znacznik
+    // terminu tylko przesuwa; wolno odpowiedzialnemu albo zlecającemu (`moze-przesunac-zadanie`). Krok = dzień kalendarzowy.
+    const prawaZadania = (l, r0, r1) => {
         const t = l._zadanie;
+        const edyt = mozePrzesunac(t, uid);
+        const dd = drag?.l.id === l.id ? drag : null;
+        let d0 = r0, d1 = r1;
+        if (dd?.delta) {
+            if (dd.tryb === 'move' || l._termin) { d0 += dd.delta; d1 += dd.delta; }
+            else if (dd.tryb === 'l') d0 = Math.min(d0 + dd.delta, d1);
+            else d1 = Math.max(d1 + dd.delta, d0);
+        }
         const widoczny = d1 >= 0 && d0 < ileDni;
         const od = widoczny ? Math.max(d0, 0) : -1;
         const dl = widoczny ? Math.min(d1, ileDni - 1) - od + 1 : 0;
         const poza = widoczny ? null : (d1 < 0 ? 'l' : 'r');
-        const klasa = `z-${t.status}${poTerminie(l) ? ' po' : ''}`;
-        const klik = (e) => { e.stopPropagation(); otworzZadanie(t); };
+        const klasa = `z-${t.status}${poTerminie(l) ? ' po' : ''}${edyt ? ' drag' : ''}${dd ? ' ciagniety' : ''}`;
+        const klik = (e) => { e.stopPropagation(); if (!poDragu.current) otworzZadanie(t); };
+        const tytul = `${opisZadania(l)}${edyt ? `\n${l._termin ? 'Przeciągnij, by przesunąć termin' : 'Przeciągnij, by przesunąć · krawędź zmienia Od / Do'}` : ''}`;
         return (
             <div key={l.id} className="hg-tor" style={{ height: ROW_H }}>
                 {widoczny && l._termin && (
-                    <span className={`z-termin ${klasa}`} style={{ left: d0 * dzienPx + dzienPx / 2 - 6 }} title={opisZadania(l)} onClick={klik} />
+                    <span className={`z-termin ${klasa}`} style={{ left: d0 * dzienPx + dzienPx / 2 - 6 }} title={tytul} onClick={klik}
+                        onPointerDown={edyt ? e => zacznij(e, l, null, 'move') : undefined} />
                 )}
                 {widoczny && !l._termin && (
                     <div className={`bar z-bar ${klasa}${d0 < 0 ? ' cut-l' : ''}${d1 >= ileDni ? ' cut-r' : ''}`}
-                        style={{ left: od * dzienPx + 2, width: Math.max(6, dl * dzienPx - 4) }} title={opisZadania(l)} onClick={klik}>
+                        style={{ left: od * dzienPx + 2, width: Math.max(6, dl * dzienPx - 4) }} title={tytul} onClick={klik}
+                        onPointerDown={edyt ? e => zacznij(e, l, null, 'move') : undefined}>
+                        {edyt && d0 >= 0 && <span className="uchwyt l" onPointerDown={e => zacznij(e, l, null, 'l')} />}
                         {dl * dzienPx > 50 && <span className="tx">{kto(t.user) || EXEC_STATUS_META[t.status]?.label || ''}</span>}
+                        {edyt && d1 < ileDni && <span className="uchwyt r" onPointerDown={e => zacznij(e, l, null, 'r')} />}
                     </div>
                 )}
                 {poza && (
@@ -709,7 +748,7 @@ export default function Harmonogram({
                     {zakres !== 'calosc' && <label><input type="checkbox" checked={wszystkie} onChange={e => setWszystkie(e.target.checked)} /> {zad ? 'wszystkie zadania' : 'wszystkie roboty'}</label>}
                 </div>
                 {zad
-                    ? <span>{zakres === 'calosc' ? 'Wszystkie zadania' : `Okno ${opisOkna}`}. Zadania zamówienia wg dat Od–Do, kolor = status{zad.bezDat ? ` · ${zad.bezDat} bez dat (poza osią)` : ''}. Klik w zadanie otwiera formularz, klik w dzień w wierszu gałęzi dodaje zadanie.</span>
+                    ? <span>{zakres === 'calosc' ? 'Wszystkie zadania' : `Okno ${opisOkna}`}. Zadania zamówienia wg dat Od–Do, kolor = status{zad.bezDat ? ` · ${zad.bezDat} bez dat (poza osią)` : ''}. Klik w zadanie otwiera formularz, przeciągnięcie paska przesuwa daty (krawędź — Od / Do), klik w dzień w wierszu gałęzi dodaje zadanie.</span>
                     : <span>{zakres === 'calosc' ? 'Cały harmonogram' : `Okno ${opisOkna}`}. Jedno źródło dat dla Planowania i Realizacji{canEdit && savePlanDates ? ' — przeciągnij pasek, rozciągnij za krawędź, kliknij dzień, by przenieść start, albo kliknij daty przy nazwie' : ''}{onOtworz ? '. Klik w nazwę otwiera pozycję' : ''}.</span>}
             </div>
 

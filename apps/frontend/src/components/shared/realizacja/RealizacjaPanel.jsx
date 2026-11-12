@@ -531,14 +531,19 @@ export default function RealizacjaPanel({
         return () => mq.removeEventListener('change', fn);
     }, []);
 
+    // @anchor realizacja-harmonogram-galaz-zoomu — pozycje wprost pod gałęzią zoomu dostają w Harmonogramie
+    // tę gałąź jako nagłówek: nazwa, licznik i przełączniki pracy w soboty / niedziele (ten sam klucz co
+    // w pełnym drzewie). Bez tego nagłówka nie było, więc po zoomie znikały „bez sob. / bez nd.”.
     const grupyHarmonogramu = useMemo(() => {
         const kolejnosc = new Map(nodes.map((n, i) => [n.id, i]));
+        const galazZoomu = zakresId !== SYNTHETIC_ROOT ? idx.nodeById[zakresId] || null : null;
         return grupy.map(g => ({
             ...g,
+            galaz: g.galaz || galazZoomu,
             liscie: [...g.liscie, ...(g.milestony || [])].sort((a, b) => (kolejnosc.get(a.id) ?? 0) - (kolejnosc.get(b.id) ?? 0)),
             milestony: [],
         }));
-    }, [grupy, nodes]);
+    }, [grupy, nodes, zakresId, idx]);
 
     // @anchor realizacja-gotowosc — gotowość każdej pozycji: materiał (sama pozycja z osią zakupu
     // albo materiał z tej samej gałęzi), otwarte pytania i blokery pozycji oraz jej gałęzi.
