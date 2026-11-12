@@ -6,12 +6,13 @@ import CalendarView, { TASK_TILE_STYLE } from './CalendarView';
 import AllTasksModal from './AllTasksModal';
 import TaskModal from './TaskModal';
 
-// @anchor tasks-calendar-section
-export default function TasksCalendarSection({ nodeId, versionId }) {
+// @anchor tasks-calendar-section — kalendarz zadań w Planowaniu; ten sam komponent otwiera też data w nagłówku
+// (`dashboard-tasks-calendar-modal`) — wtedy bez projektu (`nodeId` = null) pokazuje tylko „Wszystkie moje”.
+export default function TasksCalendarSection({ nodeId, versionId, defaultScope }) {
     // @anchor tasks-calendar-user-tasks — zadania węzłów (UserTask) nakładane na kalendarz
     const [userTasks, setUserTasks] = useState([]);
     // @anchor tasks-calendar-scope — 'project' = zadania wszystkich w tym projekcie, 'mine' = moje w tym projekcie, 'all' = wszystkie moje
-    const [taskScope, setTaskScope] = useState('project');
+    const [taskScope, setTaskScope] = useState(() => (nodeId ? defaultScope || 'project' : 'all'));
     // @anchor tasks-calendar-project-tasks — otwarte UserTaski wszystkich osób w projekcie (GET /my-tasks/project/:id)
     const [projectTasks, setProjectTasks] = useState([]);
     // @anchor tasks-calendar-all-modal
@@ -45,9 +46,9 @@ export default function TasksCalendarSection({ nodeId, versionId }) {
             }
         } catch {}
     };
-    const refreshUserTasks = () => { fetchUserTasks(); fetchProjectTasks(); };
+    const refreshUserTasks = () => { fetchUserTasks(); if (nodeId) fetchProjectTasks(); };
     // Przełączenie zakresu odświeża listę — zadania innych osób mogły się zmienić od otwarcia sekcji.
-    useEffect(() => { if (nodeId) refreshUserTasks(); }, [taskScope]);
+    useEffect(() => { refreshUserTasks(); }, [taskScope]);
 
     useEffect(() => {
         if (!nodeId) return;
@@ -128,7 +129,7 @@ export default function TasksCalendarSection({ nodeId, versionId }) {
         <div className="flex flex-col gap-3 px-5 pb-5 flex-1 overflow-y-auto">
             {/* @anchor tasks-calendar-toolbar — zakres UserTasków, legenda statusów, pełna lista */}
             <div className="flex items-center gap-3 flex-wrap flex-shrink-0">
-                <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
+                {nodeId && <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
                     <button
                         onClick={() => setTaskScope('project')}
                         className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${taskScope === 'project' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
@@ -141,18 +142,18 @@ export default function TasksCalendarSection({ nodeId, versionId }) {
                         onClick={() => setTaskScope('all')}
                         className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${taskScope === 'all' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
                     >Wszystkie moje</button>
-                </div>
+                </div>}
                 <div className="flex items-center gap-3 text-[10px] text-gray-500 flex-wrap">
                     {TASK_STATUS_CODES.map(code => (
                         <span key={code} className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded border ${TASK_TILE_STYLE[code].swatch}`} />{EXEC_STATUS_META[code].label}</span>
                     ))}
                 </div>
-                <button
+                {nodeId && <button
                     onClick={() => setAllTasksOpen(true)}
                     className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 rounded-lg text-gray-300 text-[10px] font-bold uppercase tracking-widest transition-all"
                 >
                     <LayoutList size={12} /> Pełna lista
-                </button>
+                </button>}
             </div>
             <div className="flex-1 flex flex-col min-h-[420px]">
                 <CalendarView

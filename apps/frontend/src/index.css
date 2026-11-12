@@ -195,3 +195,9 @@ tr.rt-card-open { border-bottom-width: 0; }
   border-right: 1px solid var(--rt-edge);
   border-bottom: 1px solid var(--rt-edge);
 }
+
+/* @anchor tab-find-highlight — trafienia wyszukiwarki nagłówka w trybie „znajdź na stronie” (useFindInTab) */
+::highlight(tab-find) { background-color: rgba(250, 204, 21, 0.35); color: inherit; }
+::highlight(tab-find-current) { background-color: rgba(249, 115, 22, 0.9); color: #fff; }
+[data-tab-find="hit"] { outline: 2px solid rgba(250, 204, 21, 0.6); outline-offset: 1px; }
+[data-tab-find="current"] { outline: 2px solid rgba(249, 115, 22, 0.95); outline-offset: 1px; }

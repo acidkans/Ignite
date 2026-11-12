@@ -153,16 +153,32 @@ function formatDeadline(dateStr) {
     if (taskDay < todayStart) return { label: 'Przeterminowane', color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20' };
     if (taskDay.getTime() === todayStart.getTime()) return { label: 'Dzisiaj', color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/20' };
     if (taskDay.getTime() === tomorrowStart.getTime()) return { label: 'Jutro', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/20' };
-    return {
-        label: d.toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' }),
-        color: 'text-gray-400',
-        bg: 'bg-white/[0.04] border-white/[0.08]',
-    };
+    return null; // dalszy termin — widać go w dacie Od–Do obok
+}
+
+// @anchor my-tasks-date-range — Od–Do zadania na liście: „12.11 8:00 – 19.11 16:00”, ten sam dzień „12.11 8:00–9:00”.
+// Godzina pominięta, gdy 00:00; rok tylko, gdy inny niż bieżący.
+function formatTaskDates(start, end) {
+    const s = start ? new Date(start) : null;
+    const e = end ? new Date(end) : null;
+    if (!s && !e) return null;
+    const year = new Date().getFullYear();
+    const day = d => `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}${d.getFullYear() !== year ? `.${d.getFullYear()}` : ''}`;
+    const time = d => (d.getHours() || d.getMinutes() ? `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}` : '');
+    const full = d => [day(d), time(d)].filter(Boolean).join(' ');
+    if (!e) return `od ${full(s)}`;
+    if (!s) return full(e);
+    if (s.toDateString() === e.toDateString()) {
+        const ts = time(s), te = time(e);
+        return ts && te && ts !== te ? `${day(s)} ${ts}–${te}` : full(e);
+    }
+    return `${full(s)} – ${full(e)}`;
 }
 
 // @anchor my-tasks-task-card
 function TaskCard({ task, onDone, onRename, onAlarmSaved }) {
     const deadline = formatDeadline(task.plannedEnd);
+    const dates = formatTaskDates(task.plannedStart, task.plannedEnd);
     const [alarmOpen, setAlarmOpen] = useState(false);
     // @anchor my-tasks-title-edit — inline edycja tytułu zadania
     const [editingTitle, setEditingTitle] = useState(false);
@@ -216,6 +232,12 @@ function TaskCard({ task, onDone, onRename, onAlarmSaved }) {
                             <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-medium ${deadline.bg} ${deadline.color}`}>
                                 <Clock size={9} />
                                 {deadline.label}
+                            </span>
+                        )}
+                        {dates && (
+                            <span className="flex items-center gap-1 text-[10px] text-gray-400 tabular-nums whitespace-nowrap" title="Od – Do">
+                                <Calendar size={9} />
+                                {dates}
                             </span>
                         )}
                         {task.node && (

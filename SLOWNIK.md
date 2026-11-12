@@ -3691,6 +3691,14 @@ Jeden kształt danych, dwa wyjścia: PDF (front → `/pdf/render`) i DOCX (backe
 | back-funkcja | overview() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-overview |
 | back-endpoint | GET /trainings/overview | apps/backend/src/trainings/trainings.controller.ts | @anchor trainings-overview-endpoint |
 | ui-widok | TrainingsPage | apps/frontend/src/TrainingsPage.jsx | @anchor trainings-page |
+| ui-stan | backOrderId (zamówienie, z którego otwarto Szkolenia) | apps/frontend/src/TrainingsPage.jsx | @anchor trainings-back-order-id |
+| ui-przycisk | Wróć do zamówienia (powrót do drzewa) | apps/frontend/src/TrainingsPage.jsx | @anchor trainings-back-to-tree |
+| ui-hook | useFindInTab (wyszukiwarka nagłówka jako „znajdź na stronie”) | apps/frontend/src/hooks/useFindInTab.js | @anchor use-find-in-tab |
+| ui-stan | findInTab (Informacje o zamówieniu / lokalizacji — tryb „znajdź na stronie”) | apps/frontend/src/DashboardPage.jsx | @anchor find-in-tab-mode |
+| ui-stala | ::highlight(tab-find) / [data-tab-find] (podświetlenie trafień) | apps/frontend/src/index.css | @anchor tab-find-highlight |
+| ui-stan | tasksCalendarOpen (kalendarz zadań z nagłówka) | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-tasks-calendar-open |
+| ui-modal | Kalendarz zadań (TasksCalendarSection po kliknięciu w datę) | apps/frontend/src/DashboardPage.jsx | @anchor dashboard-tasks-calendar-modal |
+| ui-funkcja | formatTaskDates (Od–Do zadania na liście Moje zadania) | apps/frontend/src/components/shared/MyTasksModal.jsx | @anchor my-tasks-date-range |
 | back-serwis | TrainingsService | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-service |
 | back-funkcja | setUserOrders() | apps/backend/src/trainings/trainings.service.ts | @anchor trainings-set-user-orders |
 | ui-stala | TRAINING_TABS | apps/frontend/src/TrainingsPage.jsx | @anchor trainings-tab-meta |
