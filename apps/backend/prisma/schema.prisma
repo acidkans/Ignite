@@ -170,6 +170,10 @@ model Notification {
   body          String
   orderId       String?
   requirementId String?
+  /// @anchor notification-wbs-root-id
+  /// Klucz węzła WBS czatu/maila (`sourceWbsNodeId ?? id`, wspólny dla wszystkich wersji) — klik
+  /// w powiadomienie otwiera Realizację → Kokpit na tym węźle. null = powiadomienie bez węzła.
+  wbsRootId     String?
   readAt        DateTime?
   createdAt     DateTime  @default(now())
 

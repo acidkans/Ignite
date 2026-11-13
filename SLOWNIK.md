@@ -316,6 +316,16 @@ Plan: `docs/REALIZACJA-MVP-PLAN.md`. Kokpit + Macierz w zakładce „Realizacja�
 | ui-hook | useBranchFocus — wybrana gałąź zamówienia wspólna dla Planowania i Realizacji (klucz `wbsRootOf`) | apps/frontend/src/hooks/useBranchFocus.js | @anchor use-branch-focus |
 | ui-funkcja | idGaleziPoKluczu — klucz gałęzi → id węzła w bieżącej wersji | apps/frontend/src/hooks/useBranchFocus.js | @anchor id-galezi-po-kluczu |
 | back-funkcja | push odpowiedzi Q&A — pytanie (`qaQuestion`) w treści powiadomienia | apps/backend/src/comments/comments.controller.ts | @anchor comment-push-qa-question |
+| schema-pole | Notification.wbsRootId — klucz węzła WBS czatu/maila gałęzi (cel kliknięcia w Realizacji) | apps/backend/prisma/schema.prisma | @anchor notification-wbs-root-id |
+| back-funkcja | wbsRootId powiadomienia z czatu gałęzi (powiadomienie + push `tab: 'realizacja'`) | apps/backend/src/comments/comments.controller.ts | @anchor comment-push-wbs-root |
+| ui-funkcja | celRealizacji — węzeł do otwarcia w Kokpicie po kliknięciu powiadomienia (ważny 30 s) | apps/frontend/src/components/shared/realizacja/celRealizacji.js | @anchor cel-realizacji |
+| ui-funkcja | ustawCelRealizacji | apps/frontend/src/components/shared/realizacja/celRealizacji.js | @anchor ustaw-cel-realizacji |
+| ui-hook | useCelRealizacji | apps/frontend/src/components/shared/realizacja/celRealizacji.js | @anchor use-cel-realizacji |
+| ui-funkcja | watekZPowiadomienia — filtr wątku z tytułu powiadomienia (chat / qa / mail) | apps/frontend/src/components/shared/realizacja/celRealizacji.js | @anchor watek-z-powiadomienia |
+| ui-stan | watekStart — filtr wątku pozycji/milestone'a z powiadomienia | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-watek-start |
+| ui-funkcja | otwarcie Kokpitu na węźle z powiadomienia | apps/frontend/src/components/shared/realizacja/RealizacjaPanel.jsx | @anchor realizacja-cel-powiadomienia |
+| ui-funkcja | klik w powiadomienie z czatu gałęzi → Realizacja / Kokpit | apps/frontend/src/components/Layout/MainLayout.jsx | @anchor notification-to-kokpit |
+| ui-funkcja | zakładka z powiadomienia dla bieżącego zamówienia | apps/frontend/src/DashboardPage.jsx | @anchor notification-same-order-tab |
 | ui-funkcja | zamknijBloker | apps/frontend/src/components/shared/realizacja/useWatekRealizacji.js | @anchor watek-zamknij-bloker |
 | schema-model | Constraint | apps/backend/prisma/schema.prisma | @anchor constraint |
 | schema-pole | Constraint.processNodeId | apps/backend/prisma/schema.prisma | @anchor constraint-process-node-id |

@@ -310,12 +310,26 @@ export default function DashboardPage() {
     }, [activeAreaId, isOrder, isLogistykaArea]);
 
     // Otwórz chat gdy powiadomienie kliknięte dla tego samego zamówienia (activeAreaId się nie zmienił)
+    // @anchor notification-same-order-tab — to samo zamówienie: efekt zmiany węzła nie odpali, więc zakładkę
+    // z powiadomienia (np. `realizacja` z czatu gałęzi) przełączamy tu i zdejmujemy `pendingTabRef`,
+    // żeby nie przerzucił następnego zamówienia na tę zakładkę.
     useEffect(() => {
         const handler = (e) => {
             const { orderId, tab } = e.detail;
-            if (String(orderId) === String(activeAreaId) && isOrder && tab === 'comments') {
+            if (String(orderId) !== String(activeAreaId) || !isOrder) return;
+            pendingTabRef.current = null;
+            if (tab === 'comments') {
                 setShowComments(true);
+                return;
             }
+            if (!tab) return;
+            // Te same kroki co efekt zmiany węzła: sekcja WBS i wymaganie z powiadomienia.
+            setFocusedRequirementId(contextPendingRequirementIdRef?.current || null);
+            if (contextPendingRequirementIdRef) contextPendingRequirementIdRef.current = null;
+            setPendingWbsSection(contextPendingSectionRef?.current || null);
+            if (contextPendingSectionRef) contextPendingSectionRef.current = null;
+            setShowComments(false);
+            setActiveTab(tab);
         };
         window.addEventListener('notification-navigate', handler);
         return () => window.removeEventListener('notification-navigate', handler);

@@ -194,15 +194,17 @@ export class WatekMailRepliesService {
   private async powiadom(mail: { processNodeId: string; wbsNodeId: string; sentById: string | null }, kto: string, tresc: string) {
     const [order, node, team] = await Promise.all([
       this.prisma.processNode.findUnique({ where: { id: mail.processNodeId }, select: { name: true } }),
-      this.prisma.wbsNode.findUnique({ where: { id: mail.wbsNodeId }, select: { name: true } }),
+      this.prisma.wbsNode.findUnique({ where: { id: mail.wbsNodeId }, select: { name: true, sourceWbsNodeId: true } }),
       this.prisma.user.findMany({ where: { isActive: true, teams: { some: { orderNodeId: mail.processNodeId } } }, select: { id: true } }),
     ]);
     const ids = [...new Set([...team.map(u => u.id), ...(mail.sentById ? [mail.sentById] : [])])];
     const title = `📨 ${kto} — odpowiedź mailem „${node?.name || 'gałąź'}” w ${order?.name || 'zamówieniu'}`;
     const body = tresc.length > 120 ? `${tresc.slice(0, 120)}…` : tresc;
+    // Klik w powiadomienie → Realizacja → Kokpit na węźle maila (klucz węzła, jak przy czacie gałęzi).
+    const wbsRootId = node?.sourceWbsNodeId || mail.wbsNodeId;
     for (const id of ids) {
-      await this.notifications.create(id, 'NEW_COMMENT', title, body, mail.processNodeId);
-      await this.push.sendToUser(id, title, body, mail.processNodeId);
+      await this.notifications.create(id, 'NEW_COMMENT', title, body, mail.processNodeId, undefined, wbsRootId);
+      await this.push.sendToUser(id, title, body, mail.processNodeId, { tab: 'realizacja', wbsRootId, watek: 'mail' });
     }
   }
 }

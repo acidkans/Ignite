@@ -9,6 +9,7 @@ import DocumentViewer from '../shared/DocumentViewer';
 import AddNodeModal from '../shared/AddNodeModal';
 import NodePermissionsModal from '../shared/NodePermissionsModal';
 import NotificationBell from '../shared/NotificationBell';
+import { ustawCelRealizacji } from '../shared/realizacja/celRealizacji';
 import MyAccountModal from '../shared/MyAccountModal';
 import OfferAiToast from '../shared/OfferAiToast';
 import { APP_VERSION } from '../../version';
@@ -184,8 +185,9 @@ export default function MainLayout({ onLogout }) {
     // wejścia lądowały w tym samym miejscu i nie rozjechały się przy następnej zmianie.
     useEffect(() => {
         const handler = (e) => {
-            const { orderId, tab, section } = e.detail || {};
+            const { orderId, tab, section, wbsRootId, watek } = e.detail || {};
             if (!orderId) return;
+            if (wbsRootId) ustawCelRealizacji(orderId, wbsRootId, watek);
             pendingTabRef.current = tab || null;
             pendingSectionRef.current = section || null;
             window.dispatchEvent(new CustomEvent('notification-navigate', { detail: { orderId, tab } }));
@@ -202,6 +204,7 @@ export default function MainLayout({ onLogout }) {
         const params = new URLSearchParams(window.location.search);
         const orderId = params.get('orderId');
         if (!orderId) return;
+        if (params.get('wbsRootId')) ustawCelRealizacji(orderId, params.get('wbsRootId'), params.get('watek'));
         pendingTabRef.current = params.get('tab');
         pendingSectionRef.current = params.get('section');
         handleNodeChange(orderId);
@@ -361,12 +364,15 @@ export default function MainLayout({ onLogout }) {
                 <div className="p-2 border-t border-white/5 bg-black/20 backdrop-blur-sm">
                     <div className="flex items-center gap-2">
                         <NotificationBell
-                            onNavigateToOrder={(orderId, requirementId) => {
+                            onNavigateToOrder={(orderId, requirementId, wbsRootId, watek) => {
                                 // Powiadomienie o pozycji prowadzi do WBS → Materiały. Wcześniej stało
                                 // tu `'materials'`, a takiej zakładki w `DashboardPage` nie ma (są
                                 // `requirements`, `unified`, `materialLists`, `offers`, `realization`…) —
                                 // `setActiveTab` dostawał nazwę, której nikt nie renderuje.
-                                const tab = requirementId ? 'unified' : 'comments';
+                                // @anchor notification-to-kokpit — czat/mail gałęzi (`wbsRootId`) → Realizacja,
+                                // Kokpit na węźle wiadomości (`cel-realizacji`).
+                                if (wbsRootId) ustawCelRealizacji(orderId, wbsRootId, watek);
+                                const tab = wbsRootId ? 'realizacja' : requirementId ? 'unified' : 'comments';
                                 pendingTabRef.current = tab;
                                 pendingSectionRef.current = requirementId ? 'materials' : null;
                                 pendingRequirementIdRef.current = requirementId || null;
