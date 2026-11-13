@@ -127,9 +127,13 @@ export class CommentsController {
             recipientIds = []; // zwykły komentarz — brak powiadomień push
         }
 
-        const wbsNodeName = isBranchChat
-            ? (await this.prisma.wbsNode.findUnique({ where: { id: body.wbsNodeId }, select: { name: true } }))?.name ?? 'gałąź'
+        const wbsNode = isBranchChat
+            ? await this.prisma.wbsNode.findUnique({ where: { id: body.wbsNodeId }, select: { name: true, sourceWbsNodeId: true } })
             : null;
+        const wbsNodeName = isBranchChat ? wbsNode?.name ?? 'gałąź' : null;
+        // @anchor comment-push-wbs-root — klucz węzła czatu (ten sam w każdej wersji): klik w powiadomienie
+        // otwiera Realizację → Kokpit na tym węźle (`Notification.wbsRootId`, push `tab: 'realizacja'`).
+        const wbsRootId = isBranchChat ? wbsNode?.sourceWbsNodeId || body.wbsNodeId : undefined;
         // @anchor comment-push-qa-question — odpowiedź na pytanie Q&A: tytuł mówi, że to odpowiedź,
         // a treść niesie pytanie przed odpowiedzią — sama odpowiedź („tak", „200 mm") bez pytania nic nie mówi.
         const qaQuestion = typeof body.qaQuestion === 'string' ? body.qaQuestion.trim() : '';
@@ -148,8 +152,9 @@ export class CommentsController {
 
         for (const id of recipientIds) {
             const type = mentionedIds.includes(id) ? 'NEW_MENTION' : isQuestion ? 'NEW_QUESTION' : 'NEW_COMMENT';
-            await this.notifications.create(id, type, title, bodyText, orderId, body.requirementId);
-            await this.push.sendToUser(id, title, bodyText, orderId);
+            await this.notifications.create(id, type, title, bodyText, orderId, body.requirementId, wbsRootId);
+            // `watek` = filtr wątku po otwarciu: odpowiedź na pytanie wisi pod wpisem Q&A, reszta w czacie.
+            await this.push.sendToUser(id, title, bodyText, orderId, wbsRootId ? { tab: 'realizacja', wbsRootId, watek: qaQuestion ? 'qa' : 'chat' } : undefined);
         }
 
         return comment;

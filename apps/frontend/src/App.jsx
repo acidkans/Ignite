@@ -203,9 +203,9 @@ function App() {
     if (!('serviceWorker' in navigator)) return;
     // @anchor app-sw-message-handler
     const handler = (event) => {
-      const { type, orderId, reminderId, minutes, tab, section } = event.data || {};
+      const { type, orderId, reminderId, minutes, tab, section, wbsRootId, watek } = event.data || {};
       if (type === 'NAVIGATE_TO_ORDER' && orderId) {
-        window.dispatchEvent(new CustomEvent('push-navigate-order', { detail: { orderId, tab, section } }));
+        window.dispatchEvent(new CustomEvent('push-navigate-order', { detail: { orderId, tab, section, wbsRootId, watek } }));
       }
       if ((type === 'SNOOZE_REMINDER' || type === 'DISMISS_REMINDER') && reminderId) {
         const token = sessionStorage.getItem('token');

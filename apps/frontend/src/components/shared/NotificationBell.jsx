@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Bell, MessageCircle, AlertCircle, Check, X, BellOff, BellRing, Lock, ExternalLink, GraduationCap } from 'lucide-react';
 import { API_URL } from '../../config';
+import { watekZPowiadomienia } from './realizacja/celRealizacji';
 
 const TYPE_ICON = {
     NEW_COMMENT:  <MessageCircle size={11} className="text-teal-400" />,
@@ -92,7 +93,8 @@ export default function NotificationBell({ onNavigateToOrder, onNewUnread }) {
             setUnread(prev => Math.max(0, prev - 1));
         }
         if (n.orderId && onNavigateToOrder) {
-            onNavigateToOrder(n.orderId, n.requirementId || null);
+            // `wbsRootId` = czat/mail gałęzi → Realizacja → Kokpit na tym węźle (`Notification.wbsRootId`).
+            onNavigateToOrder(n.orderId, n.requirementId || null, n.wbsRootId || null, watekZPowiadomienia(n.title));
             setOpen(false);
         }
     };

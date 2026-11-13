@@ -1,3 +1,22 @@
+## 2026-11-13 — feat(powiadomienia): klik w powiadomienie z czatu / maila gałęzi otwiera Realizację → Kokpit na tej pozycji, wątek od razu na filtrze Czat / Q&A / Maile, stare powiadomienia uzupełnione migracją (v2026.11.13.0113)
+
+### schema.prisma
+- dodano pole `wbsRootId String?` w modelu `Notification` — klucz węzła WBS (`sourceWbsNodeId ?? id`) czatu/maila gałęzi, cel kliknięcia; migracja `20261113090000_notification_wbs_root_id`
+- migracja `20261113091000_notification_wbs_root_id_backfill` — uzupełnia `wbsRootId` w starych powiadomieniach z czatu/maila gałęzi (najbliższy wcześniejszy wpis `comments` z `wbsNodeId` w tym zamówieniu, do 2 min, preferowany węzeł z nazwą w tytule); bez tego stare powiadomienia nadal prowadziły do ogólnego czatu
+
+### architektura / API
+- `back-serwis` `NotificationsService.create()` — nowy parametr `wbsRootId`; zapisują go czat gałęzi (`POST /comments/order/:orderId` z `wbsNodeId`) i odpowiedzi mailowe wątku (`watek-mail-replies-powiadom`); `GET /notifications` zwraca pole `wbsRootId`
+- push czatu/maila gałęzi niesie `{ tab: 'realizacja', wbsRootId }`; `sw.js` przenosi `wbsRootId` w query zimnego startu i w `NAVIGATE_TO_ORDER`
+- `ui-funkcja` `ustawCelRealizacji()` — cel dla Realizacji (dzwonek, push, zimny start); `RealizacjaPanel` po wczytaniu danych przełącza na Kokpit: gałąź = zoom, pozycja/milestone = szczegóły z wątkiem
+- wątek (pozycji, milestone'a i gałęzi w Kokpicie) otwiera się od razu na filtrze wiadomości: Czat, Q&A (odpowiedź na pytanie wisi pod wpisem Q&A) albo Maile (odpowiedź mailem); push niesie `watek`, dzwonek bierze go z tytułu (`watekZPowiadomienia`)
+- `ui-funkcja` powiadomienie dla już otwartego zamówienia przełącza zakładkę (wcześniej działało tylko otwarcie czatu)
+
+### słownik
+- dodano `notification-wbs-root-id`, `comment-push-wbs-root`, `cel-realizacji`, `ustaw-cel-realizacji`, `use-cel-realizacji`, `realizacja-cel-powiadomienia`, `notification-to-kokpit`, `notification-same-order-tab`, `watek-z-powiadomienia`, `realizacja-watek-start`
+
+### wytyczne
+- `schema-pole` `Notification.wbsRootId` — zapisuj KLUCZ węzła (`sourceWbsNodeId ?? id`), nie id wiersza: powiadomienie mogło przyjść z wersji roboczej, a Realizacja stoi na baseline
+
 ## 2026-11-13 — feat(onedrive): eksporty finansowe luzem w 01, bez katalogu „Analiza budżetu”, „Oferty dostawców” zakładane przy pierwszej ofercie, „Zamówienia i faktury” w Plikach finansowych (v2026.11.13.0023)
 
 ### architektura / API

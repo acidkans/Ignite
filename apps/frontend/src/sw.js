@@ -88,6 +88,9 @@ self.addEventListener('push', (event) => {
             // Nadawca decyduje, dokąd prowadzi jego powiadomienie — SW tylko to przenosi.
             tab: data.tab || null,
             section: data.section || null,
+            // Klucz węzła WBS czatu/maila gałęzi — Realizacja otwiera Kokpit na tym węźle (`cel-realizacji`).
+            wbsRootId: data.wbsRootId || null,
+            watek: data.watek || null, // filtr wątku po otwarciu (chat / qa / mail)
             url: '/',
         },
         // Przyciski akcji widoczne w systemowym popupie (Android / Chrome desktop)
@@ -115,7 +118,7 @@ self.addEventListener('push', (event) => {
 // @anchor sw-notification-click
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    const { orderId, reminderId, type, tab, section } = event.notification.data || {};
+    const { orderId, reminderId, type, tab, section, wbsRootId, watek } = event.notification.data || {};
     const action = event.action;
 
     // Obsługa akcji dla REMINDER — deleguj do otwartej karty aplikacji
@@ -144,13 +147,15 @@ self.addEventListener('notificationclick', (event) => {
     if (orderId) params.set('orderId', orderId);
     if (tab) params.set('tab', tab);
     if (section) params.set('section', section);
+    if (wbsRootId) params.set('wbsRootId', wbsRootId);
+    if (watek) params.set('watek', watek);
     const url = orderId ? `/?${params.toString()}` : '/';
     event.waitUntil(
         self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
             for (const client of clientList) {
                 if ('focus' in client) {
                     client.focus();
-                    client.postMessage({ type: 'NAVIGATE_TO_ORDER', orderId, tab, section });
+                    client.postMessage({ type: 'NAVIGATE_TO_ORDER', orderId, tab, section, wbsRootId, watek });
                     return;
                 }
             }

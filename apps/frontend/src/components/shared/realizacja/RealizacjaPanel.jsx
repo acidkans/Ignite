@@ -24,6 +24,7 @@ import {
     DEFAULT_PURCHASE_STATUS, DEFAULT_EXEC_STATUS, PLAN_STATUS_META, planStatusFromAny, isMilestoneNode,
 } from '../wbs/wbsConstants';
 import { useWatekRealizacji } from './useWatekRealizacji';
+import { useCelRealizacji } from './celRealizacji';
 import { MailCtx, NowyMail, MailForm, ZalacznikiMaila } from './MailWatku';
 import {
     nazwaWyswietlana, WATEK_RODZAJE, RODZAJE_BLOKERA, zbudujWatek, sygnalyWezlow, sumaSygnalow, kiedyTekst,
@@ -454,6 +455,44 @@ export default function RealizacjaPanel({
         });
     }, [setBranchNav, loading, nodeId, navGalezie, navPozycje, focusId, podglad, pelne, tylkoSygnaly, canEdit, searchQuery]);
 
+    // @anchor realizacja-cel-powiadomienia — klik w powiadomienie z czatu/maila gałęzi (`cel-realizacji`):
+    // Kokpit na węźle wiadomości — gałąź = zoom na nią, pozycja/milestone = jej szczegóły (wątek + karta).
+    // Klucz z powiadomienia tłumaczony na id w wersji Realizacji jak wpisy wątku (`zbuduj-watek`); węzeł
+    // niewidoczny w Realizacji (typ ukryty dla roli) — najbliższa widoczna gałąź nad nim.
+    const cel = useCelRealizacji(nodeId);
+    const celZastosowanyRef = useRef(null);
+    // @anchor realizacja-watek-start — filtr wątku pozycji/milestone'a z powiadomienia ({ id, filtr, t }):
+    // dotyczy tylko węzła z powiadomienia i znika, gdy podgląd przejdzie na inny węzeł.
+    const [watekStart, setWatekStart] = useState(null);
+    useEffect(() => { if (watekStart && podglad !== watekStart.id) setWatekStart(null); }, [podglad]); // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => {
+        if (!cel || loading || celZastosowanyRef.current === cel.t) return;
+        const poKluczu = new Map();
+        for (const n of nodes) poKluczu.set(n.id, n.id);
+        for (const n of nodes) { const k = wbsRootOf(n); if (k && !poKluczu.has(k)) poKluczu.set(k, n.id); }
+        const id = poKluczu.get(cel.klucz);
+        if (!id) return; // węzła nie ma w tej wersji (np. pierwszy montaż przed wczytaniem baseline) — czekamy
+        celZastosowanyRef.current = cel.t;
+        setWidokState('kokpit');
+        zapisz(WIDOK_KEY, 'kokpit');
+        setFiltr(cel.watek || 'chat'); // wątek gałęzi w Kokpicie od razu na rodzaju wiadomości
+        const ms = msById[id];
+        const n = idx.nodeById[id];
+        if (ms || (n && LEAF_TYPES.includes(n.type))) {
+            setWatekStart({ id, filtr: cel.watek || 'chat', t: cel.t });
+            setPodglad(id);
+            setFocus((ms || n).branchId || SYNTHETIC_ROOT);
+            return;
+        }
+        setPodglad(null);
+        if (n) { setFocus(id); return; }
+        const poId = new Map(nodes.map(x => [x.id, x]));
+        const seen = new Set();
+        let p = poId.get(id)?.parentId;
+        while (p && !seen.has(p) && !idx.nodeById[p]) { seen.add(p); p = poId.get(p)?.parentId; }
+        setFocus(p && idx.nodeById[p] ? p : SYNTHETIC_ROOT);
+    }, [cel, loading, nodes, idx, msById, setFocus]);
+
     // ── Pozycje w zoomie ─────────────────────────────────────────────────────
     // @anchor realizacja-szukaj — fraza z wyszukiwarki w nagłówku aplikacji. Szuka w CAŁYM zamówieniu
     // (`zakresId` = korzeń), nie tylko w gałęzi zoomu — inaczej fraza spoza zaznaczonej gałęzi nic nie
@@ -660,6 +699,7 @@ export default function RealizacjaPanel({
                                 saveAxis={saveAxis} zapiszShort={zapiszShort} edycja={edycjaWatku}
                                 wyslij={wyslij} dodajBloker={dodajBloker} akcje={canEdit ? akcje : null}
                                 ownerUsers={ownerUsers} gotowosc={gotowosc(pozPodgladu)}
+                                filtrStart={watekStart?.id === pozPodgladu.id ? watekStart : null}
                             />
                         </div>
                     );
@@ -677,6 +717,7 @@ export default function RealizacjaPanel({
                             key={msPodgladu.id} node={msPodgladu} canEdit={canEdit}
                             wpisy={wpisy.filter(w => w.nodeId === msPodgladu.id)}
                             akcje={canEdit ? akcje : null} edycja={edycjaWatku}
+                            filtrStart={watekStart?.id === msPodgladu.id ? watekStart : null}
                         />
                     </div>
                 )}
@@ -1323,10 +1364,13 @@ const kolejnoscWatku = (a, b) => {
 // wszystkich rodzajów wpisów (filtr), pod listą formularz nowego wpisu WYBRANEGO rodzaju (`NowyWpis`).
 // Filtr może być sterowany z zewnątrz (Kokpit pamięta go między gałęziami), inaczej własny stan karty.
 // `qaMail` (Kokpit) = pod filtrem Q&A pasek wysyłki pytań zamówienia mailem.
-function WatekKarta({ tytul, prawa, wpisy, wbsNodeId, gdzie, edycja, onZakup, renderWpis, filtr: filtrZew, setFiltr: setFiltrZew, maxHeight = 420, qaMail = null }) {
-    const [filtrWew, setFiltrWew] = useState('all');
+// `filtrStart` ({ filtr, t }) — filtr ustawiony z zewnątrz (powiadomienie, `realizacja-watek-start`):
+// od pierwszego renderu i ponownie przy każdym nowym `t` (to samo powiadomienie kliknięte drugi raz).
+function WatekKarta({ tytul, prawa, wpisy, wbsNodeId, gdzie, edycja, onZakup, renderWpis, filtr: filtrZew, setFiltr: setFiltrZew, maxHeight = 420, qaMail = null, filtrStart = null }) {
+    const [filtrWew, setFiltrWew] = useState(() => filtrStart?.filtr || 'all');
     const filtr = filtrZew ?? filtrWew;
     const setFiltr = setFiltrZew ?? setFiltrWew;
+    useEffect(() => { if (filtrStart?.filtr) setFiltr(filtrStart.filtr); }, [filtrStart?.t]); // eslint-disable-line react-hooks/exhaustive-deps
     const widoczne = wpisy.filter(w => filtr === 'all' || w.rodzaj === filtr).sort(kolejnoscWatku);
     // Granica między niewyjaśnionymi a resztą — separator tylko gdy są obie grupy.
     const granica = widoczne.findIndex(w => etapWpisu(w) > 0);
@@ -1461,13 +1505,13 @@ function MilestonyChipy({ milestony = [], pelne, onOtworz }) {
 
 // @anchor realizacja-szczegoly-milestone — szczegóły milestone'a: wątek (czat z @wzmiankami) · termin,
 // status i pytania Q&A · blokery z formularzem. Daty zmienia się na Harmonogramie.
-function SzczegolyMilestone({ node, canEdit, wpisy, akcje, edycja }) {
+function SzczegolyMilestone({ node, canEdit, wpisy, akcje, edycja, filtrStart = null }) {
     const zadania = wpisy.filter(w => w.rodzaj === 'task');
     const status = PLAN_STATUS_META[planStatusFromAny(node.status)]?.label || '—';
     return (
         <DwieKolumny
             lewa={
-                <WatekKarta tytul="Wątek milestone'a" wpisy={wpisy} wbsNodeId={node.id} gdzie="milestone'a" edycja={edycja}
+                <WatekKarta tytul="Wątek milestone'a" wpisy={wpisy} wbsNodeId={node.id} gdzie="milestone'a" edycja={edycja} filtrStart={filtrStart}
                     renderWpis={w => <Wpis key={w.id} w={w} akcje={akcje} edycja={edycja} />} />
             }
             prawa={
@@ -1565,7 +1609,7 @@ function Macierz({ grupy, rowOf, actualsOf, sygnaly, pelne, canSeeMoney, onOtwor
 }
 
 // @anchor realizacja-rozwinieta-pozycja — trzy karty pod wierszem: wątek · zakup i realizacja · blokery i powiązania.
-function RozwinietaPozycja({ node, r, planValue, card, zakupyApi, canEdit, canSeeMoney, wpisy, saveAxis, zapiszShort, akcje, gotowosc, edycja }) {
+function RozwinietaPozycja({ node, r, planValue, card, zakupyApi, canEdit, canSeeMoney, wpisy, saveAxis, zapiszShort, akcje, gotowosc, edycja, filtrStart = null }) {
     const [short, setShort] = useState(node.shortName || '');
     // @anchor realizacja-sygnal-zakupu — filtr „Zakupy” w wątku → „+ Nowy wpis zakupu” otwiera formularz szuflady obok.
     const [sygnalZakupu, setSygnalZakupu] = useState(0);
@@ -1578,7 +1622,7 @@ function RozwinietaPozycja({ node, r, planValue, card, zakupyApi, canEdit, canSe
     return (
         <DwieKolumny
             lewa={
-            <WatekKarta tytul="Wątek pozycji" wpisy={wpisy} wbsNodeId={node.id} gdzie="pozycji" edycja={edycja} onZakup={nowyZakup}
+            <WatekKarta tytul="Wątek pozycji" wpisy={wpisy} wbsNodeId={node.id} gdzie="pozycji" edycja={edycja} onZakup={nowyZakup} filtrStart={filtrStart}
                 renderWpis={w => <Wpis key={w.id} w={w} akcje={akcje} edycja={edycja} />} />
 
             }

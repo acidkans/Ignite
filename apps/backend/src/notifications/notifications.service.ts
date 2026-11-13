@@ -5,8 +5,9 @@ import { PrismaService } from '../prisma/prisma.service';
 export class NotificationsService {
     constructor(private prisma: PrismaService) {}
 
-    async create(userId: string, type: string, title: string, body: string, orderId?: string, requirementId?: string) {
-        return this.prisma.notification.create({ data: { userId, type, title, body, orderId: orderId ?? null, requirementId: requirementId ?? null } });
+    // `wbsRootId` — klucz węzła WBS (`Notification.wbsRootId`), gdy powiadomienie dotyczy czatu/maila gałęzi.
+    async create(userId: string, type: string, title: string, body: string, orderId?: string, requirementId?: string, wbsRootId?: string) {
+        return this.prisma.notification.create({ data: { userId, type, title, body, orderId: orderId ?? null, requirementId: requirementId ?? null, wbsRootId: wbsRootId ?? null } });
     }
 
     async getForUser(userId: string) {
